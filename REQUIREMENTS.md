@@ -102,6 +102,10 @@ BASIC V2 except for the explicit direct-mode restrictions in section 4.
 Compatibility includes:
 
 - lexical rules, abbreviations, token boundaries, quoting, and `REM` behavior;
+- stock edge limits for line numbers, tokenized lines, screen-editor logical
+  lines, variable names, string lengths, integer and byte coercions, address
+  arguments, arrays, logical files, devices, secondary addresses, filenames,
+  and input fields as defined in `docs/BASIC_COMPATIBILITY_LIMITS.md`;
 - operator precedence and associativity;
 - numeric parsing, formatting, coercion, overflow, and error behavior;
 - string creation, slicing, comparison, and lifetime behavior;
@@ -131,6 +135,9 @@ The required stock keyword surface is:
 
 `docs/KEYWORDS.md` must describe each implemented keyword, but omission from
 that reference does not reduce the BASIC V2 compatibility requirement.
+Likewise, every limit in `docs/BASIC_COMPATIBILITY_LIMITS.md` is a
+compatibility contract even when an individual keyword entry omits the edge
+case.
 
 ### 3.2 Implemented Extensions
 
@@ -189,6 +196,11 @@ VICE is the ultimate behavioral reference emulator for the C64 and Plus/4.
 When the source-derived expectation and a stock VICE observation appear to
 disagree, the discrepancy must be captured as an oracle issue and resolved
 before Compiler 2 behavior is accepted.
+
+The explicit stock limit contracts are in
+`docs/BASIC_COMPATIBILITY_LIMITS.md`. VICE confirmation for those contracts is
+deferred until the project has a harness, but implementation tasks and tests
+must still reserve named cases for each limit.
 
 ## 4. Direct and Program Modes
 

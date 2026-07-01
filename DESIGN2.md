@@ -158,6 +158,14 @@ behavioral oracle (`docs/CANONICAL_TESTS.md`); a disagreement between the
 source-derived expectation and an observed VICE run is an oracle issue that
 must be resolved, not silently picked one way.
 
+`docs/BASIC_COMPATIBILITY_LIMITS.md` is the implementation contract for stock
+edge limits: line-number range, tokenized-line form, editor logical-line
+length, variable-name canonicalization, string length, byte and address
+coercion, arrays, logical files, devices, secondary addresses, filenames, and
+input fields. Parser, runtime, editor, KERNAL bridge, and E2E tests consume
+that table as a manifest of required edge behavior rather than treating
+"BASIC V2 compatible" as an informal blanket statement.
+
 The implementation divides the compatibility surface into generated
 lexical/token tables, the typed expression and value layer, scalar/array/string
 descriptors, control-flow and continuation descriptors, KERNAL-backed I/O,

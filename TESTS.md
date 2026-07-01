@@ -870,6 +870,7 @@ build artifacts.
 
 | Module | Scope | Environment | Description |
 |---|---|---|---|
+| `cases/basicv2_limits.yaml` | e2e data | source-derived, vice pending | Required edge-limit cases from `docs/BASIC_COMPATIBILITY_LIMITS.md` |
 | `test_e2e_basicv2_functions.py` | e2e | vice | Complete BASIC V2 function surface |
 | `test_e2e_basicv2_statements.py` | e2e | vice | Complete BASIC V2 statement surface |
 

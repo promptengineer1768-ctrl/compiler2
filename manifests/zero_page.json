@@ -216,7 +216,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "georam_gate",
-      "lifetimes": ["georam_gate"],
+      "lifetimes": [
+        "georam_gate"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Current selected block (mirror)"
@@ -226,7 +228,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "georam_gate",
-      "lifetimes": ["georam_gate"],
+      "lifetimes": [
+        "georam_gate"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Current selected page (mirror)"
@@ -236,7 +240,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "georam_gate",
-      "lifetimes": ["georam_gate"],
+      "lifetimes": [
+        "georam_gate"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Context stack pointer"
@@ -246,7 +252,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "georam_gate",
-      "lifetimes": ["georam_gate"],
+      "lifetimes": [
+        "georam_gate"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Current call target ID (during dispatch)"
@@ -256,7 +264,9 @@
       "size": 2,
       "alignment": 1,
       "domain": "expression",
-      "lifetimes": ["expression"],
+      "lifetimes": [
+        "expression"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Primary expression pointer"
@@ -266,7 +276,9 @@
       "size": 2,
       "alignment": 1,
       "domain": "expression",
-      "lifetimes": ["expression"],
+      "lifetimes": [
+        "expression"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Secondary expression pointer"
@@ -276,7 +288,9 @@
       "size": 2,
       "alignment": 1,
       "domain": "expression",
-      "lifetimes": ["expression"],
+      "lifetimes": [
+        "expression"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Temp 1 for expression work"
@@ -286,7 +300,9 @@
       "size": 2,
       "alignment": 1,
       "domain": "expression",
-      "lifetimes": ["expression"],
+      "lifetimes": [
+        "expression"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Temp 2 for expression work"
@@ -296,7 +312,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "expression",
-      "lifetimes": ["expression"],
+      "lifetimes": [
+        "expression"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Current expression result type tag"
@@ -306,7 +324,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "expression",
-      "lifetimes": ["expression"],
+      "lifetimes": [
+        "expression"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Operator precedence (shunting)"
@@ -316,7 +336,10 @@
       "size": 5,
       "alignment": 1,
       "domain": "math_fac",
-      "lifetimes": ["runtime_abi", "math_fac"],
+      "lifetimes": [
+        "runtime_abi",
+        "math_fac"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Stock FAC1 layout, 5 bytes at contiguous addresses"
@@ -326,7 +349,10 @@
       "size": 5,
       "alignment": 1,
       "domain": "math_fac",
-      "lifetimes": ["runtime_abi", "math_fac"],
+      "lifetimes": [
+        "runtime_abi",
+        "math_fac"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "FAC2/FACARG: secondary accumulator"
@@ -336,7 +362,10 @@
       "size": 5,
       "alignment": 1,
       "domain": "math_fac",
-      "lifetimes": ["runtime_abi", "math_fac"],
+      "lifetimes": [
+        "runtime_abi",
+        "math_fac"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "ARG: argument register for binary ops"
@@ -346,7 +375,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "math_fac",
-      "lifetimes": ["math_fac"],
+      "lifetimes": [
+        "math_fac"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Sign of FAC1 result"
@@ -356,7 +387,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "math_fac",
-      "lifetimes": ["math_fac"],
+      "lifetimes": [
+        "math_fac"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Temporary for VAL/STR"
@@ -366,7 +399,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "math_fac",
-      "lifetimes": ["math_fac"],
+      "lifetimes": [
+        "math_fac"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "FAC overflow byte"
@@ -376,7 +411,9 @@
       "size": 5,
       "alignment": 1,
       "domain": "math_fac",
-      "lifetimes": ["math_fac"],
+      "lifetimes": [
+        "math_fac"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "IEEE extended temp (when IEEE mode)"
@@ -386,7 +423,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "math_fac",
-      "lifetimes": ["math_fac"],
+      "lifetimes": [
+        "math_fac"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Bit test scratch"
@@ -396,7 +435,9 @@
       "size": 2,
       "alignment": 1,
       "domain": "parser",
-      "lifetimes": ["parser"],
+      "lifetimes": [
+        "parser"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Current parse position in token stream"
@@ -406,7 +447,9 @@
       "size": 2,
       "alignment": 1,
       "domain": "tokenizer",
-      "lifetimes": ["tokenizer"],
+      "lifetimes": [
+        "tokenizer"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Token scan pointer"
@@ -416,7 +459,9 @@
       "size": 2,
       "alignment": 1,
       "domain": "parser",
-      "lifetimes": ["parser"],
+      "lifetimes": [
+        "parser"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Line pointer for recursive descent"
@@ -426,7 +471,9 @@
       "size": 2,
       "alignment": 1,
       "domain": "parser",
-      "lifetimes": ["parser"],
+      "lifetimes": [
+        "parser"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Operator/function operand pointer"
@@ -436,7 +483,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "parser",
-      "lifetimes": ["parser"],
+      "lifetimes": [
+        "parser"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Parser temporary for duck-typing"
@@ -446,7 +495,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "parser",
-      "lifetimes": ["parser"],
+      "lifetimes": [
+        "parser"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Parser temporary 2"
@@ -456,7 +507,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "parser",
-      "lifetimes": ["parser"],
+      "lifetimes": [
+        "parser"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Current FOR/DO nesting level"
@@ -466,7 +519,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "parser",
-      "lifetimes": ["parser"],
+      "lifetimes": [
+        "parser"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Current GOSUB nesting level"
@@ -476,7 +531,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "stmt_scratch",
-      "lifetimes": ["stmt_scratch"],
+      "lifetimes": [
+        "stmt_scratch"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Current opcode/statement ID"
@@ -486,7 +543,9 @@
       "size": 2,
       "alignment": 1,
       "domain": "stmt_scratch",
-      "lifetimes": ["stmt_scratch"],
+      "lifetimes": [
+        "stmt_scratch"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Current statement argument pointer"
@@ -496,7 +555,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "stmt_scratch",
-      "lifetimes": ["stmt_scratch"],
+      "lifetimes": [
+        "stmt_scratch"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "General scratch byte 1"
@@ -506,7 +567,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "stmt_scratch",
-      "lifetimes": ["stmt_scratch"],
+      "lifetimes": [
+        "stmt_scratch"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "General scratch byte 2"
@@ -516,7 +579,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "stmt_scratch",
-      "lifetimes": ["stmt_scratch"],
+      "lifetimes": [
+        "stmt_scratch"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "General scratch byte 3"
@@ -526,7 +591,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "stmt_scratch",
-      "lifetimes": ["stmt_scratch"],
+      "lifetimes": [
+        "stmt_scratch"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "General scratch byte 4"
@@ -536,7 +603,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "editor",
-      "lifetimes": ["editor"],
+      "lifetimes": [
+        "editor"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Cursor column (resident, IRQ-visible)"
@@ -546,7 +615,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "editor",
-      "lifetimes": ["editor"],
+      "lifetimes": [
+        "editor"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Cursor row (resident, IRQ-visible)"
@@ -556,7 +627,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "editor",
-      "lifetimes": ["editor"],
+      "lifetimes": [
+        "editor"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Cursor visible flag"
@@ -566,7 +639,9 @@
       "size": 2,
       "alignment": 1,
       "domain": "editor",
-      "lifetimes": ["editor"],
+      "lifetimes": [
+        "editor"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Pointer to resident line capture buffer"
@@ -576,7 +651,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "editor",
-      "lifetimes": ["editor"],
+      "lifetimes": [
+        "editor"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Current line length in buffer"
@@ -586,7 +663,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "editor",
-      "lifetimes": ["editor"],
+      "lifetimes": [
+        "editor"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Quote mode toggle"
@@ -596,7 +675,9 @@
       "size": 2,
       "alignment": 1,
       "domain": "stop_cont",
-      "lifetimes": ["stop_cont"],
+      "lifetimes": [
+        "stop_cont"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Handle of persistent continuation descriptor"
@@ -606,7 +687,9 @@
       "size": 2,
       "alignment": 1,
       "domain": "stop_cont",
-      "lifetimes": ["stop_cont"],
+      "lifetimes": [
+        "stop_cont"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Runtime/source generation checked by CONT"
@@ -616,7 +699,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "stop_cont",
-      "lifetimes": ["stop_cont"],
+      "lifetimes": [
+        "stop_cont"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "STOP/STOP-key validity and reason bits"
@@ -626,7 +711,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "error_unwind",
-      "lifetimes": ["error_unwind"],
+      "lifetimes": [
+        "error_unwind"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Current BASIC error number"
@@ -636,7 +723,9 @@
       "size": 2,
       "alignment": 1,
       "domain": "error_unwind",
-      "lifetimes": ["error_unwind"],
+      "lifetimes": [
+        "error_unwind"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Source line of error"
@@ -646,7 +735,9 @@
       "size": 2,
       "alignment": 1,
       "domain": "error_unwind",
-      "lifetimes": ["error_unwind"],
+      "lifetimes": [
+        "error_unwind"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Pointer into source for error context"
@@ -656,7 +747,9 @@
       "size": 2,
       "alignment": 1,
       "domain": "loader",
-      "lifetimes": ["loader"],
+      "lifetimes": [
+        "loader"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Source pointer during payload copy"
@@ -666,7 +759,9 @@
       "size": 2,
       "alignment": 1,
       "domain": "loader",
-      "lifetimes": ["loader"],
+      "lifetimes": [
+        "loader"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Destination pointer during payload copy"
@@ -676,7 +771,9 @@
       "size": 2,
       "alignment": 1,
       "domain": "loader",
-      "lifetimes": ["loader"],
+      "lifetimes": [
+        "loader"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Block length during payload copy"
@@ -686,7 +783,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "loader",
-      "lifetimes": ["loader"],
+      "lifetimes": [
+        "loader"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "geoRAM block counter during load"
@@ -696,7 +795,9 @@
       "size": 1,
       "alignment": 1,
       "domain": "loader",
-      "lifetimes": ["loader"],
+      "lifetimes": [
+        "loader"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "geoRAM page counter during load"
@@ -706,10 +807,81 @@
       "size": 15,
       "alignment": 1,
       "domain": "loader",
-      "lifetimes": ["loader"],
+      "lifetimes": [
+        "loader"
+      ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "CGS1 stream reader decompressor state"
     }
-  ]
+  ],
+  "schema": {
+    "required_domain_fields": [
+      "name",
+      "irq_safe",
+      "description"
+    ],
+    "required_fixed_reservation_fields": [
+      "symbol",
+      "address",
+      "size",
+      "domain",
+      "notes"
+    ],
+    "required_kernal_bridge_fields": [
+      "symbol",
+      "address",
+      "size",
+      "kernal_use",
+      "persistent"
+    ],
+    "required_node_fields": [
+      "name",
+      "size",
+      "alignment",
+      "domain",
+      "lifetimes",
+      "aliases_allowed",
+      "interference_overrides",
+      "notes"
+    ],
+    "source_authority": "SKELETON.md section 5 and docs/ZERO_PAGE.md"
+  },
+  "allocation_policy": {
+    "allocator": "deterministic graph coloring with contiguous/aligned multi-byte placement",
+    "hard_reservations": [
+      "$00-$01",
+      "$90",
+      "$91",
+      "$98-$9A",
+      "$A0-$A2",
+      "$AC-$AF",
+      "$B7-$BC",
+      "$C5",
+      "$C6",
+      "$CB",
+      "$D3",
+      "$F5-$F6"
+    ],
+    "no_literal_project_addresses": true,
+    "generated_outputs": [
+      "build/zp_symbols.inc",
+      "build/zp_allocation.json",
+      "build/zp_allocation.md",
+      "build/zp_interference.dot"
+    ],
+    "validation": "The allocator must fail on unclassified nodes, overlapping live ranges, invalid fixed reservations, missing domains, or undeclared aliases."
+  },
+  "coverage": {
+    "source_document": "SKELETON.md",
+    "source_sections": [
+      "5. Zero-Page Allocation Manifest",
+      "6 routine ZP columns"
+    ],
+    "domain_count": 14,
+    "fixed_reservation_count": 7,
+    "kernal_bridge_count": 12,
+    "allocatable_node_count": 50,
+    "completion_rule": "Every zero-page symbol listed in SKELETON.md section 5 appears exactly once as a fixed reservation, KERNAL bridge symbol, or allocatable node."
+  }
 }

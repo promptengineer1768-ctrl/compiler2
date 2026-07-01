@@ -10,6 +10,7 @@ These documents define Compiler 2:
 - `GEORAM_BANKING.md`
 - `ZERO_PAGE.md`
 - `KERNAL_ABI.md`
+- `BASIC_COMPATIBILITY_LIMITS.md`
 - `LOOP_OPTIMIZATION.md`
 - `INCREMENTAL_COMPILATION.md`
 - `COMPILE_EXPORT.md`

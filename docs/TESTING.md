@@ -185,6 +185,23 @@ manifest. Every implemented keyword and operator must be represented. Modifiers
 such as `TO`, `THEN`, and `STEP` map to semantic cases in their containing
 statement module rather than artificial standalone invocations.
 
+### Compatibility Limit Cases
+
+Every contract row in `docs/BASIC_COMPATIBILITY_LIMITS.md` must have a named
+E2E case. The minimum set covers line-number lower and upper bounds,
+line-number overflow, screen-editor logical-line length, tokenized-line
+round-trip, variable-name first-two-character aliasing, type-suffix identity,
+reserved variables, 255-character and 256-character string cases, integer
+range coercion, byte and address argument bounds, array default/redimension/
+subscript behavior, logical-file table exhaustion, stock `LOAD`/`SAVE` device
+errors, `OPEN` logical/device/secondary parsing, filename length behavior, and
+DATA/INPUT delimiters.
+
+Until the VICE harness exists, these cases may be marked as source-derived from
+`c64rom` and pending fixture confirmation. No related BASIC V2 or BASIC 3.5
+behavior is complete for release until the matching VICE reference fixture
+exists or an explicit oracle waiver is recorded.
+
 ## Smoke Tests
 
 `smoke` is a marker applied to a stable, fast subset of authoritative tests at

@@ -247,6 +247,34 @@ Get-ChildItem docs/*.md | Measure-Object | Select-Object -ExpandProperty Count
 > Establish stock BASIC V2 token/program fixtures and requirements tests.
 > **Test-first** — fixtures define expected behavior before any runtime code.
 
+### T1.0 BASIC Compatibility Limit Manifest
+
+**Prerequisites:** T0.7
+
+**RED phase:**
+- [ ] Create `tests/e2e/cases/basicv2_limits.yaml`
+- [ ] Encode every row from `docs/BASIC_COMPATIBILITY_LIMITS.md`
+- [ ] Add source-derived expected behavior from `c64rom`
+- [ ] Mark each case `vice_pending` until the VICE harness can generate the
+      authoritative fixture
+- [ ] Add coverage validation that fails when a compatibility-limit row lacks
+      an E2E case
+
+**GREEN phase:**
+- [ ] Populate the limit manifest with line number, variable name, string,
+      byte/address, array, logical-file, device, filename, and input cases
+- [ ] Link each case to the owning keyword or feature group
+- [ ] Expose the manifest to the shared E2E mode runner
+
+**REFACTOR phase:**
+- [ ] Remove duplicate hand-written limit cases from individual test modules
+- [ ] Keep case IDs stable for future VICE fixture generation
+
+**Verification:**
+```powershell
+pytest tests/system/test_e2e_coverage.py -k compatibility_limits -v
+```
+
 ### T1.1 Stock BASIC V2 Reference Fixtures
 
 **Prerequisites:** T0.7
