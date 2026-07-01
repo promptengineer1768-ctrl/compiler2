@@ -1,0 +1,715 @@
+{
+  "manifest_version": "1.0",
+  "description": "Zero-page allocation nodes for graph-coloring solver",
+  "domains": [
+    {
+      "name": "cpu_port",
+      "irq_safe": true,
+      "description": "$00-$01 — always live, never allocated"
+    },
+    {
+      "name": "irq_state",
+      "irq_safe": true,
+      "description": "Concurrently live with foreground (keyboard, timer)"
+    },
+    {
+      "name": "georam_gate",
+      "irq_safe": false,
+      "description": "geoRAM call gate, context stack, selected state"
+    },
+    {
+      "name": "kernal_bridge",
+      "irq_safe": false,
+      "description": "KERNAL bridge call-scoped ZP effects"
+    },
+    {
+      "name": "runtime_abi",
+      "irq_safe": false,
+      "description": "Compiled runtime ABI call pointers"
+    },
+    {
+      "name": "expression",
+      "irq_safe": false,
+      "description": "Expression evaluator temporaries"
+    },
+    {
+      "name": "math_fac",
+      "irq_safe": false,
+      "description": "Numeric FAC/ARG/extended math"
+    },
+    {
+      "name": "stmt_scratch",
+      "irq_safe": false,
+      "description": "Statement-local scratch"
+    },
+    {
+      "name": "tokenizer",
+      "irq_safe": false,
+      "description": "Tokenizer/lexer state"
+    },
+    {
+      "name": "parser",
+      "irq_safe": false,
+      "description": "Parser/compiler phase temporaries"
+    },
+    {
+      "name": "editor",
+      "irq_safe": false,
+      "description": "Editor foreground state (screen, cursor)"
+    },
+    {
+      "name": "loader",
+      "irq_safe": false,
+      "description": "Loader/install-only (overlaid post-install)"
+    },
+    {
+      "name": "error_unwind",
+      "irq_safe": false,
+      "description": "Error unwind state"
+    },
+    {
+      "name": "stop_cont",
+      "irq_safe": false,
+      "description": "STOP/CONT resumable state"
+    }
+  ],
+  "fixed_reservations": [
+    {
+      "symbol": "zp_cpu_port",
+      "address": "$00-$01",
+      "size": 2,
+      "domain": "cpu_port",
+      "notes": "6510 DDR and data"
+    },
+    {
+      "symbol": "zp_stkey",
+      "address": "$91",
+      "size": 1,
+      "domain": "irq_state",
+      "notes": "STOP key flag, UDTIM/STOP"
+    },
+    {
+      "symbol": "zp_time",
+      "address": "$A0-$A2",
+      "size": 3,
+      "domain": "irq_state",
+      "notes": "Jiffy clock, UDTIM/RDTIM/SETTIM"
+    },
+    {
+      "symbol": "zp_lstx",
+      "address": "$C5",
+      "size": 1,
+      "domain": "irq_state",
+      "notes": "Current key from matrix"
+    },
+    {
+      "symbol": "zp_ndx",
+      "address": "$C6",
+      "size": 1,
+      "domain": "irq_state",
+      "notes": "Keyboard buffer count"
+    },
+    {
+      "symbol": "zp_sfdx",
+      "address": "$CB",
+      "size": 1,
+      "domain": "irq_state",
+      "notes": "Keyboard shift state"
+    },
+    {
+      "symbol": "zp_keytab",
+      "address": "$F5-$F6",
+      "size": 2,
+      "domain": "irq_state",
+      "notes": "Keyboard decode-table pointer"
+    }
+  ],
+  "kernal_bridge_zp": [
+    {
+      "symbol": "zp_status",
+      "address": "$90",
+      "size": 1,
+      "kernal_use": "I/O status (READST and device paths)",
+      "persistent": false
+    },
+    {
+      "symbol": "zp_ldtnd",
+      "address": "$98",
+      "size": 1,
+      "kernal_use": "open-file table count/index",
+      "persistent": false
+    },
+    {
+      "symbol": "zp_dfltn",
+      "address": "$99",
+      "size": 1,
+      "kernal_use": "default input device/channel paths",
+      "persistent": false
+    },
+    {
+      "symbol": "zp_dflto",
+      "address": "$9A",
+      "size": 1,
+      "kernal_use": "default output device/channel paths",
+      "persistent": false
+    },
+    {
+      "symbol": "zp_sal",
+      "address": "$AC-$AD",
+      "size": 2,
+      "kernal_use": "save/load start address workspace",
+      "persistent": false
+    },
+    {
+      "symbol": "zp_eal",
+      "address": "$AE-$AF",
+      "size": 2,
+      "kernal_use": "save/load end address workspace",
+      "persistent": false
+    },
+    {
+      "symbol": "zp_fnlen",
+      "address": "$B7",
+      "size": 1,
+      "kernal_use": "filename length",
+      "persistent": false
+    },
+    {
+      "symbol": "zp_la",
+      "address": "$B8",
+      "size": 1,
+      "kernal_use": "logical file number",
+      "persistent": false
+    },
+    {
+      "symbol": "zp_sa",
+      "address": "$B9",
+      "size": 1,
+      "kernal_use": "secondary address",
+      "persistent": false
+    },
+    {
+      "symbol": "zp_fa",
+      "address": "$BA",
+      "size": 1,
+      "kernal_use": "device; persistent current-disk state",
+      "persistent": true
+    },
+    {
+      "symbol": "zp_fnadr",
+      "address": "$BB-$BC",
+      "size": 2,
+      "kernal_use": "filename pointer",
+      "persistent": false
+    },
+    {
+      "symbol": "zp_pntr",
+      "address": "$D3",
+      "size": 1,
+      "kernal_use": "screen cursor column on applicable paths",
+      "persistent": false
+    }
+  ],
+  "nodes": [
+    {
+      "name": "zp_gr_block",
+      "size": 1,
+      "alignment": 1,
+      "domain": "georam_gate",
+      "lifetimes": ["georam_gate"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Current selected block (mirror)"
+    },
+    {
+      "name": "zp_gr_page",
+      "size": 1,
+      "alignment": 1,
+      "domain": "georam_gate",
+      "lifetimes": ["georam_gate"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Current selected page (mirror)"
+    },
+    {
+      "name": "zp_gr_ctx_sp",
+      "size": 1,
+      "alignment": 1,
+      "domain": "georam_gate",
+      "lifetimes": ["georam_gate"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Context stack pointer"
+    },
+    {
+      "name": "zp_gr_call_id",
+      "size": 1,
+      "alignment": 1,
+      "domain": "georam_gate",
+      "lifetimes": ["georam_gate"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Current call target ID (during dispatch)"
+    },
+    {
+      "name": "zp_expr_ptr1",
+      "size": 2,
+      "alignment": 1,
+      "domain": "expression",
+      "lifetimes": ["expression"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Primary expression pointer"
+    },
+    {
+      "name": "zp_expr_ptr2",
+      "size": 2,
+      "alignment": 1,
+      "domain": "expression",
+      "lifetimes": ["expression"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Secondary expression pointer"
+    },
+    {
+      "name": "zp_expr_tmp1",
+      "size": 2,
+      "alignment": 1,
+      "domain": "expression",
+      "lifetimes": ["expression"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Temp 1 for expression work"
+    },
+    {
+      "name": "zp_expr_tmp2",
+      "size": 2,
+      "alignment": 1,
+      "domain": "expression",
+      "lifetimes": ["expression"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Temp 2 for expression work"
+    },
+    {
+      "name": "zp_expr_type",
+      "size": 1,
+      "alignment": 1,
+      "domain": "expression",
+      "lifetimes": ["expression"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Current expression result type tag"
+    },
+    {
+      "name": "zp_prec",
+      "size": 1,
+      "alignment": 1,
+      "domain": "expression",
+      "lifetimes": ["expression"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Operator precedence (shunting)"
+    },
+    {
+      "name": "zp_fac1",
+      "size": 5,
+      "alignment": 1,
+      "domain": "math_fac",
+      "lifetimes": ["runtime_abi", "math_fac"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Stock FAC1 layout, 5 bytes at contiguous addresses"
+    },
+    {
+      "name": "zp_fac2",
+      "size": 5,
+      "alignment": 1,
+      "domain": "math_fac",
+      "lifetimes": ["runtime_abi", "math_fac"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "FAC2/FACARG: secondary accumulator"
+    },
+    {
+      "name": "zp_arg",
+      "size": 5,
+      "alignment": 1,
+      "domain": "math_fac",
+      "lifetimes": ["runtime_abi", "math_fac"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "ARG: argument register for binary ops"
+    },
+    {
+      "name": "zp_sign",
+      "size": 1,
+      "alignment": 1,
+      "domain": "math_fac",
+      "lifetimes": ["math_fac"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Sign of FAC1 result"
+    },
+    {
+      "name": "zp_valtmp",
+      "size": 1,
+      "alignment": 1,
+      "domain": "math_fac",
+      "lifetimes": ["math_fac"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Temporary for VAL/STR"
+    },
+    {
+      "name": "zp_facov",
+      "size": 1,
+      "alignment": 1,
+      "domain": "math_fac",
+      "lifetimes": ["math_fac"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "FAC overflow byte"
+    },
+    {
+      "name": "zp_iesstp",
+      "size": 5,
+      "alignment": 1,
+      "domain": "math_fac",
+      "lifetimes": ["math_fac"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "IEEE extended temp (when IEEE mode)"
+    },
+    {
+      "name": "zp_bitst",
+      "size": 1,
+      "alignment": 1,
+      "domain": "math_fac",
+      "lifetimes": ["math_fac"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Bit test scratch"
+    },
+    {
+      "name": "zp_txtptr",
+      "size": 2,
+      "alignment": 1,
+      "domain": "parser",
+      "lifetimes": ["parser"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Current parse position in token stream"
+    },
+    {
+      "name": "zp_tmptr",
+      "size": 2,
+      "alignment": 1,
+      "domain": "tokenizer",
+      "lifetimes": ["tokenizer"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Token scan pointer"
+    },
+    {
+      "name": "zp_lptr",
+      "size": 2,
+      "alignment": 1,
+      "domain": "parser",
+      "lifetimes": ["parser"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Line pointer for recursive descent"
+    },
+    {
+      "name": "zp_opptr",
+      "size": 2,
+      "alignment": 1,
+      "domain": "parser",
+      "lifetimes": ["parser"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Operator/function operand pointer"
+    },
+    {
+      "name": "zp_duck",
+      "size": 1,
+      "alignment": 1,
+      "domain": "parser",
+      "lifetimes": ["parser"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Parser temporary for duck-typing"
+    },
+    {
+      "name": "zp_duck2",
+      "size": 1,
+      "alignment": 1,
+      "domain": "parser",
+      "lifetimes": ["parser"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Parser temporary 2"
+    },
+    {
+      "name": "zp_forlev",
+      "size": 1,
+      "alignment": 1,
+      "domain": "parser",
+      "lifetimes": ["parser"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Current FOR/DO nesting level"
+    },
+    {
+      "name": "zp_sublev",
+      "size": 1,
+      "alignment": 1,
+      "domain": "parser",
+      "lifetimes": ["parser"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Current GOSUB nesting level"
+    },
+    {
+      "name": "zp_stmt_op",
+      "size": 1,
+      "alignment": 1,
+      "domain": "stmt_scratch",
+      "lifetimes": ["stmt_scratch"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Current opcode/statement ID"
+    },
+    {
+      "name": "zp_stmt_arg",
+      "size": 2,
+      "alignment": 1,
+      "domain": "stmt_scratch",
+      "lifetimes": ["stmt_scratch"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Current statement argument pointer"
+    },
+    {
+      "name": "zp_tmp1",
+      "size": 1,
+      "alignment": 1,
+      "domain": "stmt_scratch",
+      "lifetimes": ["stmt_scratch"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "General scratch byte 1"
+    },
+    {
+      "name": "zp_tmp2",
+      "size": 1,
+      "alignment": 1,
+      "domain": "stmt_scratch",
+      "lifetimes": ["stmt_scratch"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "General scratch byte 2"
+    },
+    {
+      "name": "zp_tmp3",
+      "size": 1,
+      "alignment": 1,
+      "domain": "stmt_scratch",
+      "lifetimes": ["stmt_scratch"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "General scratch byte 3"
+    },
+    {
+      "name": "zp_tmp4",
+      "size": 1,
+      "alignment": 1,
+      "domain": "stmt_scratch",
+      "lifetimes": ["stmt_scratch"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "General scratch byte 4"
+    },
+    {
+      "name": "zp_crsr_x",
+      "size": 1,
+      "alignment": 1,
+      "domain": "editor",
+      "lifetimes": ["editor"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Cursor column (resident, IRQ-visible)"
+    },
+    {
+      "name": "zp_crsr_y",
+      "size": 1,
+      "alignment": 1,
+      "domain": "editor",
+      "lifetimes": ["editor"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Cursor row (resident, IRQ-visible)"
+    },
+    {
+      "name": "zp_crsr_vis",
+      "size": 1,
+      "alignment": 1,
+      "domain": "editor",
+      "lifetimes": ["editor"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Cursor visible flag"
+    },
+    {
+      "name": "zp_linebuf",
+      "size": 2,
+      "alignment": 1,
+      "domain": "editor",
+      "lifetimes": ["editor"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Pointer to resident line capture buffer"
+    },
+    {
+      "name": "zp_line_len",
+      "size": 1,
+      "alignment": 1,
+      "domain": "editor",
+      "lifetimes": ["editor"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Current line length in buffer"
+    },
+    {
+      "name": "zp_quotemode",
+      "size": 1,
+      "alignment": 1,
+      "domain": "editor",
+      "lifetimes": ["editor"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Quote mode toggle"
+    },
+    {
+      "name": "zp_cont_handle",
+      "size": 2,
+      "alignment": 1,
+      "domain": "stop_cont",
+      "lifetimes": ["stop_cont"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Handle of persistent continuation descriptor"
+    },
+    {
+      "name": "zp_cont_generation",
+      "size": 2,
+      "alignment": 1,
+      "domain": "stop_cont",
+      "lifetimes": ["stop_cont"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Runtime/source generation checked by CONT"
+    },
+    {
+      "name": "zp_stop_flag",
+      "size": 1,
+      "alignment": 1,
+      "domain": "stop_cont",
+      "lifetimes": ["stop_cont"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "STOP/STOP-key validity and reason bits"
+    },
+    {
+      "name": "zp_errnum",
+      "size": 1,
+      "alignment": 1,
+      "domain": "error_unwind",
+      "lifetimes": ["error_unwind"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Current BASIC error number"
+    },
+    {
+      "name": "zp_errline",
+      "size": 2,
+      "alignment": 1,
+      "domain": "error_unwind",
+      "lifetimes": ["error_unwind"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Source line of error"
+    },
+    {
+      "name": "zp_errptr",
+      "size": 2,
+      "alignment": 1,
+      "domain": "error_unwind",
+      "lifetimes": ["error_unwind"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Pointer into source for error context"
+    },
+    {
+      "name": "zp_ldr_src",
+      "size": 2,
+      "alignment": 1,
+      "domain": "loader",
+      "lifetimes": ["loader"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Source pointer during payload copy"
+    },
+    {
+      "name": "zp_ldr_dst",
+      "size": 2,
+      "alignment": 1,
+      "domain": "loader",
+      "lifetimes": ["loader"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Destination pointer during payload copy"
+    },
+    {
+      "name": "zp_ldr_len",
+      "size": 2,
+      "alignment": 1,
+      "domain": "loader",
+      "lifetimes": ["loader"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Block length during payload copy"
+    },
+    {
+      "name": "zp_ldr_blk",
+      "size": 1,
+      "alignment": 1,
+      "domain": "loader",
+      "lifetimes": ["loader"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "geoRAM block counter during load"
+    },
+    {
+      "name": "zp_ldr_pge",
+      "size": 1,
+      "alignment": 1,
+      "domain": "loader",
+      "lifetimes": ["loader"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "geoRAM page counter during load"
+    },
+    {
+      "name": "zp_georam_stream",
+      "size": 15,
+      "alignment": 1,
+      "domain": "loader",
+      "lifetimes": ["loader"],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "CGS1 stream reader decompressor state"
+    }
+  ]
+}

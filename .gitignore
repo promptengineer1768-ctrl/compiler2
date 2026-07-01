@@ -1,0 +1,19 @@
+# Generated build outputs
+/build/
+/debug/
+/graphify-out/
+
+# Python caches and test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local virtual environments
+.venv/
+venv/
+
+# Editor/OS noise
+.DS_Store
+Thumbs.db
