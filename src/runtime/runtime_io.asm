@@ -152,74 +152,23 @@ rio_load:
     sec
     rts
 
+; Product SAVE/VERIFY (token-class format + exact-byte verify after SAVE) is
+; SKELETON — see DESIGN2 §5. These entries remain low-level KERNAL range I/O
+; helpers only and must not be treated as complete language SAVE/VERIFY.
 .export rio_verify
 rio_verify:
-    lda #1
-    jsr rio_parse_load
-    jcs @error
-    jsr rio_set_name_and_lfs
-    jcs @error
-    lda #1
-    ldx rio_address
-    ldy rio_address+1
-    jmp kernal_load
-@error:
+    ; SKELETON: design requires byte-equality to what SAVE would write for the
+    ; current program (token-class format). KERNAL load-with-verify of a raw
+    ; address range is not that contract.
+    lda #ERR_UNDEFINED_FUNCTION
     sec
     rts
 
 .export rio_save
 rio_save:
-    stx rio_request
-    sty rio_request+1
-    stx zp_src
-    sty zp_src+1
-    ldy #0
-    lda (zp_src), y
-    cmp #'R'
-    bne @error
-    iny
-    lda (zp_src), y
-    cmp #'S'
-    bne @error
-    ldx rio_request
-    ldy rio_request+1
-    jsr rio_parse_name
-    jcs @error
-    lda rio_request
-    sta zp_src
-    lda rio_request+1
-    sta zp_src+1
-    ldy #7
-    lda (zp_src), y
-    sta rio_save_start
-    iny
-    lda (zp_src), y
-    sta rio_save_start+1
-    iny
-    lda (zp_src), y
-    sta rio_end
-    iny
-    lda (zp_src), y
-    sta rio_end+1
-    lda rio_end+1
-    cmp rio_save_start+1
-    bcc @error
-    bne @range_ok
-    lda rio_end
-    cmp rio_save_start
-    bcc @error
-    beq @error
-@range_ok:
-    lda #1
-    sta rio_logical
-    jsr rio_set_name_and_lfs
-    jcs @error
-    lda #<rio_save_start
-    ldx rio_end
-    ldy rio_end+1
-    jmp kernal_save
-@error:
-    lda #ERR_ILLEGAL_QUANTITY
+    ; SKELETON: language SAVE must classify by tokens (C2-only > Plus/4 3.5 >
+    ; V2) and emit that format. Range KERNAL SAVE is not the product path.
+    lda #ERR_UNDEFINED_FUNCTION
     sec
     rts
 

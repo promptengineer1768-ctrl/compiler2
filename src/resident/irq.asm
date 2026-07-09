@@ -1,5 +1,8 @@
 ; src/resident/irq.asm
-; Pinned IRQ helper stubs with bounded state save/restore.
+; Pinned IRQ helper with bounded state save/restore.
+;
+; SKELETON (design audit 2026-07-09): NMI RESTORE distrust path is missing
+; (DESIGN2 §8.5 / §9.3). IRQ path is partial and kept for structure.
 
 .include "common/zp.inc"
 .include "common/constants.asm"
@@ -16,10 +19,17 @@ irq_saved_port: .res 1
 .segment "RESIDENT"
 
 .export irq_entry
+.export nmi_entry
 .export irq_update_jiffy
 .export irq_cursor_blink
 .export irq_scan_keyboard
 .export irq_restore_mapping
+
+; nmi_entry - RESTORE key / NMI distrust path (SKELETON)
+; Design: invalidate CONT, mark compile fully dirty, re-probe devices,
+; republish expansion profile or enter minimal editor; never resume code.
+nmi_entry:
+    rti
 
 irq_entry:
     pha

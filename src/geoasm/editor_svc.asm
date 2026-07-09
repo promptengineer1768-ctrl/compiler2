@@ -325,10 +325,9 @@ editor_delete_line:
 ; Clobbers: A, X, Y
 .export editor_detokenize_line
 editor_detokenize_line:
-    ; Convert editor_accepted_line to screen codes for display
-    ldx #<editor_result_buffer
-    ldy #>editor_result_buffer
-    clc
+    ; SKELETON: LIST detokenize not implemented to stock form.
+    lda #ERR_UNDEFINED_FUNCTION
+    sec
     rts
 
 ; editor_list_range - Range listing
@@ -337,8 +336,9 @@ editor_detokenize_line:
 ; Clobbers: A, X, Y
 .export editor_list_range
 editor_list_range:
-    ; Placeholder for range listing
-    clc
+    ; SKELETON: previous body was a success no-op.
+    lda #ERR_UNDEFINED_FUNCTION
+    sec
     rts
 
 ; =============================================================================

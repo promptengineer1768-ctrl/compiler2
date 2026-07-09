@@ -55,16 +55,20 @@ system_peek:
     rts
 
 ; system_poke - Store a byte at the requested address.
+; SKELETON (design audit 2026-07-09): previous policy blanked $0801-$D000 as
+; protected, which violates the narrow control-plane rule (DESIGN2 §3.1).
+; Re-implement: protect only vectors/gates/profile mirrors/compiler ZP, and
+; $CE00 while REU XIP is active; do not blanket-protect $C800-$CDFF hot slots
+; or ordinary program/variable RAM.
 .export system_poke
 system_poke:
     stx zp_tmp1
     sty zp_tmp1+1
     sta system_poke_value
-    ; Compiler-owned zero page is allocated dynamically.  POKE must protect
-    ; the generated occupied ranges while leaving non-compiler ZP addresses
-    ; available for stock-compatible hardware/KERNAL use.
+    ; Temporary minimal guard only: high hardware guard + compiler ZP.
+    ; Full narrow control-plane list is not yet generated for current design.
     cpy #0
-    bne @normal_ram
+    bne @high_guard
     ldx #0
 @zp_range_loop:
     cpx #(compiler_zp_protected_range_count * 2)
@@ -81,19 +85,6 @@ system_poke:
     inx
     inx
     bne @zp_range_loop
-@normal_ram:
-    ; The normal-RAM compiler image/workspace is one generated policy range.
-    cpy #>compiler_protected_start
-    bcc @high_guard
-    bne @check_end
-    cpx #<compiler_protected_start
-    bcc @high_guard
-@check_end:
-    cpy #>compiler_protected_end
-    bcc @protected
-    bne @high_guard
-    cpx #<compiler_protected_end
-    bcc @protected
 @high_guard:
     cpy #>compiler_high_guard_start
     bne @store

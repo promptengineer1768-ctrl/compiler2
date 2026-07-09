@@ -1,5 +1,10 @@
 ; src/arena/georam_detect.asm
 ; Non-destructive geoRAM detection.
+;
+; PARTIAL (design audit 2026-07-09): geoRAM probe/minimum/fingerprint remain
+; useful as the geoRAM backend. Dual-device expansion profile (store kind,
+; reu_assist, XIP slots, N_dma/N_fill, generation) and REU detect are missing
+; (DESIGN2 §8.1.1). Do not treat this module as dual-device complete.
 
 .include "common/zp.inc"
 .include "common/constants.asm"

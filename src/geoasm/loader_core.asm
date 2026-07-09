@@ -1,8 +1,10 @@
 ; src/geoasm/loader_core.asm
 ; Loader core for file I/O, memory paging, and decompression hooks.
 ;
-; Provides the foundation for loading GEORAM payloads and managing
-; memory overlays.
+; SKELETON (design audit 2026-07-09) for dual-device install and detection:
+; DESIGN2 / REU_DESIGN require non-destructive dual probe (geoRAM+REU),
+; geoRAM-prefer store, fingerprint skip-reload, and REU patch packaging.
+; The routines marked SKELETON below must be re-implemented before claim.
 
 .include "common/zp.inc"
 .include "common/constants.asm"
@@ -161,32 +163,8 @@ loader_memory_paging:
 ; Clobbers: A, X, Y
 .export loader_decompression
 loader_decompression:
-    ; Save pointers
-    stx zp_georam_stream_src
-    sty zp_georam_stream_src+1
-    ; Read CGS1 header (4 bytes: magic, version, size, checksum)
-    ldy #0
-    lda (zp_georam_stream_src),y
-    cmp #'C'
-    bne @invalid_header
-    iny
-    lda (zp_georam_stream_src),y
-    cmp #'G'
-    bne @invalid_header
-    iny
-    lda (zp_georam_stream_src),y
-    cmp #'S'
-    bne @invalid_header
-    iny
-    lda (zp_georam_stream_src),y
-    cmp #'1'
-    bne @invalid_header
-    ; Skip header, start decompression
-    ; For now, just report success
-    clc
-    rts
-@invalid_header:
-    lda #ERR_SYNTAX
+    ; SKELETON: CGS1 decompress was a success no-op.
+    lda #ERR_UNDEFINED_FUNCTION
     sec
     rts
 
@@ -197,42 +175,19 @@ loader_decompression:
 .segment "LOADER"
 
 ; loader_entry - Main loader entry in the fixed first loader page
+; SKELETON: dual-device install (geoRAM+REU probe, prefer geoRAM store, REU
+; patch, fingerprint skip-reload, expansion profile) is not implemented.
 ; Input:  none
 ; Output: C = error
 ; Clobbers: A, X, Y
 .export loader_entry
 loader_entry:
-    lda #0
-    sta loader_sequence_phase
-    ldx #<detecting_message
-    ldy #>detecting_message
-    jsr loader_print
-    jsr loader_detect_georam
-    bcs @failed
-    inc loader_sequence_phase
-    ldx #<detected_message
-    ldy #>detected_message
-    jsr loader_print
-    ldx #<loading_message
-    ldy #>loading_message
-    jsr loader_print
-    lda #georam_filename_len
-    ldx #<georam_filename
-    ldy #>georam_filename
-    jsr georam_stream_load
-    bcs @failed
-    inc loader_sequence_phase
-    ldx #<ready_message
-    ldy #>ready_message
-    jsr loader_print
-    inc loader_sequence_phase
-    jmp loader_basic_shell
-@failed:
     lda #$FF
     sta loader_sequence_phase
     ldx #<failed_message
     ldy #>failed_message
     jsr loader_print
+    lda #ERR_UNDEFINED_FUNCTION
     sec
     rts
 
@@ -375,29 +330,14 @@ loader_raw_page:   .byte 0
 ; =============================================================================
 
 ; loader_detect_georam - Detection wrapper
+; SKELETON: previous body faked geoRAM at $DE00 with a 64 KiB claim and did
+; not call non-destructive detect_georam / dual REU probe (DESIGN2 §8).
 ; Input:  none
-; Output: C = detected, A = capacity in 64KB blocks
+; Output: C set (not implemented)
 ; Clobbers: A, X, Y
 .export loader_detect_georam
 loader_detect_georam:
-    ; Try to detect geoRAM by writing test patterns
-    ldx #$FE
-    stx $D000
-    ldx #$FF
-    stx $D001
-    ; Write test pattern
-    lda #$A5
-    sta $DE00
-    ; Read back
-    lda $DE00
-    cmp #$A5
-    bne @not_found
-    ; geoRAM detected
-    lda #$01          ; 64KB minimum
-    clc
-    rts
-@not_found:
-    lda #$00
+    lda #ERR_UNDEFINED_FUNCTION
     sec
     rts
 

@@ -915,28 +915,31 @@ program_encode_stock:
 @error:
     rts
 
-; program_decode_extended
+; program_decode_extended / program_encode_extended
+; SKELETON for product SAVE path (design audit 2026-07-09): DESIGN2 §5 chooses
+; format by tokens (C2-only > Plus/4 3.5 PRG > V2). C2P1 is optional only for
+; Compiler 2-only packages; Plus/4 3.5 and token-driven classification are
+; missing. These entries fail until re-implemented.
 ; Inputs/outputs: X/Y = arena-backed whole-program descriptor.
-; Validates and removes the complete C2P1 envelope transactionally.
 ; Clobbers: A, X, Y. Zero page: expression pointer workspace.
 .export program_decode_extended
 program_decode_extended:
-    jsr __program_stream_probe
-    bcs @error
-    jmp __program_stream_decode_extended
-@error:
+    lda #ERR_UNDEFINED_FUNCTION
+    sec
     rts
 
-; program_encode_extended
-; Inputs/outputs: X/Y = arena-backed whole-program descriptor.
-; Prepends a versioned C2P1 envelope with 16-bit length and checksum fields.
-; Clobbers: A, X, Y. Zero page: expression pointer workspace.
 .export program_encode_extended
 program_encode_extended:
-    jsr __program_stream_probe
-    bcs @error
-    jmp __program_stream_encode_extended
-@error:
+    lda #ERR_UNDEFINED_FUNCTION
+    sec
+    rts
+
+; program_select_save_format - token-class SAVE format selection (SKELETON)
+; Design: scan tokens outside REM/string; emit C2-only / Plus/4 3.5 / V2.
+.export program_select_save_format
+program_select_save_format:
+    lda #ERR_UNDEFINED_FUNCTION
+    sec
     rts
 
 __program_stream_classify:

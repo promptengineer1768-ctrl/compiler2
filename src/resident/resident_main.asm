@@ -1,5 +1,8 @@
 ; src/resident/resident_main.asm
 ; Minimal resident input loop and boundary assertions.
+;
+; SKELETON (design audit 2026-07-09): no expansion-profile degraded mode and
+; no minimal editor (error + QUIT only) after store loss (DESIGN2 §8.5).
 
 .include "common/zp.inc"
 .include "common/constants.asm"

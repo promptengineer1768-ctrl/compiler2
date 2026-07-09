@@ -584,12 +584,13 @@ strict mypy on the touched screen tests.
 - [x] Implement `detect_probe_pattern1` / `detect_probe_pattern2`
 - [x] Implement `detect_probe_aliasing` — capacity detection
 - [x] Implement `detect_check_minimum` — 512 KiB threshold
-- [x] Implement `detect_publish_profile` — install profile
+- [~] Implement `detect_publish_profile` — dual-device expansion profile (PARTIAL 2026-07-09: geoRAM fingerprint only; need store/reu_assist/XIP slots/N_dma)
 - [x] Implement `detect_validate_profile` — session integrity
+- [ ] Implement REU non-destructive detect + dual selection (prefer geoRAM store)
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -958,12 +959,13 @@ depth tracking, caller selection restoration, and underflow rejection.
 - [x] Implement `program_classify_file` — stock vs extended
 - [x] Implement `program_decode_stock` — BASIC V2 import
 - [x] Implement `program_encode_stock` — canonical BASIC V2 export
-- [x] Implement `program_decode_extended` — versioned extension import
-- [x] Implement `program_encode_extended` — extension export
+- [~] Implement `program_decode_extended` — versioned extension import (SKELETON 2026-07-09: token-class SAVE / Plus/4 path missing)
+- [~] Implement `program_encode_extended` — extension export (SKELETON 2026-07-09)
+- [~] Implement `program_select_save_format` — tokens outside REM/string → C2 / Plus/4 3.5 / V2
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -1386,7 +1388,7 @@ Black and Ruff passed, manifest and generated-contract validation passed, and
 - [x] Create `src/runtime/errors.asm`
 - [x] Implement `io_print_value` / `io_print_newline` / `io_print_space`
 - [x] Implement `io_input_value` / `io_input_string` / `io_get`
-- [x] Implement `rio_load` / `rio_save` / `rio_verify`
+- [~] Implement `rio_load` / `rio_save` / `rio_verify` (SKELETON 2026-07-09: product SAVE/VERIFY must be token-class + exact SAVE bytes; raw range path demoted)
 - [x] Implement `rio_open` / `rio_close` / `rio_chrin` / `rio_chrout`
 - [x] Use one bit-7-terminated static-output-string ABI and shared emitter
 - [x] Implement `err_raise` / `err_from_kernal` / error shortcuts
@@ -1474,7 +1476,7 @@ tests.
 
 **GREEN phase:**
 - [x] Create `src/runtime/system.asm`
-- [x] Implement `system_peek` / `system_poke` with protection
+- [~] Implement `system_peek` / `system_poke` with protection (SKELETON 2026-07-09: narrow control-plane; `$CE00` when REU XIP; no blanket `$0801-$D000`)
 - [x] Implement `system_sys` / `system_usr`
 - [x] Implement `system_wait`
 - [x] Implement `system_ti_load` / `system_ti_store`
@@ -1739,7 +1741,7 @@ pytest tests/integration/test_compile_pipeline.py -v
 - [x] Create `src/geoasm/direct_dispatch.asm`
 - [x] Implement `direct_probe_prefix` — wedge detection
 - [x] Implement `direct_classify` — direct/program policy
-- [x] Implement `direct_execute_command`
+- [~] Implement `direct_execute_command` (SKELETON 2026-07-09: QUIT/SAVE/LOAD/VERIFY/COMPILE not design-complete)
 - [x] Implement `direct_execute_temporary` — immediate compiler path
 
 **REFACTOR phase:**
@@ -2082,13 +2084,14 @@ KERNAL/parser/semantic slice reported 94 passed.
 - [x] Implement `export_parse_command`
 - [x] Implement `export_collect_dependencies`
 - [x] Implement `export_link_image`
-- [x] Implement `export_check_budgets`
+- [~] Implement `export_check_budgets` (SKELETON 2026-07-09: soft 80/100 edge warnings + dual `$CE00` layouts)
+- [~] Implement `export_compile_command` (SKELETON 2026-07-09: demoted with budget/layout policy)
 - [x] Implement `export_write_prg`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify all functional tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify all functional tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -2096,7 +2099,7 @@ pytest tests/unit/test_compile_export.py -v
 pytest tests/functional/test_compile_export.py -v
 ```
 
-**Implementation evidence (2026-07-03):** Replaced success placeholders with
+**Implementation evidence (2026-07-03, superseded 2026-07-09 audit):** Replaced success placeholders with
 validated CP/EO option records, ED dependency rejection, EL linked-image
 admission, EB range/budget/disjoint checks, and an EW path through the resident
 KERNAL SETNAM/SETLFS/SAVE bridges. RED reported 12 failures and 1 pass;
@@ -2137,7 +2140,7 @@ and no production standalone linker emits `build/COMPILED.PRG`.
 - [x] Implement `editor_submit_line` — transactional submission
 - [x] Implement `editor_delete_line` — deletion with repair
 - [x] Implement `editor_detokenize_line` — LIST conversion
-- [x] Implement `editor_list_range` — range listing
+- [~] Implement `editor_list_range` — range listing (SKELETON 2026-07-09)
 - [x] Implement `editor_ready_transition` — READY state
 
 **REFACTOR phase:**
@@ -2247,18 +2250,19 @@ behavior. Six unrelated pre-existing failures remain outside these phases
 
 **GREEN phase:**
 - [x] Create `src/geoasm/loader_core.asm`
-- [x] Implement `loader_entry` — main entry at `$080D`
-- [x] Implement `loader_detect_georam` — detection wrapper
+- [~] Implement `loader_entry` — dual-device install at `$080D` (SKELETON 2026-07-09)
+- [~] Implement `loader_detect_georam` — dual probe wrapper (SKELETON 2026-07-09: fake detector removed)
 - [x] Implement `georam_load_georam_file` — load GEORAM from disk
 - [x] Implement `georam_install_pages` — byte-by-byte install
 - [x] Implement `loader_install_ram_payload` — RAM payload install
 - [x] Implement `loader_restore_banking` — restore `$35`
 - [x] Implement `loader_check_sentinel` — guard byte check
+- [~] Implement REU detect / fingerprint skip-reload / dual D64 install path
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify all integration tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify all integration tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -2282,17 +2286,21 @@ pytest tests/integration/test_loader.py -v
 - [x] Implement `init_clear_bss`
 - [x] Implement `init_arenas`
 - [x] Implement `init_editor` / `init_enter_main_loop`
+- [~] Implement `compiler_vectors` — install IRQ/NMI (SKELETON 2026-07-09)
+- [~] Implement `compiler_state_machine` (SKELETON 2026-07-09)
+- [~] Implement NMI RESTORE distrust re-detect path (DESIGN2 §8.5/§9.3)
+- [~] Implement `QUIT` soft-reset leave path (keep program, CLR, restore vectors)
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
 pytest tests/unit/test_compiler_init.py -v
 ```
 
-**Implementation evidence (2026-07-03):** `compiler_init` now uses the
+**Implementation evidence (2026-07-03, partial after 2026-07-09 audit):** `compiler_init` now uses the
 linker-defined BSS bounds, delegates arena construction to `arena_init_all`,
 initializes the resident screen/editor state, and tail-enters `resident_main`;
 the old hard-coded `$1000` clearing and synthetic arena directory were
@@ -2315,7 +2323,7 @@ emulator/VICE verification before these items can be marked complete.
 - [x] Verify tests fail
 
 **GREEN phase:**
-- [x] Create `src/geoasm/compressor.asm`
+- [~] Create `src/geoasm/compressor.asm` (SKELETON 2026-07-09: success no-ops demoted)
 - [x] Copy `georam_stream_reader.asm` from compressor project
 - [x] Integrate `georam_stream_load` into loader
 - [x] Allocate `zp_georam_stream` (15 bytes) in loader ZP

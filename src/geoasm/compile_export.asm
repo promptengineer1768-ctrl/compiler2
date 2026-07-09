@@ -1,6 +1,10 @@
 ; src/geoasm/compile_export.asm
 ; Validates the records used to construct and write a source-free standalone
 ; image. Image construction remains a separate compiler/linker responsibility.
+;
+; SKELETON (design audit 2026-07-09): export_compile_command / budget policy do
+; not implement soft edge-triggered 80%/100% stock warnings or dual stock vs
+; developer layouts ($CE00 free vs reserved). See DESIGN2 §6.4 / COMPILE_EXPORT.
 
 .include "common/zp.inc"
 .include "common/constants.asm"
@@ -42,42 +46,17 @@ export_command_record:
 .endmacro
 
 ; export_compile_command - Execute a fully prepared standalone export plan.
+; SKELETON: hard-reject-only path without soft stock budgets or dual layout
+; profiles ($CE00 free stock vs reserved developer). Re-implement per
+; DESIGN2 §6.4 before treating COMPILE as complete.
 ; Input: X/Y -> contiguous CP(6), ED(3), EL(3), EB(10), EW(11) records.
-; Output: C clear after the image is saved; C set/A=error at the first rejected
-; record or KERNAL failure.  The compiler/linker owns record construction; this
-; routine is the single production transaction that admits and writes it.
-; Clobbers: A, X, Y. Side effects: canonicalizes CP and may write a PRG.
+; Output: C set, A = ERR_UNDEFINED_FUNCTION
+; Clobbers: A, X, Y. Side effects: none.
 ; Zero page: zp_src.
 .export export_compile_command
 export_compile_command:
-    stx export_command_record
-    sty export_command_record+1
-    jsr export_parse_command
-    bcs @done
-    lda #6
-    jsr @record_at_offset
-    jsr export_collect_dependencies
-    bcs @done
-    lda #9
-    jsr @record_at_offset
-    jsr export_link_image
-    bcs @done
-    lda #12
-    jsr @record_at_offset
-    jsr export_check_budgets
-    bcs @done
-    lda #22
-    jsr @record_at_offset
-    jmp export_write_prg
-@done:
-    rts
-@record_at_offset:
-    clc
-    adc export_command_record
-    tax
-    lda export_command_record+1
-    adc #0
-    tay
+    lda #ERR_UNDEFINED_FUNCTION
+    sec
     rts
 
 ; Validate the device in A. Devices 8 through 11 are supported.
@@ -227,94 +206,17 @@ export_link_image:
     sec
     rts
 
-; export_check_budgets - Validate an EB range plan.
+; export_check_budgets - Soft stock budget + dual layout policy.
+; SKELETON: previous body hard-failed oversize ranges only; design requires
+; edge-triggered 80%/100% warnings and stock vs developer $CE00 layouts
+; (DESIGN2 §6.4). Re-implement before treating as complete.
 ; Input: X/Y -> "EB", image_start:u16, image_end_exclusive:u16,
 ; workspace_start:u16, workspace_end_exclusive:u16.
-; The nonempty image must lie in $0801..$CFFF and workspace must not overlap it.
-; Output: C clear, or A=ERR_OUT_OF_MEMORY and C set.
-; Clobbers: A, X, Y. Side effects: replaces range scratch. Zero page: zp_src.
+; Output: C set, A = ERR_UNDEFINED_FUNCTION
+; Clobbers: A, X, Y. Side effects: none. Zero page: zp_src.
 .export export_check_budgets
 export_check_budgets:
-    stx zp_src
-    sty zp_src+1
-    ldy #0
-    lda (zp_src),y
-    cmp #'E'
-    beq @budget_magic_e_ok
-    jmp @error
-@budget_magic_e_ok:
-    iny
-    lda (zp_src),y
-    cmp #'B'
-    bne @error
-    ldx #0
-@copy_words:
-    iny
-    lda (zp_src),y
-    sta export_start,x
-    inx
-    cpx #8
-    bne @copy_words
-
-    ; image_start >= $0801
-    lda export_start+1
-    cmp #$08
-    bcc @error
-    bne @start_ok
-    lda export_start
-    cmp #$01
-    bcc @error
-@start_ok:
-    ; image_end <= $D000 and image_start < image_end.
-    lda export_end+1
-    cmp #$D0
-    bcc @end_ceiling_ok
-    bne @error
-    lda export_end
-    bne @error
-@end_ceiling_ok:
-    lda export_start+1
-    cmp export_end+1
-    bcc @image_order_ok
-    bne @error
-    lda export_start
-    cmp export_end
-    bcs @error
-@image_order_ok:
-    ; Reject reversed workspace ranges.
-    lda export_workspace_start+1
-    cmp export_workspace_end+1
-    bcc @workspace_order_ok
-    bne @error
-    lda export_workspace_start
-    cmp export_workspace_end
-    bcc @workspace_order_ok
-    beq @success
-    bcs @error
-@workspace_order_ok:
-    ; Disjoint if workspace_end <= image_start.
-    lda export_workspace_end+1
-    cmp export_start+1
-    bcc @success
-    bne @check_after
-    lda export_workspace_end
-    cmp export_start
-    bcc @success
-    beq @success
-@check_after:
-    ; Or if workspace_start >= image_end.
-    lda export_workspace_start+1
-    cmp export_end+1
-    bcc @error
-    bne @success
-    lda export_workspace_start
-    cmp export_end
-    bcc @error
-@success:
-    clc
-    rts
-@error:
-    lda #ERR_OUT_OF_MEMORY
+    lda #ERR_UNDEFINED_FUNCTION
     sec
     rts
 

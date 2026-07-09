@@ -13,8 +13,31 @@ not duplicate generated values as if they were current output.
 
 ## 0. Validation Status
 
-The original skeleton did **not** completely realize the design. This revision
-closes the structural gaps found during the design audit:
+### 0.1 Design-audit demotions (2026-07-09)
+
+After the dual-device / QUIT / SAVE-token / COMPILE-layout design lock, production
+code was audited against `REQUIREMENTS.md` and `DESIGN2.md`. Modules that
+claimed completeness under an older model were **reverted to SKELETON** (honest
+`ERR_UNDEFINED_FUNCTION` / documented partial status) so the next
+implementation pass cannot treat them as done.
+
+| Design delta | Production state after demotion |
+|---|---|
+| Dual geoRAM+REU store/XIP/assist | **Missing** — no REU modules; gate is geoRAM-window only (PARTIAL) |
+| QUIT soft-reset + fingerprint skip-reload | **SKELETON** (`direct_execute_command`, `loader_entry`) |
+| NMI RESTORE distrust | **SKELETON** (`nmi_entry`, `compiler_vectors`) |
+| SAVE by tokens / VERIFY = SAVE bytes | **SKELETON** (`rio_save`/`rio_verify`, extended codec, format select) |
+| COMPILE soft 80/100 + dual `$CE00` layout | **SKELETON** (`export_compile_command`, `export_check_budgets`) |
+| 512 KiB hard build fail | **Partial** — `validate_georam_image_budget` hard-fails from size report |
+| FRE profile-aware / narrow POKE | **PARTIAL/SKELETON** (`const_fre_bytes`; `system_poke` narrowed, `$CE00` still missing) |
+| Minimal editor (error+QUIT) | **Missing** (`resident_main` PARTIAL) |
+| Compressor / CGS1 decompress success no-ops | **SKELETON** (`compressor.asm`, `loader_decompression`) |
+
+Skeleton markers in source use `SKELETON (design audit 2026-07-09)` headers.
+Do not mark owning `TASKS.md` items `[x]` until re-implemented through the
+production path and acceptance tests.
+
+### 0.2 Structural ownership map
 
 | Design responsibility | Owning implementation |
 |---|---|
@@ -24,7 +47,7 @@ closes the structural gaps found during the design audit:
 | Source-free `COMPILE` export and its restricted shell | `geoasm/compile_export.asm`, `runtime/inspection.asm`, standalone linker profile |
 | DOS wedge before BASIC tokenization | `geoasm/dos_wedge.asm`, `runtime/wedge.asm`, resident input dispatch |
 | Graphics ownership and one exit path | `runtime/graphics.asm`, generated memory policy |
-| Dual-device expansion profile and fatal integrity handling | `arena/georam_detect.asm`, REU detect/gate, `resident/fatal.asm`, expansion dispatcher |
+| Dual-device expansion profile and fatal integrity handling | `arena/georam_detect.asm` (geoRAM half), REU detect/gate (**missing**), `resident/fatal.asm`, expansion dispatcher (**missing**) |
 | Generated ABI, arena, ZP, placement, test-entry, and traceability contracts | structured manifests and `tools/` generators |
 | Current-build API and memory-map references | `tools/generate_reference.py`, `build/API.md`, `build/MAP.md` |
 

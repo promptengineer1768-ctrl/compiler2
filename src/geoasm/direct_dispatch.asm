@@ -1,10 +1,13 @@
 ; src/geoasm/direct_dispatch.asm
 ; Immediate-mode front door and direct/program execution policy.
+;
+; SKELETON (design audit 2026-07-09): QUIT soft-reset, token-class SAVE/VERIFY,
+; and most direct commands are not implemented (DESIGN2 §4, §5, §8.5).
 
 .include "common/constants.asm"
 .include "common/zp.inc"
 
-.import export_compile_command, pipeline_compile_line, codegen_get_code_ptr
+.import pipeline_compile_line, codegen_get_code_ptr
 
 TOKEN_DIM       = 134
 TOKEN_LET       = 136
@@ -24,6 +27,7 @@ TOKEN_SYS       = 158
 TOKEN_BASIC3_5  = 205
 TOKEN_BASIC2    = 206
 TOKEN_COMPILE   = 207
+TOKEN_QUIT      = 211
 
 DIRECT_CLASS_COMMAND   = $00
 DIRECT_CLASS_TEMPORARY = $01
@@ -112,6 +116,8 @@ direct_classify:
     beq @command
     cmp #TOKEN_COMPILE
     beq @command
+    cmp #TOKEN_QUIT
+    beq @command
     cmp #TOKEN_BASIC3_5
     beq @command
     cmp #TOKEN_DIM
@@ -145,10 +151,11 @@ direct_classify:
     rts
 
 ; direct_execute_command - Record and dispatch a validated direct-only command.
+; SKELETON: previously returned success for SAVE/LOAD/VERIFY/QUIT without
+; performing design behavior. COMPILE path is demoted with export_compile_command.
 ; Inputs: X/Y = direct-command record; byte zero is the command token.
-; Outputs: direct_last_path=0 and direct_last_token set. Side effects: records
-; the dispatch pointer and writes zp_src. Clobbers: A, Y. Flags: C clear.
-; Zero page: zp_src.
+; Outputs: direct_last_path/token set; C set, A = ERR_UNDEFINED_FUNCTION.
+; Clobbers: A, Y. Zero page: zp_src.
 .export direct_execute_command
 direct_execute_command:
     lda #DIRECT_CLASS_COMMAND
@@ -160,21 +167,8 @@ direct_execute_command:
     ldy #0
     lda (zp_src), y
     sta direct_last_token
-    cmp #TOKEN_COMPILE
-    bne @recorded
-    ; The semantic command builder places the prepared CP/ED/EL/EB/EW export
-    ; plan immediately after the token.  Dispatch the real export transaction.
-    lda direct_last_ptr
-    clc
-    adc #1
-    tax
-    lda direct_last_ptr+1
-    adc #0
-    tay
-    jsr export_compile_command
-    rts
-@recorded:
-    clc
+    lda #ERR_UNDEFINED_FUNCTION
+    sec
     rts
 
 ; direct_execute_temporary - Enter the single-line temporary compiler path.

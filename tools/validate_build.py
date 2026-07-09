@@ -462,6 +462,28 @@ def _validate_assembled_artifacts() -> list[str]:
     return errors
 
 
+def validate_georam_image_budget(size_report_path: str) -> list[str]:
+    """Hard-fail when the geoRAM-canonical image exceeds 512 KiB (2048 pages).
+
+    Larger detected devices may only add dynamic storage; the base image must
+    always fit 512 KiB (REQUIREMENTS §8.1 / DESIGN2 §1).
+    """
+    errors: list[str] = []
+    path = Path(size_report_path)
+    if not path.exists():
+        return errors
+    report = _load_json(str(path))
+    pages = report.get("georam_pages")
+    limit = report.get("georam_page_limit", 2048)
+    if isinstance(pages, int) and isinstance(limit, int) and pages > limit:
+        errors.append(
+            f"geoRAM image exceeds 512 KiB budget: {pages} pages > {limit} limit"
+        )
+    if report.get("georam_within_limit") is False:
+        errors.append("size_report.georam_within_limit is false (512 KiB hard fail)")
+    return errors
+
+
 def _contract_errors() -> list[str]:
     """Run generated-contract validators used before and after assembly."""
     errors: list[str] = []
@@ -477,6 +499,7 @@ def _contract_errors() -> list[str]:
             "manifests/commands.json", "build/keyword_lookup_report.json"
         )
     )
+    errors.extend(validate_georam_image_budget("build/size_report.json"))
     return errors
 
 

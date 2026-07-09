@@ -1,7 +1,9 @@
 ; src/geoasm/compiler_init.asm
 ; Compiler initialization, vector setup, and state machine entry.
 ;
-; Provides the bootstrap sequence for the Compiler 2 system.
+; SKELETON (design audit 2026-07-09): NMI RESTORE distrust path, dual-device
+; re-detect tail, and real vector install are not implemented (DESIGN2 §8.5,
+; §9.3). Re-implement before treating init as complete.
 
 .include "common/zp.inc"
 .include "common/constants.asm"
@@ -67,27 +69,15 @@ compiler_init:
 ; =============================================================================
 
 ; compiler_vectors - Install interrupt vectors
+; SKELETON: only stored BSS copies; never installs IRQ/NMI hardware vectors
+; or the RESTORE distrust handler (DESIGN2 §9.3).
 ; Input:  X/Y = vector table pointer (low/high)
-; Output: none
+; Output: C set, A = ERR_UNDEFINED_FUNCTION
 ; Clobbers: A, X, Y
 .export compiler_vectors
 compiler_vectors:
-    ; Store vector table pointer
-    stx zp_ptr1
-    sty zp_ptr1+1
-    ; Copy vectors to zero page
-    ldy #$00
-    lda (zp_ptr1),y
-    sta compiler_irq_vector
-    iny
-    lda (zp_ptr1),y
-    sta compiler_irq_vector+1
-    iny
-    lda (zp_ptr1),y
-    sta compiler_nmi_vector
-    iny
-    lda (zp_ptr1),y
-    sta compiler_nmi_vector+1
+    lda #ERR_UNDEFINED_FUNCTION
+    sec
     rts
 
 ; =============================================================================
@@ -95,19 +85,14 @@ compiler_vectors:
 ; =============================================================================
 
 ; compiler_state_machine - State machine entry
+; SKELETON: previous body always returned success.
 ; Input:  X/Y = initial state (low/high)
-; Output: C = error
+; Output: C set, A = ERR_UNDEFINED_FUNCTION
 ; Clobbers: A, X, Y
 .export compiler_state_machine
 compiler_state_machine:
-    ; Store initial state
-    stx zp_ptr1
-    sty zp_ptr1+1
-    ; Execute state machine
-    ldy #$00
-    lda (zp_ptr1),y
-    ; For now, just return success
-    clc
+    lda #ERR_UNDEFINED_FUNCTION
+    sec
     rts
 
 ; =============================================================================

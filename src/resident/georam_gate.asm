@@ -1,4 +1,8 @@
 ; src/resident/georam_gate.asm
+; PARTIAL (design audit 2026-07-09): geoRAM window XIP at $DE00 is valid for
+; the geoRAM store backend. Dual-backend dispatch (REU DMA into $CE00 / hot
+; slots $C800+), expansion profile generation checks, and REU assist
+; memcopy/memfill are not implemented (DESIGN2 §8 / REU_DESIGN).
 ; Resident geoRAM gate and selection helpers.
 
 .include "common/zp.inc"
