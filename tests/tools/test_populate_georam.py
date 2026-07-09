@@ -6,7 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from populate_georam import COLD_SEGMENTS, populate
+from populate_georam import (
+    COLD_SEGMENTS,
+    GEORAM_MAX_PAYLOAD_SIZE,
+    payload_size_for,
+    populate,
+)
 
 
 def _map_text(start: int, size: int) -> str:
@@ -90,3 +95,47 @@ def test_populate_overlays_directory_routine_bytes(tmp_path: Path) -> None:
     payload = output_path.read_bytes()[2:]
     destination = 2 * 256 + 16
     assert payload[destination : destination + len(routine)] == routine
+
+
+def test_payload_size_for_hard_fails_over_512kib() -> None:
+    """REQUIREMENTS §8.1: images above 512 KiB / 2048 pages are rejected."""
+    assert payload_size_for(1) == 65536
+    assert payload_size_for(GEORAM_MAX_PAYLOAD_SIZE) == GEORAM_MAX_PAYLOAD_SIZE
+    with pytest.raises(ValueError, match="512 KiB"):
+        payload_size_for(GEORAM_MAX_PAYLOAD_SIZE + 1)
+
+
+def test_populate_rejects_placement_beyond_512kib(tmp_path: Path) -> None:
+    """Directory placements past the last page of the 512 KiB image fail."""
+    map_path = tmp_path / "compiler.map"
+    map_path.write_text(_map_text(0x0810, 4))
+    linked = bytearray(range(1, len(COLD_SEGMENTS) * 4 + 1))
+    (tmp_path / "hibasic.bin").write_bytes(b"\x61\x62\x63\x64")
+    routine = b"\xa9\x42\x60"
+    compiler_path = tmp_path / "compiler.bin"
+    compiler_path.write_bytes(b"\x01\x08" + b"\x00" * 15 + linked + routine)
+    label_address = 0x0810 + len(linked)
+    labels_path = tmp_path / "compiler.lbl"
+    labels_path.write_text(f"al {label_address:06X} .too_high\n")
+    directory_path = tmp_path / "routine_directory.json"
+    # block 32 page 0 => absolute page 2048, offset 0 is past the last page.
+    directory_path.write_text("""
+{
+  "routines": {
+    "too_high": {
+      "layer": "georam",
+      "block": 32,
+      "page": 0,
+      "offset": 0
+    }
+  }
+}
+""")
+    with pytest.raises(ValueError, match="512 KiB"):
+        populate(
+            map_path,
+            compiler_path,
+            tmp_path / "georam.bin",
+            labels_path,
+            directory_path,
+        )

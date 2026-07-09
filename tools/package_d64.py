@@ -1,18 +1,142 @@
 """D64 packaging tool for Compiler 2.
 
-Creates D64 disk images using VICE c1541 tool or fallback to direct write.
+Creates dual-device D64 disk images (BASICV3 + GEORAM + REU) using VICE c1541
+or a direct sector-chain fallback. Also builds the versioned REU patch object
+(`reu.bin`) that pairs with the geoRAM-canonical image.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import struct
 import subprocess
+import zlib
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# REU patch envelope (DESIGN2 §8.3 / REQUIREMENTS §8.1): small delta/fixup,
+# fingerprint of paired GEORAM, no geoRAM capacity field used for fixup.
+REU_PATCH_MAGIC = b"C2RP"
+REU_PATCH_FORMAT_VERSION = 1
+REU_PATCH_ABI_VERSION = 1
+REU_MIN_CAPACITY_KIB = 512
+
+
+def build_reu_patch(
+    georam_path: str | Path,
+    output_path: str | Path,
+    *,
+    abi_version: int = REU_PATCH_ABI_VERSION,
+    fixups: bytes = b"",
+) -> dict[str, Any]:
+    """Build the versioned REU patch sidecar paired with a GEORAM image.
+
+    The envelope carries magic, format/ABI versions, REU device minimum
+    capacity, SHA-256 of the paired geoRAM image bytes, an optional fixup
+    blob, and a CRC-32 over the header+blob. It intentionally omits any
+    geoRAM size field used for fixup (REQUIREMENTS §8.1).
+
+    Args:
+        georam_path: Path to the geoRAM-canonical image (``georam.bin``).
+        output_path: Destination path for ``reu.bin``.
+        abi_version: Patch ABI version recorded in the envelope.
+        fixups: Optional deterministic fixup/reloc blob (may be empty).
+
+    Returns:
+        Machine-readable REU loader manifest fields for the patch.
+
+    Raises:
+        FileNotFoundError: When the paired geoRAM image is missing.
+        ValueError: When the fixup blob exceeds the u32 length field.
+    """
+    georam = Path(georam_path)
+    if not georam.exists():
+        raise FileNotFoundError(f"geoRAM image not found: {georam}")
+    georam_bytes = georam.read_bytes()
+    fingerprint = hashlib.sha256(georam_bytes).digest()
+    if len(fixups) > 0xFFFFFFFF:
+        raise ValueError("REU fixup blob exceeds 32-bit length")
+
+    header = bytearray()
+    header.extend(REU_PATCH_MAGIC)
+    header.extend(struct.pack("<H", REU_PATCH_FORMAT_VERSION))
+    header.extend(struct.pack("<H", abi_version))
+    header.extend(struct.pack("<H", REU_MIN_CAPACITY_KIB))
+    header.extend(struct.pack("<H", 0))  # flags
+    header.extend(fingerprint)
+    header.extend(struct.pack("<H", 0 if not fixups else 1))  # fixup_count
+    header.extend(struct.pack("<I", len(fixups)))
+    body = bytes(header) + fixups
+    crc = zlib.crc32(body) & 0xFFFFFFFF
+    payload = body + struct.pack("<I", crc)
+
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(payload)
+
+    manifest: dict[str, Any] = {
+        "schema_version": 1,
+        "kind": "reu_patch",
+        "magic": REU_PATCH_MAGIC.decode("ascii"),
+        "format_version": REU_PATCH_FORMAT_VERSION,
+        "abi_version": abi_version,
+        "min_reu_capacity_kib": REU_MIN_CAPACITY_KIB,
+        "georam_sha256": fingerprint.hex(),
+        "georam_path": georam.as_posix(),
+        "fixup_bytes": len(fixups),
+        "size": len(payload),
+        "crc32": f"{crc:08x}",
+        "path": out.as_posix(),
+        # Explicitly absent: no geoRAM capacity field (REQUIREMENTS §8.1).
+        "has_georam_capacity_field": False,
+    }
+    manifest_path = out.with_name("reu_loader_manifest.json")
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return manifest
+
+
+def validate_reu_patch(reu_path: str | Path) -> list[str]:
+    """Validate a REU patch envelope.
+
+    Args:
+        reu_path: Path to ``reu.bin``.
+
+    Returns:
+        Deterministic list of validation errors (empty when valid).
+    """
+    path = Path(reu_path)
+    if not path.exists():
+        return [f"REU patch not found: {reu_path}"]
+    data = path.read_bytes()
+    errors: list[str] = []
+    min_header = 50
+    if len(data) < min_header + 4:
+        return [f"REU patch truncated: {len(data)} bytes"]
+    if data[:4] != REU_PATCH_MAGIC:
+        errors.append("REU patch magic is not C2RP")
+    format_version = struct.unpack_from("<H", data, 4)[0]
+    if format_version != REU_PATCH_FORMAT_VERSION:
+        errors.append(f"REU patch format_version {format_version} unsupported")
+    min_capacity = struct.unpack_from("<H", data, 8)[0]
+    if min_capacity < REU_MIN_CAPACITY_KIB:
+        errors.append(
+            f"REU min capacity {min_capacity} KiB is below {REU_MIN_CAPACITY_KIB} KiB"
+        )
+    fixup_len = struct.unpack_from("<I", data, 46)[0]
+    expected = min_header + fixup_len + 4
+    if len(data) != expected:
+        errors.append(f"REU patch size {len(data)} != expected {expected}")
+        return errors
+    body = data[:-4]
+    crc_stored = struct.unpack_from("<I", data, len(data) - 4)[0]
+    crc_calc = zlib.crc32(body) & 0xFFFFFFFF
+    if crc_stored != crc_calc:
+        errors.append("REU patch CRC-32 mismatch")
+    return errors
 
 
 def build_d64(
@@ -20,29 +144,44 @@ def build_d64(
     basicv3_path: str,
     georam_path: str,
     output_path: str,
+    reu_path: str | None = None,
 ) -> None:
-    """Create a D64 disk image using c1541 tool.
+    """Create a dual-device D64 disk image.
 
     Args:
-        c1541_path: Path to c1541 executable.
+        c1541_path: Path to c1541 executable (empty string selects direct build).
         basicv3_path: Path to BASICV3.PRG.
         georam_path: Path to GEORAM PRG sidecar.
         output_path: Output D64 path.
+        reu_path: Optional path to REU patch (``reu.bin``). When omitted and a
+            geoRAM image exists, a patch is generated next to the D64.
     """
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    # Use c1541 if path provided
+    resolved_reu = reu_path
+    if resolved_reu is None and georam_path and Path(georam_path).exists():
+        auto_reu = output.with_name("reu.bin")
+        build_reu_patch(georam_path, auto_reu)
+        resolved_reu = str(auto_reu)
+    elif (
+        resolved_reu
+        and georam_path
+        and Path(georam_path).exists()
+        and not Path(resolved_reu).exists()
+    ):
+        build_reu_patch(georam_path, resolved_reu)
+
     if c1541_path:
         _build_with_c1541(
             Path(c1541_path),
             basicv3_path,
             georam_path,
             output_path,
+            resolved_reu,
         )
     else:
-        # Fallback: create D64 directly
-        _build_direct(basicv3_path, georam_path, output_path)
+        _build_direct(basicv3_path, georam_path, output_path, resolved_reu)
 
 
 def _build_with_c1541(
@@ -50,6 +189,7 @@ def _build_with_c1541(
     basicv3_path: str,
     georam_path: str,
     output_path: str,
+    reu_path: str | None = None,
 ) -> None:
     """Build D64 using VICE c1541 tool."""
     cmd = [str(c1541)]
@@ -64,6 +204,11 @@ def _build_with_c1541(
     # Write GEORAM as a PRG with a fake $DE00 load header.
     if georam_path and Path(georam_path).exists():
         cmd.extend(["-write", georam_path, "georam"])
+
+    # Write REU patch sidecar (dual-device release always carries both).
+    if reu_path and Path(reu_path).exists():
+        cmd.extend(["-write", reu_path, "reu"])
+
     subprocess.run(cmd, check=True, capture_output=True)
 
 
@@ -71,6 +216,7 @@ def _build_direct(
     basicv3_path: str,
     georam_path: str,
     output_path: str,
+    reu_path: str | None = None,
 ) -> None:
     """Build D64 directly without c1541."""
     # Standard 35-track D64 uses variable sectors per track.
@@ -97,33 +243,23 @@ def _build_direct(
     next_track = 1
     next_sector = 0
 
-    # Add BASICV3.PRG
+    files: list[tuple[str, str]] = []
     if basicv3_path and Path(basicv3_path).exists():
-        data = Path(basicv3_path).read_bytes()
-        start_track, start_sector, sector_count, next_track, next_sector = (
-            _write_prg_data(d64_data, data, next_track, next_sector)
-        )
-        _add_entry(
-            d64_data,
-            dir_offset + 2 + entry_offset,
-            "BASICV3",
-            "PRG",
-            start_track,
-            start_sector,
-            sector_count,
-        )
-        entry_offset += 32
-
-    # Add GEORAM PRG sidecar.
+        files.append(("BASICV3", basicv3_path))
     if georam_path and Path(georam_path).exists():
-        data = Path(georam_path).read_bytes()
+        files.append(("GEORAM", georam_path))
+    if reu_path and Path(reu_path).exists():
+        files.append(("REU", reu_path))
+
+    for name, path in files:
+        data = Path(path).read_bytes()
         start_track, start_sector, sector_count, next_track, next_sector = (
             _write_prg_data(d64_data, data, next_track, next_sector)
         )
         _add_entry(
             d64_data,
             dir_offset + 2 + entry_offset,
-            "GEORAM",
+            name,
             "PRG",
             start_track,
             start_sector,
@@ -240,7 +376,7 @@ def validate_d64(d64_path: str) -> dict[str, Any]:
 
 
 def validate_prg_header(prg_path: str) -> list[str]:
-    """Validate the canonical `$0801` BASIC loader header.
+    """Validate the canonical ``$0801`` BASIC loader header.
 
     Args:
         prg_path: Path to the uncompressed BASICV3 PRG.
@@ -296,12 +432,27 @@ def _decode_petscii_name(raw: bytes) -> str:
 
 def main() -> None:
     """Main entry point."""
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Package Compiler 2 dual-device D64")
+    parser.add_argument(
+        "--write-reu-patch",
+        nargs=2,
+        metavar=("GEORAM", "REU"),
+        help="Build reu.bin patch from georam.bin and exit",
+    )
     parser.add_argument("c1541_path", nargs="?", default=None)
     parser.add_argument("basicv3_path", nargs="?", default=None)
     parser.add_argument("georam_path", nargs="?", default=None)
     parser.add_argument("output_path", nargs="?", default=None)
+    parser.add_argument("reu_path", nargs="?", default=None)
     args = parser.parse_args()
+
+    if args.write_reu_patch is not None:
+        georam_src, reu_dst = args.write_reu_patch
+        manifest = build_reu_patch(georam_src, reu_dst)
+        print(f"REU patch written: {reu_dst} ({manifest['size']} bytes)")
+        print(f"  georam_sha256={manifest['georam_sha256']}")
+        print("  reu_loader_manifest.json updated")
+        return
 
     build_dir = ROOT / "build"
     basicv3_path = (
@@ -313,6 +464,7 @@ def main() -> None:
     output_path = (
         Path(args.output_path) if args.output_path else build_dir / "compiler.d64"
     )
+    reu_path = Path(args.reu_path) if args.reu_path else build_dir / "reu.bin"
 
     # Find c1541
     c1541_path = (
@@ -356,13 +508,18 @@ def main() -> None:
         georam_path.parent.mkdir(parents=True, exist_ok=True)
         georam_path.write_bytes(struct.pack("<H", 0xDE00) + b"\x00" * 65536)
 
-    print(f"Building D64: {output_path}")
+    if not reu_path.exists() and georam_path.exists():
+        print(f"Building REU patch: {reu_path}")
+        build_reu_patch(georam_path, reu_path)
+
+    print(f"Building dual D64: {output_path}")
     try:
         build_d64(
             c1541_path,
             str(basicv3_path),
             str(georam_path),
             str(output_path),
+            str(reu_path),
         )
     except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
         print(f"c1541 failed, using direct build: {e}")
@@ -370,6 +527,7 @@ def main() -> None:
             str(basicv3_path),
             str(georam_path),
             str(output_path),
+            str(reu_path),
         )
 
     # Validate
@@ -377,6 +535,12 @@ def main() -> None:
     print(f"D64 created: {manifest['total_size']} bytes")
     for f in manifest["files"]:
         print(f"  {f['name']}.{f['type']}: {f['size_sectors']} sectors")
+
+    reu_errors = validate_reu_patch(reu_path)
+    if reu_errors:
+        for error in reu_errors:
+            print(f"Error: {error}")
+        raise SystemExit(1)
 
     # Save manifest
     manifest_path = output_path.with_suffix(".json")

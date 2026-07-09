@@ -115,6 +115,8 @@ class TestCrossArtifactValidators:
 
     def test_checked_in_generated_contracts_are_consistent(self) -> None:
         root = Path(__file__).resolve().parents[2]
+        if not (root / "build" / "routine_directory.json").exists():
+            pytest.skip("build/ artifacts not present; run build.ps1 first")
         assert (
             validate_build.validate_routine_directory(
                 str(root / "manifests" / "routines.json"),
@@ -194,3 +196,70 @@ class TestCrossArtifactValidators:
         assert validate_build.validate_no_stale_generated(
             {str(output): [str(source)]}
         ) == [f"generated output {output} is stale relative to {source}"]
+
+
+class TestGeoramImageBudget:
+    """REQUIREMENTS §8.1 hard-fail via size_report end-to-end."""
+
+    def test_missing_size_report_is_hard_fail(self, tmp_path: Path) -> None:
+        errors = validate_build.validate_georam_image_budget(
+            str(tmp_path / "missing.json")
+        )
+        assert errors
+        assert "missing" in errors[0]
+
+    def test_passes_when_report_within_512kib(self, tmp_path: Path) -> None:
+        report = tmp_path / "size_report.json"
+        report.write_text(
+            json.dumps(
+                {
+                    "georam_pages": 256,
+                    "georam_page_limit": 2048,
+                    "georam_bytes": 65536,
+                    "georam_byte_limit": 524288,
+                    "georam_within_limit": True,
+                }
+            ),
+            encoding="utf-8",
+        )
+        (tmp_path / "georam.bin").write_bytes(b"\x00\xde" + b"\x00" * 65536)
+        assert validate_build.validate_georam_image_budget(str(report)) == []
+
+    def test_hard_fails_when_pages_exceed_limit(self, tmp_path: Path) -> None:
+        report = tmp_path / "size_report.json"
+        report.write_text(
+            json.dumps(
+                {
+                    "georam_pages": 2049,
+                    "georam_page_limit": 2048,
+                    "georam_bytes": 524289,
+                    "georam_byte_limit": 524288,
+                    "georam_within_limit": False,
+                }
+            ),
+            encoding="utf-8",
+        )
+        errors = validate_build.validate_georam_image_budget(str(report))
+        assert any("pages" in err for err in errors)
+        assert any("within_limit" in err for err in errors)
+
+    def test_hard_fails_on_oversize_georam_bin_even_if_report_ok(
+        self, tmp_path: Path
+    ) -> None:
+        report = tmp_path / "size_report.json"
+        report.write_text(
+            json.dumps(
+                {
+                    "georam_pages": 1,
+                    "georam_page_limit": 2048,
+                    "georam_bytes": 256,
+                    "georam_byte_limit": 524288,
+                    "georam_within_limit": True,
+                }
+            ),
+            encoding="utf-8",
+        )
+        # 512 KiB + 1 payload after $DE00 header.
+        (tmp_path / "georam.bin").write_bytes(b"\x00\xde" + b"\x00" * (512 * 1024 + 1))
+        errors = validate_build.validate_georam_image_budget(str(report))
+        assert any("georam.bin" in err and "512 KiB" in err for err in errors)
