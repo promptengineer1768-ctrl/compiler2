@@ -7,7 +7,12 @@ import json
 import re
 from pathlib import Path
 
-GEORAM_PAYLOAD_SIZE = 65536
+# Minimum release pad (legacy 64 KiB image) and hard capacity ceiling
+# (REQUIREMENTS §8.1: base image must fully fit in 512 KiB / 2048 pages).
+GEORAM_MIN_PAYLOAD_SIZE = 65536
+GEORAM_MAX_PAYLOAD_SIZE = 512 * 1024
+GEORAM_MAX_PAGES = 2048
+GEORAM_PAGE_SIZE = 256
 GEORAM_LOAD_ADDRESS = b"\x00\xde"
 COLD_SEGMENTS = (
     "COMPILER",
@@ -26,6 +31,39 @@ SEGMENT_RE = re.compile(
 )
 LABEL_RE = re.compile(r"^al\s+([0-9A-Fa-f]{6})\s+\.([A-Za-z0-9_]+)$", re.MULTILINE)
 
+# Backward-compatible alias used by older tests/callers.
+GEORAM_PAYLOAD_SIZE = GEORAM_MIN_PAYLOAD_SIZE
+
+
+def payload_size_for(content_length: int) -> int:
+    """Return padded payload size for content, enforcing the 512 KiB ceiling.
+
+    Args:
+        content_length: Occupied payload bytes before padding.
+
+    Returns:
+        Padded size in bytes (page-aligned, at least ``GEORAM_MIN_PAYLOAD_SIZE``).
+
+    Raises:
+        ValueError: When content exceeds the 512 KiB / 2048-page budget.
+    """
+    if content_length > GEORAM_MAX_PAYLOAD_SIZE:
+        raise ValueError(
+            f"geoRAM image exceeds 512 KiB budget: {content_length} bytes > "
+            f"{GEORAM_MAX_PAYLOAD_SIZE} limit ({GEORAM_MAX_PAGES} pages)"
+        )
+    pages = (content_length + GEORAM_PAGE_SIZE - 1) // GEORAM_PAGE_SIZE
+    if pages > GEORAM_MAX_PAGES:
+        raise ValueError(
+            f"geoRAM image exceeds 2048 pages: {pages} pages > {GEORAM_MAX_PAGES}"
+        )
+    padded = max(GEORAM_MIN_PAYLOAD_SIZE, pages * GEORAM_PAGE_SIZE)
+    if padded > GEORAM_MAX_PAYLOAD_SIZE:
+        raise ValueError(
+            f"geoRAM image exceeds 512 KiB budget after padding: {padded} bytes"
+        )
+    return padded
+
 
 def _read_labels(labels_path: Path) -> dict[str, int]:
     """Return ca65 label addresses keyed by symbol name."""
@@ -43,14 +81,19 @@ def _overlay_directory_routines(
     load_address: int,
     labels_path: Path,
     routine_directory_path: Path,
-) -> None:
-    """Overlay linked routine bytes at their generated geoRAM placements."""
+) -> int:
+    """Overlay linked routine bytes at their generated geoRAM placements.
+
+    Returns:
+        Highest exclusive payload offset written by an overlay.
+    """
     if not routine_directory_path.exists():
         raise FileNotFoundError(
             f"routine directory not found: {routine_directory_path}"
         )
     labels = _read_labels(labels_path)
     directory = json.loads(routine_directory_path.read_text(encoding="utf-8"))
+    max_end = 0
     for name, record in directory.get("routines", {}).items():
         if record.get("layer") != "georam":
             continue
@@ -60,15 +103,28 @@ def _overlay_directory_routines(
         page = int(record["page"])
         offset = int(record["offset"])
         destination = (block * 64 + page) * 256 + offset
-        if destination >= GEORAM_PAYLOAD_SIZE:
-            raise ValueError(f"geoRAM placement outside payload for {name}")
+        if destination >= GEORAM_MAX_PAYLOAD_SIZE:
+            raise ValueError(
+                f"geoRAM placement outside 512 KiB budget for {name}: "
+                f"offset {destination}"
+            )
         source = 2 + labels[name] - load_address
         if source < 2 or source >= len(compiler):
             raise ValueError(f"linked label for {name} falls outside compiler image")
         length = min(
-            256 - offset, GEORAM_PAYLOAD_SIZE - destination, len(compiler) - source
+            256 - offset,
+            GEORAM_MAX_PAYLOAD_SIZE - destination,
+            len(compiler) - source,
         )
+        end = destination + length
+        if end > len(payload):
+            raise ValueError(
+                f"geoRAM placement for {name} exceeds allocated payload "
+                f"({end} > {len(payload)})"
+            )
         payload[destination : destination + length] = compiler[source : source + length]
+        max_end = max(max_end, end)
+    return max_end
 
 
 def populate(
@@ -81,10 +137,17 @@ def populate(
 ) -> None:
     """Write linked cold/compiler bytes into a padded geoRAM PRG.
 
+    The image is padded to at least 64 KiB and hard-fails if content or
+    directory placements would exceed 512 KiB / 2048 pages
+    (REQUIREMENTS §8.1).
+
     Args:
         map_path: ld65 map containing the required segment ranges.
         compiler_path: PRG containing the linked normal-RAM image.
         output_path: Destination geoRAM PRG.
+        labels_path: Optional ca65 label file for directory overlays.
+        routine_directory_path: Optional routine directory for overlays.
+        hibasic_path: Optional HIBASIC binary (defaults beside compiler).
     """
     matches = {
         match.group(1): (int(match.group(2), 16), int(match.group(4), 16))
@@ -120,10 +183,35 @@ def populate(
             linked.extend(compiler[first:last])
     if not linked or len(set(linked)) < 3:
         raise ValueError("linked cold payload is empty or fill-only")
-    if len(linked) > GEORAM_PAYLOAD_SIZE:
-        raise ValueError("linked cold payload exceeds 64 KiB geoRAM image")
+    if len(linked) > GEORAM_MAX_PAYLOAD_SIZE:
+        raise ValueError(
+            f"linked cold payload exceeds 512 KiB geoRAM budget: "
+            f"{len(linked)} bytes > {GEORAM_MAX_PAYLOAD_SIZE}"
+        )
 
-    payload = bytearray(GEORAM_PAYLOAD_SIZE)
+    # Directory overlays may land beyond the linear cold pack; size the
+    # payload for the higher of linear content and max placement end.
+    provisional_size = payload_size_for(len(linked))
+    if labels_path is not None and routine_directory_path is not None:
+        # Probe max placement so we allocate enough room before overlaying.
+        directory = json.loads(routine_directory_path.read_text(encoding="utf-8"))
+        max_end = len(linked)
+        for name, record in directory.get("routines", {}).items():
+            if record.get("layer") != "georam":
+                continue
+            block = int(record["block"])
+            page = int(record["page"])
+            # Assume up to a full page remainder for sizing.
+            end = (block * 64 + page) * 256 + 256
+            if end > GEORAM_MAX_PAYLOAD_SIZE:
+                raise ValueError(
+                    f"geoRAM placement for {name} exceeds 512 KiB budget "
+                    f"(end={end})"
+                )
+            max_end = max(max_end, end)
+        provisional_size = payload_size_for(max_end)
+
+    payload = bytearray(provisional_size)
     payload[: len(linked)] = linked
     if labels_path is not None and routine_directory_path is not None:
         _overlay_directory_routines(

@@ -1,11 +1,8 @@
-"""Tests for tools/package_d64.py — D64 disk image packager.
-
-Covers: c1541 invocation logic and graceful skip when c1541 is absent.
-Actual disk image writing is integration-tested only when VICE tools present.
-"""
+"""Tests for tools/package_d64.py — dual-device D64 packager and REU patch."""
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -39,6 +36,39 @@ def test_validate_prg_header_rejects_wrong_load_address(tmp_path: Path) -> None:
     ]
 
 
+def test_build_reu_patch_envelope_pairs_with_georam(tmp_path: Path) -> None:
+    """REU patch records GEORAM fingerprint and omits geoRAM capacity."""
+    georam = tmp_path / "georam.bin"
+    georam.write_bytes(b"\x00\xde" + b"\x11\x22\x33\x44" * 16)
+    reu = tmp_path / "reu.bin"
+
+    manifest = package_d64.build_reu_patch(georam, reu)
+
+    assert reu.exists()
+    assert package_d64.validate_reu_patch(reu) == []
+    assert manifest["magic"] == "C2RP"
+    assert manifest["min_reu_capacity_kib"] == 512
+    assert manifest["has_georam_capacity_field"] is False
+    assert "georam_capacity" not in manifest
+    assert len(manifest["georam_sha256"]) == 64
+    loader = json.loads((tmp_path / "reu_loader_manifest.json").read_text())
+    assert loader["georam_sha256"] == manifest["georam_sha256"]
+    data = reu.read_bytes()
+    assert data[:4] == b"C2RP"
+
+
+def test_validate_reu_patch_rejects_corrupt_crc(tmp_path: Path) -> None:
+    """CRC mismatch is a hard validation failure."""
+    georam = tmp_path / "georam.bin"
+    georam.write_bytes(b"\x00\xde" + b"\xaa" * 32)
+    reu = tmp_path / "reu.bin"
+    package_d64.build_reu_patch(georam, reu)
+    raw = bytearray(reu.read_bytes())
+    raw[-1] ^= 0xFF
+    reu.write_bytes(raw)
+    assert any("CRC" in err for err in package_d64.validate_reu_patch(reu))
+
+
 class TestBuildD64:
     """Tests for package_d64.build_d64."""
 
@@ -49,6 +79,8 @@ class TestBuildD64:
         basicv3.write_bytes(b"\x01\x08" + b"\xea" * 32)
         georam = tmp_path / "georam.bin"
         georam.write_bytes(b"\x00" * 64)
+        reu = tmp_path / "reu.bin"
+        package_d64.build_reu_patch(georam, reu)
         out_d64 = str(tmp_path / "compiler.d64")
 
         calls: list[list[str]] = []
@@ -58,7 +90,9 @@ class TestBuildD64:
             return MagicMock(returncode=0)
 
         with patch("subprocess.run", side_effect=fake_run):
-            package_d64.build_d64(fake_c1541, str(basicv3), str(georam), out_d64)
+            package_d64.build_d64(
+                fake_c1541, str(basicv3), str(georam), out_d64, str(reu)
+            )
 
         assert any(
             "-format" in cmd for cmd in calls
@@ -66,6 +100,7 @@ class TestBuildD64:
         assert any("compiler2,00" in cmd for cmd in calls)
         assert any("basicv3" in cmd for cmd in calls)
         assert any("georam" in cmd for cmd in calls)
+        assert any("reu" in cmd for cmd in calls)
         assert all("GEORAM" not in cmd for cmd in calls)
 
     def test_c1541_path_does_not_unlink_existing_output(self, tmp_path: Path) -> None:
@@ -75,33 +110,58 @@ class TestBuildD64:
         basicv3.write_bytes(b"\x01\x08" + b"\xea" * 32)
         georam = tmp_path / "georam.bin"
         georam.write_bytes(b"\x00\xde" + b"\x00" * 64)
+        reu = tmp_path / "reu.bin"
+        package_d64.build_reu_patch(georam, reu)
         out_d64 = tmp_path / "compiler.d64"
         out_d64.write_bytes(b"existing")
 
         with patch.object(Path, "unlink") as unlink:
             with patch("subprocess.run", return_value=MagicMock(returncode=0)):
                 package_d64.build_d64(
-                    fake_c1541, str(basicv3), str(georam), str(out_d64)
+                    fake_c1541,
+                    str(basicv3),
+                    str(georam),
+                    str(out_d64),
+                    str(reu),
                 )
 
         unlink.assert_not_called()
 
-    def test_direct_build_records_georam_as_prg(self, tmp_path: Path) -> None:
-        """Fallback D64 manifests the lowercase geoRAM sidecar as a PRG."""
+    def test_direct_build_records_dual_sidecars(self, tmp_path: Path) -> None:
+        """Fallback D64 manifests basicv3, georam, and reu as PRG files."""
         basicv3 = tmp_path / "basicv3.prg"
         basicv3.write_bytes(b"\x01\x08" + b"\xea" * 32)
         georam = tmp_path / "georam.bin"
         georam.write_bytes(b"\x00\xde" + b"\x00" * 64)
+        reu = tmp_path / "reu.bin"
+        package_d64.build_reu_patch(georam, reu)
+        out_d64 = tmp_path / "compiler.d64"
+
+        package_d64.build_d64("", str(basicv3), str(georam), str(out_d64), str(reu))
+
+        manifest = package_d64.validate_d64(str(out_d64))
+        assert manifest["disk_title"] == "compiler2"
+        names = [item["name"] for item in manifest["files"]]
+        assert names == ["basicv3", "georam", "reu"]
+        assert all(item["type"] == "PRG" for item in manifest["files"])
+
+    def test_direct_build_auto_generates_reu_patch(self, tmp_path: Path) -> None:
+        """Omitting reu_path still produces a dual-device D64 with REU."""
+        basicv3 = tmp_path / "basicv3.prg"
+        basicv3.write_bytes(b"\x01\x08" + b"\xea" * 32)
+        georam = tmp_path / "georam.bin"
+        georam.write_bytes(b"\x00\xde" + b"\x55" * 64)
         out_d64 = tmp_path / "compiler.d64"
 
         package_d64.build_d64("", str(basicv3), str(georam), str(out_d64))
 
+        assert (tmp_path / "reu.bin").exists()
         manifest = package_d64.validate_d64(str(out_d64))
-        assert manifest["disk_title"] == "compiler2"
-        georam_entry = next(
-            item for item in manifest["files"] if item["name"] == "georam"
-        )
-        assert georam_entry["type"] == "PRG"
+        assert [item["name"] for item in manifest["files"]] == [
+            "basicv3",
+            "georam",
+            "reu",
+        ]
 
     def test_direct_build_writes_prg_sector_chain(self, tmp_path: Path) -> None:
         """Fallback D64 data sectors contain the exact PRG payload."""
@@ -110,9 +170,11 @@ class TestBuildD64:
         georam = tmp_path / "georam.bin"
         payload = b"\x00\xdeCGS1" + bytes(range(128))
         georam.write_bytes(payload)
+        reu = tmp_path / "reu.bin"
+        package_d64.build_reu_patch(georam, reu)
         out_d64 = tmp_path / "compiler.d64"
 
-        package_d64.build_d64("", str(basicv3), str(georam), str(out_d64))
+        package_d64.build_d64("", str(basicv3), str(georam), str(out_d64), str(reu))
 
         data = out_d64.read_bytes()
         dir_offset = package_d64._d64_offset(18, 1)
@@ -129,6 +191,8 @@ class TestBuildD64:
         fake_c1541 = str(tmp_path / "c1541.exe")
         georam = tmp_path / "georam.bin"
         georam.write_bytes(b"\x00" * 64)
+        reu = tmp_path / "reu.bin"
+        package_d64.build_reu_patch(georam, reu)
         out_d64 = str(tmp_path / "compiler.d64")
 
         calls: list[list[str]] = []
@@ -143,6 +207,7 @@ class TestBuildD64:
                 str(tmp_path / "nonexistent.prg"),
                 str(georam),
                 out_d64,
+                str(reu),
             )
 
         write_calls = [c for c in calls if "-write" in c and "basicv3" in c]

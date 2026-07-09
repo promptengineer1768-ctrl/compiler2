@@ -17,6 +17,10 @@ SEGMENT_RE = re.compile(
 )
 RESIDENT_SEGMENTS = {"LOADER", "RESIDENT", "EDITOR_PINNED", "COMPILER_INIT"}
 BENCHMARK_JIFFY_LIMIT = 60
+# REQUIREMENTS §8.1: base geoRAM-canonical image hard ceiling.
+GEORAM_BYTE_LIMIT = 512 * 1024
+GEORAM_PAGE_LIMIT = 2048
+GEORAM_PAGE_SIZE = 256
 
 
 def parse_segments(map_path: Path) -> list[dict[str, int | str]]:
@@ -113,13 +117,33 @@ def generate(build_dir: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     segments = parse_segments(build_dir / "compiler.map")
     directory = json.loads((build_dir / "routine_directory.json").read_text())
     placements = directory.get("placements", directory.get("routines", {}))
-    pages = {
+    placement_pages = {
         (record.get("block"), record.get("page"))
         for record in placements.values()
         if isinstance(record, dict)
         and isinstance(record.get("block"), int)
         and isinstance(record.get("page"), int)
     }
+    georam_path = build_dir / "georam.bin"
+    georam_bytes = 0
+    if georam_path.exists():
+        raw = georam_path.read_bytes()
+        # Strip fake $DE00 PRG header when present.
+        if len(raw) >= 2 and raw[0] == 0x00 and raw[1] == 0xDE:
+            georam_bytes = len(raw) - 2
+        else:
+            georam_bytes = len(raw)
+    image_pages = (
+        (georam_bytes + GEORAM_PAGE_SIZE - 1) // GEORAM_PAGE_SIZE if georam_bytes else 0
+    )
+    # Highest logical page index from placements (block*64 + page) + 1.
+    max_placement_index = 0
+    for block, page in placement_pages:
+        max_placement_index = max(max_placement_index, int(block) * 64 + int(page) + 1)
+    georam_pages = max(len(placement_pages), image_pages, max_placement_index)
+    georam_within_limit = (
+        georam_pages <= GEORAM_PAGE_LIMIT and georam_bytes <= GEORAM_BYTE_LIMIT
+    )
     resident_bytes = sum(
         int(record["size"])
         for record in segments
@@ -214,30 +238,49 @@ def generate(build_dir: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         "resident_bytes": resident_bytes,
         "resident_limit": 8192,
         "resident_within_limit": resident_bytes <= 8192,
-        "georam_pages": len(pages),
-        "georam_page_limit": 2048,
-        "georam_within_limit": len(pages) <= 2048,
+        "georam_bytes": georam_bytes,
+        "georam_byte_limit": GEORAM_BYTE_LIMIT,
+        "georam_pages": georam_pages,
+        "georam_page_limit": GEORAM_PAGE_LIMIT,
+        "georam_within_limit": georam_within_limit,
         "compile_bytes": (build_dir / "compile.bin").stat().st_size,
         "compile_limit": 0xCFFF - 0x080D + 1,
         "resident_delta_bytes": resident_bytes - int(previous.get("resident_bytes", 0)),
-        "georam_page_delta": len(pages) - int(previous.get("georam_pages", 0)),
+        "georam_page_delta": georam_pages - int(previous.get("georam_pages", 0)),
         "resident_hot_paths": resident_hot_paths,
         "profile_guided_optimization": profile_guided_optimization,
     }
     size_report["compile_within_limit"] = (
         size_report["compile_bytes"] <= size_report["compile_limit"]
     )
+    artifact_names = ["basicv3.prg", "georam.bin", "reu.bin", "compiler.d64"]
+    artifacts: dict[str, Any] = {}
+    for name in artifact_names:
+        path = build_dir / name
+        if path.exists():
+            artifacts[name] = _artifact(path)
     loader_manifest: dict[str, Any] = {
         "schema_version": 1,
         "load_address": 0x0801,
         "entry_address": 0x080D,
         "loader_start": loader["start"],
         "loader_size": loader["size"],
-        "artifacts": {
-            name: _artifact(build_dir / name)
-            for name in ("basicv3.prg", "georam.bin", "compiler.d64")
-        },
+        "artifacts": artifacts,
     }
+    reu_manifest_path = build_dir / "reu_loader_manifest.json"
+    if reu_manifest_path.exists():
+        reu_manifest = json.loads(reu_manifest_path.read_text(encoding="utf-8"))
+        if isinstance(reu_manifest, dict):
+            loader_manifest["reu_patch"] = {
+                "path": reu_manifest.get("path", (build_dir / "reu.bin").as_posix()),
+                "georam_sha256": reu_manifest.get("georam_sha256"),
+                "format_version": reu_manifest.get("format_version"),
+                "abi_version": reu_manifest.get("abi_version"),
+                "min_reu_capacity_kib": reu_manifest.get("min_reu_capacity_kib"),
+                "has_georam_capacity_field": reu_manifest.get(
+                    "has_georam_capacity_field", False
+                ),
+            }
     return loader_manifest, size_report
 
 

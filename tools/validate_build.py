@@ -465,23 +465,84 @@ def _validate_assembled_artifacts() -> list[str]:
 def validate_georam_image_budget(size_report_path: str) -> list[str]:
     """Hard-fail when the geoRAM-canonical image exceeds 512 KiB (2048 pages).
 
-    Larger detected devices may only add dynamic storage; the base image must
-    always fit 512 KiB (REQUIREMENTS §8.1 / DESIGN2 §1).
+    End-to-end gate over ``size_report.json`` produced by
+    ``generate_build_reports``. Larger detected devices may only add dynamic
+    storage; the base image must always fit 512 KiB (REQUIREMENTS §8.1 /
+    DESIGN2 §1).
+
+    Args:
+        size_report_path: Path to the generated size report.
+
+    Returns:
+        Deterministic list of budget errors (empty when within limit).
     """
     errors: list[str] = []
     path = Path(size_report_path)
     if not path.exists():
-        return errors
+        return [f"size report missing for geoRAM budget check: {size_report_path}"]
     report = _load_json(str(path))
+
+    page_limit = report.get("georam_page_limit", 2048)
+    byte_limit = report.get("georam_byte_limit", 512 * 1024)
     pages = report.get("georam_pages")
-    limit = report.get("georam_page_limit", 2048)
-    if isinstance(pages, int) and isinstance(limit, int) and pages > limit:
+    georam_bytes = report.get("georam_bytes")
+
+    if not isinstance(page_limit, int) or page_limit <= 0:
+        errors.append(f"size_report.georam_page_limit is invalid: {page_limit!r}")
+        page_limit = 2048
+    if not isinstance(byte_limit, int) or byte_limit <= 0:
+        errors.append(f"size_report.georam_byte_limit is invalid: {byte_limit!r}")
+        byte_limit = 512 * 1024
+
+    if not isinstance(pages, int):
+        errors.append("size_report.georam_pages is missing or not an integer")
+    elif pages > page_limit:
         errors.append(
-            f"geoRAM image exceeds 512 KiB budget: {pages} pages > {limit} limit"
+            f"geoRAM image exceeds 512 KiB budget: {pages} pages > {page_limit} limit"
         )
-    if report.get("georam_within_limit") is False:
-        errors.append("size_report.georam_within_limit is false (512 KiB hard fail)")
-    return errors
+
+    if georam_bytes is not None:
+        if not isinstance(georam_bytes, int):
+            errors.append("size_report.georam_bytes is not an integer")
+        elif georam_bytes > byte_limit:
+            errors.append(
+                f"geoRAM image exceeds 512 KiB budget: {georam_bytes} bytes > "
+                f"{byte_limit} limit"
+            )
+
+    if report.get("georam_within_limit") is not True:
+        errors.append("size_report.georam_within_limit is not true (512 KiB hard fail)")
+
+    # Cross-check the on-disk image when present so a stale report cannot
+    # hide an oversize artifact.
+    georam_bin = path.parent / "georam.bin"
+    if georam_bin.exists():
+        raw = georam_bin.read_bytes()
+        payload = (
+            len(raw) - 2
+            if len(raw) >= 2 and raw[0] == 0x00 and raw[1] == 0xDE
+            else len(raw)
+        )
+        if payload > byte_limit:
+            errors.append(
+                f"georam.bin payload exceeds 512 KiB budget: {payload} bytes > "
+                f"{byte_limit} limit"
+            )
+        image_pages = (payload + 255) // 256
+        if image_pages > page_limit:
+            errors.append(
+                f"georam.bin exceeds page budget: {image_pages} pages > "
+                f"{page_limit} limit"
+            )
+
+    # Deduplicate while preserving order.
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for error in errors:
+        if error not in seen:
+            seen.add(error)
+            ordered.append(error)
+    return ordered
 
 
 def _contract_errors() -> list[str]:

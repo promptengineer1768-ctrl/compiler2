@@ -4,6 +4,9 @@ param(
     [switch]$GeoramCompiler,
     [switch]$UseCompressor,
     [string]$CompressorRoot = "C:\Users\me\Documents\Coding Projects\compressor",
+    # Dual-device both-present preference only (never drops a sidecar).
+    [ValidateSet("GeoRam", "Reu")]
+    [string]$ExpansionPreference = "GeoRam",
     [switch]$Validate
 )
 
@@ -142,11 +145,26 @@ if ($UseCompressor) {
         --compressor-root $CompressorRoot
     if ($LASTEXITCODE -ne 0) { throw "Compressor artifact build failed." }
 }
+# Dual-device release: always emit reu.bin (REU patch) + package BASICV3/GEORAM/REU.
+# ExpansionPreference only records both-present selection policy; both sidecars ship.
+Write-Host "Building REU patch (preference=$ExpansionPreference)" -ForegroundColor Green
 $PackageGeoram = "$OutDir/georam.bin"
 if ($UseCompressor) {
     $PackageGeoram = "$OutDir/GEORAM_compressed.prg"
 }
-& $Python tools/package_d64.py "auto" "$OutDir/basicv3.prg" $PackageGeoram "$OutDir/compiler.d64"
+$ReuPath = Join-Path $Root "$OutDir/reu.bin"
+& $Python tools/package_d64.py --write-reu-patch $PackageGeoram $ReuPath
+if ($LASTEXITCODE -ne 0) { throw "REU patch generation failed." }
+$PreferenceRecord = Join-Path $Root "$OutDir/expansion_preference.json"
+@{
+    schema_version = 1
+    expansion_preference = $ExpansionPreference
+    both_present_store = if ($ExpansionPreference -eq "Reu") { "reu" } else { "georam" }
+    sidecars = @("georam.bin", "reu.bin")
+    note = "Preference never removes detectors, gates, or D64 sidecars."
+} | ConvertTo-Json | Set-Content -Path $PreferenceRecord -Encoding utf8
+
+& $Python tools/package_d64.py "auto" "$OutDir/basicv3.prg" $PackageGeoram "$OutDir/compiler.d64" $ReuPath
 if ($LASTEXITCODE -ne 0) { throw "D64 packaging failed." }
 
 & $Python tools/phase1_for_benchmark.py --json-out "$OutDir/phase1_for_benchmark.json"
