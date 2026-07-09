@@ -9,13 +9,29 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-TOOLS_ROOT = ROOT.parent / "tools"
+_TOOLS_CANDIDATES = (
+    ROOT.parent / "tools",
+    Path(r"C:\Users\me\Documents\Coding Projects\tools"),
+)
+TOOLS_ROOT = next(
+    (path for path in _TOOLS_CANDIDATES if (path / "emu6502.dll").exists()),
+    _TOOLS_CANDIDATES[0],
+)
 if str(TOOLS_ROOT) not in sys.path:
     sys.path.insert(0, str(TOOLS_ROOT))
 
 from emu6502_c64_bindings import C64Emu6502  # noqa: E402
 
 ERR_ILLEGAL_QUANTITY = 0x0E
+ERR_OUT_OF_MEMORY = 0x10
+
+EXPORT_LAYOUT_STOCK = 0
+EXPORT_LAYOUT_DEVELOPER = 1
+EXPORT_FLAG_CE00_RESERVED = 0x01
+EXPORT_STATE_GE_80 = 0x01
+EXPORT_STATE_GE_100 = 0x02
+
+READ_HELPER_ADDR = 0xC700
 
 
 def _symbol(name: str) -> int:
@@ -44,14 +60,43 @@ def _call(emu: C64Emu6502, routine: str, pointer: int) -> tuple[int, int, int, b
     """Execute an export routine and return A/X/Y/carry."""
     emu.set_x(pointer & 0xFF)
     emu.set_y(pointer >> 8)
-    emu.execute(_symbol(routine), 30_000)
+    emu.execute(_symbol(routine), 80_000)
     state = emu.get_state()
     return int(state.a), int(state.x), int(state.y), bool(int(state.p) & 1)
 
 
-def _bytes(emu: C64Emu6502, address: int, length: int) -> bytes:
-    """Read emulator memory."""
-    return bytes(emu.read_mem(address + offset) for offset in range(length))
+def _cpu_read(emu: C64Emu6502, address: int) -> int:
+    """Read CPU-visible RAM through a tiny LDA/RTS helper."""
+    emu.write_mem_range(
+        READ_HELPER_ADDR,
+        bytes([0xAD, address & 0xFF, address >> 8, 0x60]),
+    )
+    emu.execute(READ_HELPER_ADDR, 20)
+    return int(emu.get_state().a)
+
+
+def _write_eb(
+    emu: C64Emu6502,
+    record: int,
+    start: int,
+    end: int,
+    workspace_start: int,
+    workspace_end: int,
+) -> None:
+    """Store an EB range plan at *record*."""
+    words = (start, end, workspace_start, workspace_end)
+    emu.write_mem_range(
+        record,
+        b"EB" + b"".join(bytes((word & 0xFF, word >> 8)) for word in words),
+    )
+
+
+def _reset_budget_state(emu: C64Emu6502) -> None:
+    """Clear soft-budget latches and diagnostic print count."""
+    emu.write_mem(_symbol("export_budget_state"), 0)
+    emu.write_mem(_symbol("export_layout_profile"), 0)
+    emu.write_mem(_symbol("export_layout_flags"), 0)
+    emu.write_mem(_symbol("diag_print_count"), 0)
 
 
 @pytest.mark.unit
@@ -61,7 +106,7 @@ def test_export_parse_command_defaults_and_validates_device() -> None:
     emu = _emulator()
     record = 0xC000
     emu.write_mem(0xBA, 9)
-    emu.write_mem_range(record, b"CP\x00\x00\x00\x00")
+    emu.write_mem_range(record, b"CP\x00\x00\x00\x00\x00")
     _, low, high, carry = _call(emu, "export_parse_command", record)
     assert not carry
     options = low | (high << 8)
@@ -74,7 +119,7 @@ def test_export_parse_command_defaults_and_validates_device() -> None:
     payload = (ROOT / "build" / "compiler.bin").read_bytes()
     assert b"COMPILED" in payload
 
-    emu.write_mem_range(record, b"CP\x00\x00\x00\x07")
+    emu.write_mem_range(record, b"CP\x00\x00\x00\x07\x00")
     a, _, _, carry = _call(emu, "export_parse_command", record)
     assert carry and a == ERR_ILLEGAL_QUANTITY
 
@@ -87,7 +132,7 @@ def test_export_parse_command_preserves_explicit_filename() -> None:
     record, name = 0xC000, 0xC100
     emu.write_mem_range(name, b"HELLO")
     emu.write_mem_range(
-        record, bytes((ord("C"), ord("P"), name & 0xFF, name >> 8, 5, 11))
+        record, bytes((ord("C"), ord("P"), name & 0xFF, name >> 8, 5, 11, 0))
     )
     _, low, high, carry = _call(emu, "export_parse_command", record)
     assert not carry
@@ -132,35 +177,185 @@ def test_export_link_image_requires_resolved_standalone_image() -> None:
 @pytest.mark.parametrize(
     ("start", "end", "workspace_start", "workspace_end", "valid"),
     [
-        (0x0801, 0xD000, 0x0200, 0x0801, True),
-        (0x0800, 0x1000, 0x0200, 0x0800, False),
-        (0x0801, 0xD001, 0x0200, 0x0801, False),
-        (0x0801, 0x2000, 0x1FFF, 0x3000, False),
-        (0x2000, 0x2000, 0x0200, 0x0801, False),
+        (0x0801, 0xD000, 0x0200, 0x0801, True),  # full stock ceiling fits
+        (0x0801, 0xD001, 0x0200, 0x0801, True),  # oversize allowed (soft warn)
+        (0x0800, 0x1000, 0x0200, 0x0800, False),  # start below $0801
+        (0x0801, 0x2000, 0x1FFF, 0x3000, False),  # workspace overlaps image
+        (0x2000, 0x2000, 0x0200, 0x0801, False),  # empty image
     ],
 )
-def test_export_check_budgets_enforces_load_range_and_disjoint_workspace(
+def test_export_check_budgets_hard_fail_only_invalid_ranges(
     start: int,
     end: int,
     workspace_start: int,
     workspace_end: int,
     valid: bool,
 ) -> None:
-    """EB uses exclusive ranges and rejects overlap or out-of-budget images."""
+    """EB hard-fails only invalid ranges; oversize is admitted with soft policy."""
     emu = _emulator()
+    _reset_budget_state(emu)
     record = 0xC000
-    words = (start, end, workspace_start, workspace_end)
-    emu.write_mem_range(
-        record,
-        b"EB" + b"".join(bytes((word & 0xFF, word >> 8)) for word in words),
-    )
+    _write_eb(emu, record, start, end, workspace_start, workspace_end)
     a, _, _, carry = _call(emu, "export_check_budgets", record)
     assert carry is (not valid)
     if not valid:
         assert a == ERR_OUT_OF_MEMORY
 
 
-ERR_OUT_OF_MEMORY = 0x10
+@pytest.mark.unit
+@pytest.mark.local
+def test_export_check_budgets_edge_triggered_80_and_100_warnings() -> None:
+    """Soft 80%/100% warnings fire once per threshold crossing, not continuously."""
+    emu = _emulator()
+    record = 0xC000
+    _reset_budget_state(emu)
+
+    # Below 80%: no warning.
+    _write_eb(emu, record, 0x0801, 0x1000, 0x0200, 0x0801)
+    _, _, _, carry = _call(emu, "export_check_budgets", record)
+    assert not carry
+    assert _cpu_read(emu, _symbol("diag_print_count")) == 0
+    assert _cpu_read(emu, _symbol("export_budget_state")) == 0
+
+    # Cross up through 80% → one near-limit warning.
+    _write_eb(emu, record, 0x0801, 0xA800, 0x0200, 0x0801)
+    _, _, _, carry = _call(emu, "export_check_budgets", record)
+    assert not carry
+    assert _cpu_read(emu, _symbol("diag_print_count")) == 1
+    assert _cpu_read(emu, _symbol("export_budget_state")) & EXPORT_STATE_GE_80
+
+    # Stay >= 80%: no additional print.
+    _write_eb(emu, record, 0x0801, 0xB000, 0x0200, 0x0801)
+    _, _, _, carry = _call(emu, "export_check_budgets", record)
+    assert not carry
+    assert _cpu_read(emu, _symbol("diag_print_count")) == 1
+
+    # Cross 100% ceiling → one exceeds warning (still admitted).
+    _write_eb(emu, record, 0x0801, 0xD001, 0x0200, 0x0801)
+    _, _, _, carry = _call(emu, "export_check_budgets", record)
+    assert not carry
+    assert _cpu_read(emu, _symbol("diag_print_count")) == 2
+    state = _cpu_read(emu, _symbol("export_budget_state"))
+    assert state & EXPORT_STATE_GE_80
+    assert state & EXPORT_STATE_GE_100
+
+    # Stay oversize: no spam.
+    _write_eb(emu, record, 0x0801, 0xE000, 0x0200, 0x0801)
+    _, _, _, carry = _call(emu, "export_check_budgets", record)
+    assert not carry
+    assert _cpu_read(emu, _symbol("diag_print_count")) == 2
+
+    # Drop below both thresholds → one clear per boundary (2 prints).
+    _write_eb(emu, record, 0x0801, 0x1000, 0x0200, 0x0801)
+    _, _, _, carry = _call(emu, "export_check_budgets", record)
+    assert not carry
+    assert _cpu_read(emu, _symbol("diag_print_count")) == 4
+    assert _cpu_read(emu, _symbol("export_budget_state")) == 0
+
+
+@pytest.mark.unit
+@pytest.mark.local
+@pytest.mark.parametrize(
+    ("start", "end", "workspace_start", "workspace_end", "layout", "flags"),
+    [
+        # Fits stock ceiling, workspace below image → stock, $CE00 free.
+        (0x0801, 0x2000, 0x0200, 0x0801, EXPORT_LAYOUT_STOCK, 0),
+        # Full stock image including $CE00 as ordinary RAM → still stock/free.
+        (0x0801, 0xD000, 0x0200, 0x0801, EXPORT_LAYOUT_STOCK, 0),
+        # Workspace only in hot pages $C800-$CDFF → stock; hot not permanent.
+        (0x0801, 0x2000, 0xC800, 0xCE00, EXPORT_LAYOUT_STOCK, 0),
+        # Oversize image → developer, $CE00 reserved.
+        (
+            0x0801,
+            0xD001,
+            0x0200,
+            0x0801,
+            EXPORT_LAYOUT_DEVELOPER,
+            EXPORT_FLAG_CE00_RESERVED,
+        ),
+        # Workspace past stock ceiling → developer.
+        (
+            0x0801,
+            0x2000,
+            0xD000,
+            0xE000,
+            EXPORT_LAYOUT_DEVELOPER,
+            EXPORT_FLAG_CE00_RESERVED,
+        ),
+    ],
+)
+def test_export_check_budgets_dual_layout_profiles(
+    start: int,
+    end: int,
+    workspace_start: int,
+    workspace_end: int,
+    layout: int,
+    flags: int,
+) -> None:
+    """Stock frees $CE00; developer reserves it; hot pages stay disposable."""
+    emu = _emulator()
+    _reset_budget_state(emu)
+    record = 0xC000
+    _write_eb(emu, record, start, end, workspace_start, workspace_end)
+    _, _, _, carry = _call(emu, "export_check_budgets", record)
+    assert not carry
+    assert _cpu_read(emu, _symbol("export_layout_profile")) == layout
+    assert _cpu_read(emu, _symbol("export_layout_flags")) == flags
+    # Hot-page permanent bits are never set (only CE00 reserved bit exists).
+    assert (
+        _cpu_read(emu, _symbol("export_layout_flags")) & ~EXPORT_FLAG_CE00_RESERVED
+    ) == 0
+
+
+@pytest.mark.unit
+@pytest.mark.local
+def test_export_compile_command_transaction_parse_deps_link_budgets_write() -> None:
+    """Full CP→ED→EL→EB→EW transaction admits a closed plan and writes via SAVE."""
+    emu = _emulator()
+    _reset_budget_state(emu)
+    plan, name = 0xC000, 0xC100
+    emu.write_mem_range(name, b"OUTPUT")
+    # Contiguous plan: EO slot(7) + ED(3) + EL(3) + EB(10) + EW(11).
+    body = bytearray()
+    body += bytes((ord("C"), ord("P"), name & 0xFF, name >> 8, 6, 10, 0))
+    body += bytes((ord("E"), ord("D"), 0x0F))
+    body += bytes((ord("E"), ord("L"), 0x01))
+    body += b"EB" + b"".join(
+        bytes((word & 0xFF, word >> 8)) for word in (0x0801, 0x2000, 0x0200, 0x0801)
+    )
+    body += bytes(
+        (
+            ord("E"),
+            ord("W"),
+            name & 0xFF,
+            name >> 8,
+            6,
+            10,
+            0,
+            0x01,
+            0x08,
+            0x00,
+            0x20,
+        )
+    )
+    assert len(body) == 7 + 3 + 3 + 10 + 11
+    emu.write_mem_range(plan, bytes(body))
+    _, _, _, carry = _call(emu, "export_compile_command", plan)
+    assert not carry
+    assert _cpu_read(emu, _symbol("export_layout_profile")) == EXPORT_LAYOUT_STOCK
+
+    # Oversize plan still completes the write transaction (soft budget only).
+    body[13:23] = b"EB" + b"".join(
+        bytes((word & 0xFF, word >> 8)) for word in (0x0801, 0xD001, 0x0200, 0x0801)
+    )
+    # Re-seed CP (previous run canonicalized to EO).
+    body[0:2] = b"CP"
+    emu.write_mem_range(plan, bytes(body))
+    _reset_budget_state(emu)
+    _, _, _, carry = _call(emu, "export_compile_command", plan)
+    assert not carry
+    assert _cpu_read(emu, _symbol("export_layout_profile")) == EXPORT_LAYOUT_DEVELOPER
+    assert _cpu_read(emu, _symbol("export_layout_flags")) == EXPORT_FLAG_CE00_RESERVED
 
 
 @pytest.mark.unit

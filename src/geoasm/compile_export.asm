@@ -2,24 +2,61 @@
 ; Validates the records used to construct and write a source-free standalone
 ; image. Image construction remains a separate compiler/linker responsibility.
 ;
-; SKELETON (design audit 2026-07-09): export_compile_command / budget policy do
-; not implement soft edge-triggered 80%/100% stock warnings or dual stock vs
-; developer layouts ($CE00 free vs reserved). See DESIGN2 §6.4 / COMPILE_EXPORT.
+; Stock budget policy (DESIGN2 §6.4 / COMPILE_EXPORT.md): soft edge-triggered
+; 80%/100% warnings; hard-fail only invalid ranges; oversize export allowed.
+; Dual layouts: stock ($CE00 free) vs developer ($CE00 reserved). Hot pages
+; $C800-$CDFF are never permanent export reservations.
 
 .include "common/zp.inc"
 .include "common/constants.asm"
 
 .import kernal_setnam, kernal_setlfs, kernal_save
+.import diag_format_warning, diag_format_source_context, diag_print_error
 
 EXPORT_MIN_DEVICE = 8
 EXPORT_MAX_DEVICE = 11
 EXPORT_FORBIDDEN_DEPENDENCIES = $F0
 EXPORT_LINKED_STANDALONE = $01
 
+; Layout profile published by export_check_budgets (internal metadata).
+EXPORT_LAYOUT_STOCK     = 0   ; $CE00 free in export runtime
+EXPORT_LAYOUT_DEVELOPER = 1   ; $CE00 reserved (developer/XIP layout)
+
+; export_budget_state bits: latched side of soft thresholds.
+EXPORT_STATE_GE_80  = $01
+EXPORT_STATE_GE_100 = $02
+
+; Soft warning codes (diag severity WARNING).
+WARN_NEAR_STOCK     = $01
+WARN_NEAR_CLEAR     = $02
+WARN_EXCEEDS_STOCK  = $03
+WARN_EXCEEDS_CLEAR  = $04
+
+; Stock image high-water marks (exclusive end). Ceiling payload ends by $CFFF.
+EXPORT_STOCK_BASE     = $0801
+EXPORT_STOCK_END      = $D000
+; 80% of ($D000-$0801) = floor($C7FF*4/5) = $9FFF → high-water $A800.
+EXPORT_STOCK_80_END   = $A800
+; Developer XIP primary page (exclusive end $CF00).
+EXPORT_CE00_PAGE      = $CE00
+EXPORT_CE00_END       = $CF00
+; Hot XIP cache window — never a permanent export reservation.
+EXPORT_HOT_START      = $C800
+EXPORT_HOT_END        = $CE00
+
 .segment "RODATA"
 export_default_filename:
     .byte "COMPILED"
 EXPORT_DEFAULT_FILENAME_LEN = 8
+
+export_msg_near:
+    .byte "NEAR STOCK LIMIT", 0
+export_msg_near_clear:
+    .byte "STOCK LIMIT OK", 0
+export_msg_exceeds:
+    .byte "EXCEEDS STOCK RAM", 0
+export_msg_exceeds_clear:
+    .byte "STOCK RAM OK", 0
 
 .segment "BSS"
 ; EO: magic, name:u16, length:arg-byte, device:arg-byte, secondary:arg-byte.
@@ -37,6 +74,20 @@ export_workspace_end:
     .res 2
 export_command_record:
     .res 2
+; Soft budget edge-trigger latches (bits EXPORT_STATE_*).
+.export export_budget_state
+export_budget_state:
+    .res 1
+; EXPORT_LAYOUT_STOCK or EXPORT_LAYOUT_DEVELOPER.
+.export export_layout_profile
+export_layout_profile:
+    .res 1
+; Bit0 = $CE00 reserved; hot-page permanent bits are never set.
+.export export_layout_flags
+export_layout_flags:
+    .res 1
+
+EXPORT_FLAG_CE00_RESERVED = $01
 
 .segment "GEOASM"
 
@@ -46,17 +97,43 @@ export_command_record:
 .endmacro
 
 ; export_compile_command - Execute a fully prepared standalone export plan.
-; SKELETON: hard-reject-only path without soft stock budgets or dual layout
-; profiles ($CE00 free stock vs reserved developer). Re-implement per
-; DESIGN2 §6.4 before treating COMPILE as complete.
-; Input: X/Y -> contiguous CP(6), ED(3), EL(3), EB(10), EW(11) records.
-; Output: C set, A = ERR_UNDEFINED_FUNCTION
-; Clobbers: A, X, Y. Side effects: none.
+; Input: X/Y -> contiguous CP/EO(7), ED(3), EL(3), EB(10), EW(11) plan.
+;   CP is canonicalized in place to EO (secondary byte occupies slot 6).
+;   Offsets: ED@7, EL@10, EB@13, EW@23.
+; Output: C clear after the image is saved; C set/A=error at the first rejected
+; record or KERNAL failure. Soft budget warnings do not abort the transaction.
+; Clobbers: A, X, Y. Side effects: canonicalizes CP; may warn; may write a PRG.
 ; Zero page: zp_src.
 .export export_compile_command
 export_compile_command:
-    lda #ERR_UNDEFINED_FUNCTION
-    sec
+    stx export_command_record
+    sty export_command_record+1
+    jsr export_parse_command
+    bcs @done
+    lda #7
+    jsr @record_at_offset
+    jsr export_collect_dependencies
+    bcs @done
+    lda #10
+    jsr @record_at_offset
+    jsr export_link_image
+    bcs @done
+    lda #13
+    jsr @record_at_offset
+    jsr export_check_budgets
+    bcs @done
+    lda #23
+    jsr @record_at_offset
+    jmp export_write_prg
+@done:
+    rts
+@record_at_offset:
+    clc
+    adc export_command_record
+    tax
+    lda export_command_record+1
+    adc #0
+    tay
     rts
 
 ; Validate the device in A. Devices 8 through 11 are supported.
@@ -75,9 +152,10 @@ export_compile_command:
 
 ; export_parse_command - Canonicalize a CP command record.
 ; Input: X/Y -> CP, name:u16, length:arg-byte, device:arg-byte. A zero length
-; selects "COMPILED"; a zero device selects KERNAL fa at $BA.
-; Output: X/Y -> persistent EO options, C clear; A=error and C set on failure.
-; Clobbers: A, X, Y. Side effects: replaces export_options.
+; selects "COMPILED"; a zero device selects KERNAL fa at $BA. Plan slot is 7
+; bytes so secondary can be stored without clobbering the following ED record.
+; Output: X/Y -> EO options, C clear; A=error and C set on failure.
+; Clobbers: A, X, Y. Side effects: replaces in-place record and export_options.
 ; Zero page: zp_src.
 .export export_parse_command
 export_parse_command:
@@ -93,6 +171,7 @@ export_parse_command:
     lda (zp_src),y
     cmp #'P'
     bne @error
+    ldy #0
     lda #'E'
     sta (zp_src),y
     iny
@@ -130,6 +209,14 @@ export_parse_command:
     iny
     lda #0
     sta (zp_src),y
+    ; Mirror the EO options for callers that inspect export_options.
+    ldy #0
+@copy_options:
+    lda (zp_src),y
+    sta export_options,y
+    iny
+    cpy #7
+    bne @copy_options
     ldx export_record
     ldy export_record+1
     clc
@@ -207,18 +294,232 @@ export_link_image:
     rts
 
 ; export_check_budgets - Soft stock budget + dual layout policy.
-; SKELETON: previous body hard-failed oversize ranges only; design requires
-; edge-triggered 80%/100% warnings and stock vs developer $CE00 layouts
-; (DESIGN2 §6.4). Re-implement before treating as complete.
 ; Input: X/Y -> "EB", image_start:u16, image_end_exclusive:u16,
 ; workspace_start:u16, workspace_end_exclusive:u16.
-; Output: C set, A = ERR_UNDEFINED_FUNCTION
-; Clobbers: A, X, Y. Side effects: none. Zero page: zp_src.
+; Hard-fail (C set, A=ERR_OUT_OF_MEMORY): bad magic, image_start < $0801,
+; empty/reversed image, reversed workspace, or image/workspace overlap.
+; Soft policy: edge-triggered 80% / 100% stock warnings; oversize allowed.
+; Layout: stock ($CE00 free) when image+workspace fit stock normal RAM without
+; a permanent $CE00 claim; otherwise developer ($CE00 reserved). Hot pages
+; $C800-$CDFF are never marked permanent.
+; Output: C clear on admissible plan (including oversize); C set on hard fail.
+; Clobbers: A, X, Y. Side effects: export_layout_*, export_budget_state, diags.
+; Zero page: zp_src.
 .export export_check_budgets
 export_check_budgets:
-    lda #ERR_UNDEFINED_FUNCTION
+    stx zp_src
+    sty zp_src+1
+    ldy #0
+    lda (zp_src),y
+    cmp #'E'
+    beq @budget_magic_e_ok
+    jmp @error
+@budget_magic_e_ok:
+    iny
+    lda (zp_src),y
+    cmp #'B'
+    beq @copy_begin
+    jmp @error
+@copy_begin:
+    ldx #0
+@copy_words:
+    iny
+    lda (zp_src),y
+    sta export_start,x
+    inx
+    cpx #8
+    bne @copy_words
+
+    ; image_start >= $0801 (stock load base contract).
+    lda export_start+1
+    cmp #$08
+    bcc @error
+    bne @start_ok
+    lda export_start
+    cmp #$01
+    bcc @error
+@start_ok:
+    ; Nonempty forward image range (image_start < image_end).
+    lda export_start+1
+    cmp export_end+1
+    bcc @image_order_ok
+    bne @error
+    lda export_start
+    cmp export_end
+    bcs @error
+@image_order_ok:
+    ; Workspace may be empty (start == end); reject reversed only.
+    lda export_workspace_start+1
+    cmp export_workspace_end+1
+    bcc @workspace_order_ok
+    bne @error
+    lda export_workspace_start
+    cmp export_workspace_end
+    bcc @workspace_order_ok
+    beq @disjoint_ok
+    bcs @error
+@workspace_order_ok:
+    ; Disjoint if workspace_end <= image_start.
+    lda export_workspace_end+1
+    cmp export_start+1
+    bcc @disjoint_ok
+    bne @check_after
+    lda export_workspace_end
+    cmp export_start
+    bcc @disjoint_ok
+    beq @disjoint_ok
+@check_after:
+    ; Or if workspace_start >= image_end.
+    lda export_workspace_start+1
+    cmp export_end+1
+    bcc @error
+    bne @disjoint_ok
+    lda export_workspace_start
+    cmp export_end
+    bcc @error
+@disjoint_ok:
+    jsr export_apply_soft_budgets
+    jsr export_select_layout
+    clc
+    rts
+@error:
+    lda #ERR_OUT_OF_MEMORY
     sec
     rts
+
+; Edge-triggered soft stock warnings against high-water image_end.
+; 80%: image_end >= $A800; 100% exceed: image_end > $D000.
+.proc export_apply_soft_budgets
+    lda #0
+    sta zp_tmp1                 ; new state bits
+
+    ; --- 80% high-water ---
+    lda export_end+1
+    cmp #>EXPORT_STOCK_80_END
+    bcc @below_80
+    ; hi >= $A8 → at/above 80%
+    lda zp_tmp1
+    ora #EXPORT_STATE_GE_80
+    sta zp_tmp1
+@below_80:
+
+    ; --- 100% exceed (strictly past stock end) ---
+    lda export_end+1
+    cmp #>EXPORT_STOCK_END
+    bcc @below_100
+    bne @at_100
+    lda export_end
+    beq @below_100              ; exactly $D000 still fits
+@at_100:
+    lda zp_tmp1
+    ora #EXPORT_STATE_GE_100
+    sta zp_tmp1
+@below_100:
+
+    ; Edge 80% enter
+    lda export_budget_state
+    and #EXPORT_STATE_GE_80
+    bne @had_80
+    lda zp_tmp1
+    and #EXPORT_STATE_GE_80
+    beq @skip_80_enter
+    lda #WARN_NEAR_STOCK
+    ldx #<export_msg_near
+    ldy #>export_msg_near
+    jsr export_emit_warning
+    jmp @skip_80_leave
+@had_80:
+    lda zp_tmp1
+    and #EXPORT_STATE_GE_80
+    bne @skip_80_leave
+    lda #WARN_NEAR_CLEAR
+    ldx #<export_msg_near_clear
+    ldy #>export_msg_near_clear
+    jsr export_emit_warning
+@skip_80_enter:
+@skip_80_leave:
+
+    ; Edge 100% enter
+    lda export_budget_state
+    and #EXPORT_STATE_GE_100
+    bne @had_100
+    lda zp_tmp1
+    and #EXPORT_STATE_GE_100
+    beq @skip_100_enter
+    lda #WARN_EXCEEDS_STOCK
+    ldx #<export_msg_exceeds
+    ldy #>export_msg_exceeds
+    jsr export_emit_warning
+    jmp @skip_100_leave
+@had_100:
+    lda zp_tmp1
+    and #EXPORT_STATE_GE_100
+    bne @skip_100_leave
+    lda #WARN_EXCEEDS_CLEAR
+    ldx #<export_msg_exceeds_clear
+    ldy #>export_msg_exceeds_clear
+    jsr export_emit_warning
+@skip_100_enter:
+@skip_100_leave:
+
+    lda zp_tmp1
+    sta export_budget_state
+    rts
+.endproc
+
+; A=warning code, X/Y=NUL-terminated message.
+.proc export_emit_warning
+    sta zp_tmp2
+    stx zp_tmp3
+    sty zp_tmp4
+    lda zp_tmp2
+    ldx #0
+    ldy #0
+    jsr diag_format_warning
+    lda #0
+    ldx zp_tmp3
+    ldy zp_tmp4
+    jsr diag_format_source_context
+    jmp diag_print_error
+.endproc
+
+; Select stock vs developer layout from measured ranges.
+; Stock-compatible: image and workspace fit stock normal RAM ($..$CFFF). In that
+; profile $CE00 is free (program may occupy it as ordinary RAM) and hot pages
+; $C800-$CDFF are never permanent reservations.
+; Developer: image or workspace exceeds the stock ceiling — export still
+; proceeds, but metadata reserves $CE00 like the installed development layout.
+.proc export_select_layout
+    lda #EXPORT_LAYOUT_STOCK
+    sta export_layout_profile
+    lda #0
+    sta export_layout_flags
+
+    ; Oversize image → developer (cannot run on stock without expansion).
+    lda export_end+1
+    cmp #>EXPORT_STOCK_END
+    bcc @image_fits
+    bne @developer
+    lda export_end
+    bne @developer
+@image_fits:
+    ; Workspace past stock normal-RAM ceiling → developer.
+    lda export_workspace_end+1
+    cmp #>EXPORT_STOCK_END
+    bcc @workspace_fits
+    bne @developer
+    lda export_workspace_end
+    bne @developer
+@workspace_fits:
+    ; Stock: $CE00 free. Hot pages are never flagged permanent.
+    rts
+@developer:
+    lda #EXPORT_LAYOUT_DEVELOPER
+    sta export_layout_profile
+    lda #EXPORT_FLAG_CE00_RESERVED
+    sta export_layout_flags
+    rts
+.endproc
 
 ; export_write_prg - Save a validated EW image through the resident bridge.
 ; Input: X/Y -> "EW", name:u16, length:arg-byte, device:arg-byte,
@@ -274,7 +575,7 @@ export_write_prg:
     iny
     lda (zp_src),y
     sta export_end+1
-    ; Require a nonempty forward range. Full stock budget is checked separately.
+    ; Require a nonempty forward range. Soft stock budget is checked separately.
     lda export_start+1
     cmp export_end+1
     bcc @range_ok

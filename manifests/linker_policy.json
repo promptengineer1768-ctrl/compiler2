@@ -18,5 +18,33 @@
     "default_cpu_port_val": 53,
     "all_ram_cpu_port_val": 52,
     "kernal_rom_visible_val": 55
+  },
+  "export_layout_profiles": [
+    {
+      "name": "stock_compatible",
+      "id": 0,
+      "ce00": "free",
+      "hot_pages": "disposable",
+      "hot_page_range": [51200, 52736],
+      "stock_image_range": [2049, 53248],
+      "notes": "Standalone stock C64; $CE00 free; $C800-$CDFF never permanent"
+    },
+    {
+      "name": "developer",
+      "id": 1,
+      "ce00": "reserved",
+      "hot_pages": "disposable",
+      "hot_page_range": [51200, 52736],
+      "ce00_range": [52736, 52992],
+      "notes": "Installed development layout; $CE00 XIP miss slot reserved"
+    }
+  ],
+  "export_stock_budget": {
+    "image_base": 2049,
+    "image_end_exclusive": 53248,
+    "near_limit_end_exclusive": 43008,
+    "near_limit_ratio": 0.8,
+    "edge_triggered": true,
+    "hard_reject_oversize": false
   }
 }
