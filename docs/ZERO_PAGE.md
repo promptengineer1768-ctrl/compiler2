@@ -6,8 +6,9 @@ Zero page is a scheduled resource, not a collection of convenient global
 addresses. Every byte must have a declared owner, size, alignment, lifetime,
 alias policy, and interaction with interrupts and ROM calls.
 
-The legacy compiler's lifetime and graph-coloring concept is retained, but the
-new build must contain the analyzer and treat its output as a required artifact.
+Zero-page allocation uses declared lifetimes and graph coloring. The build owns
+the analyzer; its output is a required, validated artifact — not a comment or
+hand-maintained address table.
 
 ## Authoritative ROM Reference
 

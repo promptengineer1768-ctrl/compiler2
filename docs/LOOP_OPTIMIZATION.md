@@ -24,18 +24,18 @@ dispatch when descriptor facts prove the loop can use a narrower path.
 
 ## Stable Variable Descriptors
 
-A variable descriptor records:
+A scalar variable descriptor is a 12-byte `VD` record. It contains a typed
+kind (`int`, `float`, or `string`), a non-zero descriptor generation, a storage
+policy, and either a direct RAM cell pointer or an arena id/generation/page/
+offset handle. Reserved bytes must be zero. The runtime rejects malformed
+records, stale arena generations, unsupported storage policies, and kind
+mismatches before reading or writing a payload.
 
-- stable descriptor ID and generation;
-- scalar/array/string kind;
-- numeric representation and width;
-- payload handle or resident cache cell;
-- direct, banked, or indirect access policy;
-- alias and movability flags.
-
-Compiled code may cache a direct cell only while descriptor generation and
-banking facts remain valid. String payload handles are movable even when the
-string descriptor is stable.
+Compiled code may cache a direct cell only while the descriptor generation and
+banking facts remain valid. Arena-backed cells must be reselected through the
+arena API before access. String variables store a string descriptor
+`payload_ptr:u16,length:u8`; storing a string updates that descriptor rather
+than copying the payload bytes.
 
 ## Loop Descriptors
 
@@ -62,8 +62,10 @@ dialect changes, incompatible `CONT`, and failed compilation.
 
 A direct integer path is eligible only when:
 
-- start, limit, and step have proven integer values and supported widths;
+- start, limit, and step have proven signed INT2 values;
 - step is nonzero;
+- every value through `end + step` can be represented by the loop variable's
+  assigned numeric type without changing the generic loop result;
 - the variable descriptor resolves to a stable accessible cell;
 - body analysis finds no aliasing write, `POKE`, `SYS`, callback, DIM/CLR, or
   bank change that can invalidate the cell;
@@ -72,7 +74,13 @@ A direct integer path is eligible only when:
 - nested-loop and error-unwind metadata is valid.
 
 The emitted path initializes the real variable cell once, compares according to
-step sign, updates the cell directly, and branches to a resolved target.
+step sign, updates the cell directly, and branches to a resolved target. It
+does not invent a separate loop-counter type: stores and visible reads respect
+the descriptor's assigned variable type. `INT1` loop variables are
+sign-extended for mixed comparisons, `INT2` variables use signed 16-bit
+ordering, `INT3` variables use unsigned 16-bit ordering, and `FLOAT` variables
+use the packed numeric runtime. If any operation would require behavior outside
+those proven facts, the fast path is ineligible.
 
 Any failed condition selects the generic frame-based runtime helper.
 
@@ -125,6 +133,16 @@ every loop and every emitter.
 
 Build/debug timing reports separate summary construction, eligibility checks,
 and emission so a lost cache or accidental body rescan is visible.
+
+The current compact typed-IR boundary uses four-byte records. For optimizer
+analysis, loop records carry the proven lowering facts, dirty mask, and
+alias/escape mask in their three payload bytes; bit 7 of the fact byte marks a
+long loop requiring bounded STOP polling. Non-loop records contribute their
+dirty and alias payload bytes to the enclosing summary. The optimizer scans
+the record stream once, publishes at most four four-byte summaries
+(`facts`, `dirty`, `alias`, `metadata`) only after the scan succeeds, and reuses
+them only for an exact 16-bit IR-generation match. Capacity failure leaves the
+previous generation's published table intact.
 
 ## STOP, Timer, and Side Effects
 

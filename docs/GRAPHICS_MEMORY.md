@@ -2,7 +2,7 @@
 
 ## Decision
 
-Compiler 2 preserves the bitmap layout proven by the legacy compiler:
+Compiler 2 uses this fixed C64 bitmap layout:
 
 | Purpose | Address range | Bytes |
 |---|---:|---:|
@@ -56,11 +56,18 @@ at `$E000-$FFFF`.
 ## Dynamic-Memory Boundary
 
 Entering bitmap mode reserves `$DC00-$FF3F`, so the top of allocatable
-normal-RAM dynamic storage becomes `$DBFF`. Leaving graphics mode restores
-stock text mode and stock colors, then restores the text-mode ceiling only
-after graphics-owned data is invalidated and arena metadata is updated
-transactionally. This restore is required on normal program end, BASIC error,
-`STOP`, and STOP-key interruption.
+normal-RAM dynamic storage becomes `$DBFF`. Edit/compile-only `HIBASIC` may
+overlap the bitmap at `$E000+`. Before a graphics-capable `RUN`, its occupied
+bytes are copied to a dedicated geoRAM buffer; running-program runtime code may
+not depend on the displaced copy.
+
+Display lifetime and memory lifetime are separate. `END` or fall-through
+restores text mode and colors, invalidates graphics metadata, restores the
+text-mode ceiling, and copies `HIBASIC` back. Error, `STOP`, or STOP-key
+interruption restores the display but keeps graphics memory intact for `CONT`.
+Editing a line invalidates continuation and lazily restores `HIBASIC`, which may
+corrupt the former bitmap. Compiler entry forces the same restore. Save-buffer
+and transition metadata remain live until restoration completes.
 
 The linker and allocator treat the screen matrix, bitmap, guard byte, and
 hardware vectors as explicit non-overlapping reservations rather than inferring
@@ -76,6 +83,8 @@ System contract tests verify:
 - no overlap with `$FFF9-$FFFF`;
 - graphics exit restores stock text mode and stock colors after END, error,
   `STOP`, and STOP key;
+- natural completion restores `HIBASIC`; error/STOP preserves bitmap bytes for
+  `CONT`, and editing performs the documented lazy restore;
 - only the RAM-under-I/O gate accesses the underlying `$DC00-$DFE7` RAM;
 - every public graphics entry returns with `$01 = $35`.
 

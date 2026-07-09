@@ -1,0 +1,24 @@
+{
+  "generator_version": "1.0",
+  "input_sequence": [
+    "POKE 53280,PEEK(53280)"
+  ],
+  "machine": "C64",
+  "normalization_rules": "screen-v1",
+  "normalized_result": "LOAD\"*\",8,1\nSEARCHING FOR *\nLOADING",
+  "profile": "basicv2",
+  "raw_error": "",
+  "raw_screen": "\n    **** COMMODORE 64 BASIC V2 ****\n\n 64K RAM SYSTEM  38911 BASIC BYTES FREE\n\nREADY.\nLOAD\"*\",8,1\n\nSEARCHING FOR *\nLOADING\nREADY.\nRUN\n\nREADY.",
+  "raw_state": {},
+  "reference_mode": "immediate",
+  "regeneration_fingerprint": "4564efe2197c7c5fe22d98b9eecc2ee6488812daece281a71d850ab8c562db68",
+  "rom_checksums": {
+    "basic-901226-01.bin": "89878cea0a268734696de11c4bae593eaaa506465d2029d619c0e0cbccdfa62d",
+    "chargen-901225-01.bin": "fd0d53b8480e86163ac98998976c72cc58d5dd8eb824ed7b829774e74213b420",
+    "kernal-901227-03.bin": "83c60d47047d7beab8e5b7bf6f67f80daa088b7a6a27de0d7e016f6484042721"
+  },
+  "schema_version": "1.0",
+  "source_text": "POKE 53280,PEEK(53280)",
+  "vice_executable": "x64sc.exe",
+  "vice_version": "3.10"
+}

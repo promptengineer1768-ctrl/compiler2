@@ -1,0 +1,26 @@
+{
+  "generator_version": "1.0",
+  "input_sequence": [
+    "10 DO:PRINT \"OK\":EXIT:LOOP",
+    "RUN"
+  ],
+  "machine": "PLUS4",
+  "normalization_rules": "screen-v1",
+  "normalized_result": "LOAD\"*\",8,1\nSEARCHING FOR *\nLOADING\nOK",
+  "profile": "basicv35",
+  "raw_error": "",
+  "raw_screen": "\n COMMODORE BASIC V3.5 60671 BYTES FREE\n 3-PLUS-1 ON KEY F1\n\nREADY.\nLOAD\"*\",8,1\n\nSEARCHING FOR *\nLOADING\nREADY.\nRUN\nOK\n\nREADY.",
+  "raw_state": {},
+  "reference_mode": "program",
+  "regeneration_fingerprint": "d73aa7cb7675a2df54e10ffc1033ffe1a5ce24f6a7be53c7df031b46d2d81160",
+  "rom_checksums": {
+    "3plus1-317053-01.bin": "628eb4b01b8701e6fc5bd4b7e9e6573deae47e0b0f8b150b4022596501d5131d",
+    "3plus1-317054-01.bin": "2e83bfdfd93a2d9e8adfe4bb302869a30eac12015f6b41302c9d1ed3bb83de16",
+    "basic-318006-01.bin": "cbf0c4dec44e3e203beaf09690e5c7f859b0eca164e789884161c8cb0e596567",
+    "kernal-318004-05.bin": "1f07270c43fc84d1556978e5bb3a6b08aa7b1253f2e46d1a452c89c972ae506b"
+  },
+  "schema_version": "1.0",
+  "source_text": "10 DO:PRINT \"OK\":EXIT:LOOP",
+  "vice_executable": "xplus4.exe",
+  "vice_version": "3.10"
+}

@@ -1,0 +1,27 @@
+{
+  "generator_version": "1.0",
+  "input_sequence": [
+    "FPMODE1",
+    "FPSET 3",
+    "PRINT FPCLR()"
+  ],
+  "machine": "ORACLE",
+  "normalization_rules": "oracle-v1",
+  "normalized_result": "3",
+  "profile": "ieee",
+  "raw_error": "",
+  "raw_screen": "3",
+  "raw_state": {
+    "oracle": "docs/IEEE754.md + docs/KEYWORDS.md"
+  },
+  "reference_mode": "immediate",
+  "regeneration_fingerprint": "c73041d4d1df2f34d5c1bb75550363ae78bd88119778caae09e790db67615824",
+  "rom_checksums": {
+    "docs/IEEE754.md": "b446f956fc17ce2379846c5e6fa5e6d45ed9059d0861df2354fff00125ae737f",
+    "docs/KEYWORDS.md": "730af43ac2b1a8f360005d6b55fa0d05cd1e3073eaa991be1d5355dd01985500"
+  },
+  "schema_version": "1.0",
+  "source_text": "FPMODE1\nFPSET 3\nPRINT FPCLR()",
+  "vice_executable": "compiler2-ieee-oracle",
+  "vice_version": "oracle-v1"
+}

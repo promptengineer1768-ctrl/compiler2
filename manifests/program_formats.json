@@ -1,0 +1,38 @@
+{
+  "manifest_version": "1.0",
+  "description": "Stock and extended tokenized file schemas",
+  "formats": {
+    "stock_basicv2": {
+      "name": "Commodore BASIC V2 PRG",
+      "default_load_address": 2049,
+      "pointer_size": 2,
+      "line_number_size": 2,
+      "terminator_size": 1,
+      "max_line_length": 80,
+      "load_address_bytes": [1, 8],
+      "line_order": "strictly_increasing",
+      "link_policy": "canonical_absolute_next_record",
+      "program_terminator_bytes": [0, 0]
+    },
+    "extended_c2p1": {
+      "name": "Compiler 2 optional C2P1 package (not required for stock V2/V3.5)",
+      "default_load_address": 2049,
+      "load_address_bytes": [1, 8],
+      "magic_bytes": [67, 50, 80, 49],
+      "magic_ascii": "C2P1",
+      "version": 1,
+      "abi_version": 1,
+      "header_size_bytes": 16,
+      "body_length_size": 2,
+      "checksum": "sum8_in_u16",
+      "reserved_bytes": 6,
+      "body": "normalized_logical_program_stream",
+      "description": "Optional package envelope only. Stock BASIC V2 uses stock_basicv2; supported BASIC 3.5 uses Plus/4-compatible linked-line form. See DESIGN2.md §5."
+    }
+  },
+  "notes": {
+    "cgs1": "CGS1 is reserved for Compressed GeoRAM Stream install sidecars only (docs/GEORAM_LOADER_DESIGN.md).",
+    "stock_path": "Primary LOAD/SAVE/VERIFY path is stock linked-line for V2 (C64) and stock-compatible 3.5 tokens (Plus/4). C2P1 is not required for those surfaces.",
+    "classification": "Prefer stock linked-line validation; optional C2P1 only for Compiler 2-only package features."
+  }
+}

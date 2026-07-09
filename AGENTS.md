@@ -1,12 +1,37 @@
 # Compiler 2 Agent Guidelines
 
+When instructions conflict, correctness and completion integrity take precedence
+over preserving previously passing but inadequate tests or `[x]` task markers.
+
 ## Working Style
 
-This project is a fresh design exercise. Prefer reading the local code and
-documents first, then make changes that fit the existing structure in this
-tree. This is a fresh design of a legacy project at "C:\Users\me\Documents\Coding Projects\compiler"; 
-you may copy completed code if possible or relevant, or use it as guidance, but you will not assume that the design or implementation
-meets the same requirements of this project.
+Compiler 2 is a **new** project. Prefer reading the local design, code, and
+tests in this tree first, then make changes that fit the current structure and
+contracts here.
+
+**Design is the source of truth for architecture.** Normative order:
+
+1. `REQUIREMENTS.md` (and `REU_REQUIREMENTS.md` for dual-device expansion)
+2. `DESIGN2.md` (and `REU_DESIGN.md` for dual-device / REU detail)
+3. focused docs under `docs/` that `DESIGN2.md` points to
+4. manifests, generated contracts, and production source
+
+When documents disagree, requirements win over design prose; design wins over
+implementation notes, skeletons, and task lists. Do not retain obsolete
+implementations, bounded fallback paths, compatibility wrappers, dual
+representations, or deprecated interfaces. When existing code or an API is
+incorrect for the current design, replace it completely and update all callers,
+tests, manifests, generated contracts, and documentation to the single correct
+design.
+
+**External reference (implementation aid only).** An earlier C64 compiler
+codebase may exist at `C:\Users\me\Documents\Coding Projects\compiler`. Agents
+may consult it while implementing to recover proven algorithms, measurements,
+or preferences, but it is **not** a design authority, not a compatibility
+target, and not part of this repository. Do not assume its design or behavior
+meets Compiler 2 requirements. Prefer algorithms that fit Compiler 2
+manifests, ABI, and memory model; never copy fixed addresses or memory maps
+from that tree as if they were normative.
 
 The authoritative stock Commodore BASIC V2 and KERNAL reference is at
 `C:\Users\me\Documents\Coding Projects\c64rom`. It contains source that builds
@@ -60,22 +85,84 @@ artifacts are defined in `docs/BUILD.md`.
 
 ### Python
 
-Install and verify the Python tools with:
+**Required:** Python 3.13. The project uses features not available in earlier versions.
 
 ```powershell
-pip install ruff mypy black pytest
-ruff --version
-mypy --version
-black --version
-pytest --version
+# Use Python 3.13 explicitly
+$PYTHON = "C:\Users\me\AppData\Local\Programs\Python\Python313\python.exe"
+& $PYTHON --version  # Python 3.13.13
+
+# Install and verify tools
+& $PYTHON -m pip install ruff mypy black pytest
+& $PYTHON -m ruff --version
+& $PYTHON -m mypy --version
+& $PYTHON -m black --version
+& $PYTHON -m pytest --version
 ```
 
-If `mypy` is installed but not on `PATH`, use one of these:
+**Run Python commands:**
 
 ```powershell
-python -m mypy tools/ tests/ --strict
-C:\Users\me\AppData\Local\Programs\Python\Python313\Scripts\mypy.exe tools\ tests\ --strict
+# Run scripts
+& $PYTHON tools/zp_alloc.py
+& $PYTHON tools/validate_build.py --all
+
+# Run tests
+& $PYTHON -m pytest tests/ -v
+& $PYTHON -m pytest tests/ -m smoke
+
+# Run type checker
+& $PYTHON -m mypy tools/ tests/ --strict
+```
+
+**Add to PATH (optional):**
+
+```powershell
 $env:Path += ";C:\Users\me\AppData\Local\Programs\Python\Python313\Scripts"
+```
+
+### VICE MCP
+
+E2E and hardware tests drive a real emulator through VICE MCP (an MCP server
+embedded in the VICE binaries). The tooling lives at:
+
+```
+C:\Users\me\Documents\Coding Projects\tools\vice-mcp
+```
+
+The Windows headless binaries are prebuilt and used directly by the test
+harness — no build step is required:
+
+```
+C:\Users\me\Documents\Coding Projects\tools\vice-mcp\dist\HeadlessVICE-windows-x86_64\
+    x64sc.exe     # C64  (BASIC V2)
+    xplus4.exe    # Plus/4 (BASIC V3.5)
+    x128.exe      # C128
+    ...
+```
+
+**Manual start (for inspecting or driving VICE yourself):** run the machine
+binary with `-mcpserver`. It listens on `localhost:6510` by default; the port is
+configurable with `-mcpserverport <port>` (and `-mcpserverhost <host>`).
+
+```powershell
+& "C:\Users\me\Documents\Coding Projects\tools\vice-mcp\dist\HeadlessVICE-windows-x86_64\x64sc.exe" -mcpserver
+& "C:\Users\me\Documents\Coding Projects\tools\vice-mcp\dist\HeadlessVICE-windows-x86_64\xplus4.exe" -mcpserver -mcpserverport 6511
+```
+
+The MCP endpoint is `http://localhost:<port>/mcp` (JSON-RPC 2.0).
+
+**For the test suite:** VICE is launched automatically by the harness in
+`tools/vice_harness.py` via `running_vice(machine, port=6510)`, which points at
+the `dist/HeadlessVICE-windows-x86_64` binaries above and runs
+`<exe> -mcpserver -mcpserverport <port>`. E2E/hardware tests marked `@pytest.mark.vice`
+are gated on this; without a runnable VICE they are expected to be skipped or to
+time out, not to be edited to pass. The `VICE_ROOT` constant in
+`tools/vice_harness.py` is the single source of truth for the binary path.
+
+```powershell
+# Run the VICE-backed E2E/hardware suite (requires the binaries above)
+& $PYTHON -m pytest tests/e2e tests/hardware -v
 ```
 
 ## Coding Standards
@@ -139,3 +226,117 @@ All Python code must follow these standards:
 
 Keep documentation aligned with the implementation. When adding new behavior,
 update the relevant docs in `docs/` and keep comments succinct and useful.
+
+## Completion Integrity
+
+A task is complete only when its stated user-visible behavior works through the
+real production path. File existence, successful assembly, placeholder logic,
+mocked execution, or passing isolated tests are not completion.
+
+### Prohibited Completion Shortcuts
+
+Do not:
+
+- implement stubs, skeletons, placeholders, no-op success paths, dummy values,
+  hard-coded test answers, or "for now" behavior;
+- mark a task complete while comments contain `TODO`, `stub`, `placeholder`,
+  `not implemented`, `future work`, `later phase`, or equivalent deferrals;
+- weaken, delete, skip, xfail, narrow, or rewrite a failing test merely to make
+  it pass;
+- replace expected behavior with assertions matching the current
+  implementation;
+- use test-only emulator shims, hooks, monkeypatches, mocks, or synthetic state
+  to stand in for production assembly behavior;
+- enlarge the production ABI solely to expose state to tests;
+- claim integration or E2E coverage when production stages are bypassed;
+- mark verification tasks complete without running their documented commands;
+- infer completion from existing `[x]` markers in `TASKS.md`.
+
+If a temporary scaffold is necessary, mark the owning task `[~]`, document the
+missing behavior, and keep an authoritative failing test for it.
+
+### Required Completion Evidence
+
+Before changing any task to `[x]`:
+
+1. Read the full task, prerequisites, normative documentation, and acceptance
+   tests.
+2. Identify the complete production call path and inspect every routine it
+   traverses.
+3. Add or strengthen a test that fails for the missing behavior.
+4. Run that test before implementation and confirm the expected failure.
+5. Implement the production behavior without test-specific branches.
+6. Run direct unit tests for every changed callable assembly routine.
+7. Run the owning integration, functional, system, and E2E tests.
+8. For user-visible C64 behavior, verify the actual built artifact in VICE.
+9. Inspect generated binaries, maps, disk files, and installed memory where
+   relevant; do not rely only on process exit codes.
+10. Search changed production code for unfinished markers and reject completion
+    if any apply to the task.
+11. Update documentation and traceability.
+12. Record the exact verification commands and results.
+
+A passing test is insufficient when the test does not exercise the production
+path or does not assert the task's full behavior.
+
+### Test Integrity
+
+Tests are requirements, not obstacles.
+
+When a test fails:
+
+- fix production code when the test expresses the documented requirement;
+- fix the test only when authoritative documentation, stock VICE behavior, or
+  an independently verified artifact proves the test itself is wrong;
+- document that evidence when changing an established expectation;
+- preserve or strengthen the original behavioral coverage;
+- never substitute a weaker assertion.
+
+Mocks are permitted only for genuine external boundaries in host-tool unit
+tests. At least one higher-level test must exercise the real boundary.
+Assembly behavior must be tested by executing the real assembled bytes.
+
+### Mandatory Regression Coverage
+
+Every discovered defect must produce:
+
+- a focused regression test for its root cause;
+- an integration test for the affected production path;
+- an artifact or system contract when packaging/linking caused the defect;
+- a VICE E2E test when the defect was user-visible on the C64.
+
+Tests must detect recurrence independently. One broad happy-path test is not a
+substitute for root-cause coverage.
+
+### TASKS.md Status Rules
+
+Treat every existing status as untrusted until verified.
+
+- `[ ]`: not started
+- `[~]`: partially implemented, scaffolded, unverified, or failing acceptance
+- `[x]`: fully implemented and verified through the required production path
+- `[-]`: blocked with a concrete documented blocker
+- `[!]`: intentionally skipped with an approved reason
+
+Never bulk-mark tasks complete. Audit each task against its complete acceptance
+criteria. If any prerequisite, behavior, test layer, documentation update, or
+verification command is missing, leave it `[~]`.
+
+Structural subtasks such as "create file" may be `[x]` when the artifact exists,
+but this does not imply that the enclosing feature is complete.
+
+### Stop Conditions
+
+Do not report success while any of the following is true:
+
+- required tests fail or are skipped unexpectedly;
+- the build emits warnings indicating missing required segments or artifacts;
+- production code contains relevant placeholder behavior;
+- generated artifacts disagree with source manifests or linker output;
+- the release artifact was not rebuilt after source changes;
+- the E2E test uses a stale artifact;
+- the feature works only through a test shim or diagnostic export;
+- the implementation satisfies only the example case rather than the general
+  requirement.
+
+Report partial progress honestly and keep the task `[~]`.

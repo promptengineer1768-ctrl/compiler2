@@ -1,0 +1,27 @@
+{
+  "generator_version": "1.0",
+  "input_sequence": [
+    "FPMODE1",
+    "PRINT COPYSGN(5,-1)",
+    "PRINT COPYSGN(-5,1)"
+  ],
+  "machine": "ORACLE",
+  "normalization_rules": "oracle-v1",
+  "normalized_result": "-5\n5",
+  "profile": "ieee",
+  "raw_error": "",
+  "raw_screen": "-5\n5",
+  "raw_state": {
+    "oracle": "docs/IEEE754.md + docs/KEYWORDS.md"
+  },
+  "reference_mode": "immediate",
+  "regeneration_fingerprint": "53a527de8c5d16557a6bfff619f91178f8715f7c5ff331df1008d632f612305c",
+  "rom_checksums": {
+    "docs/IEEE754.md": "b446f956fc17ce2379846c5e6fa5e6d45ed9059d0861df2354fff00125ae737f",
+    "docs/KEYWORDS.md": "730af43ac2b1a8f360005d6b55fa0d05cd1e3073eaa991be1d5355dd01985500"
+  },
+  "schema_version": "1.0",
+  "source_text": "FPMODE1\nPRINT COPYSGN(5,-1)\nPRINT COPYSGN(-5,1)",
+  "vice_executable": "compiler2-ieee-oracle",
+  "vice_version": "oracle-v1"
+}

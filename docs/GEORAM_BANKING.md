@@ -2,9 +2,10 @@
 
 ## Purpose
 
-This document defines the geoRAM hardware contract used by Compiler 2. It
-retains the useful indexed-call mechanism from the legacy compiler while
-removing dependence on its generated XIP layout and page-chain conventions.
+This document defines the geoRAM hardware contract used by Compiler 2: window
+access, non-destructive detection, selection ownership, and the indexed
+native-call directory. When the dual-device profile selects REU instead, see
+`../REU_DESIGN.md`; this file remains the geoRAM backend authority.
 
 ## Hardware Model
 
@@ -149,9 +150,11 @@ depth is derived from the overlay call graph plus an explicit safety margin.
 
 ## Tail Transfer
 
-A tail transfer is not an alias for a returning call. It must remove or reuse
-the current frame so that the destination returns directly to the original
-caller after the resident fixup restores machine and geoRAM state.
+A tail transfer is not an alias for a returning call. It must resolve the
+target from the generated directory, select the destination page, consume the
+current context frame, and `JMP` to the geoRAM entry. The destination routine's
+normal `RTS` returns directly to the original caller; the resident gate must
+therefore reject missing directory entries before consuming the frame.
 
 Build tests inspect stack depth for:
 
@@ -196,6 +199,14 @@ Data helpers use logical handles and preserve the caller selection:
 - copy between geoRAM pages through a bounded resident buffer;
 - compare/checksum;
 - allocate/free page extents.
+
+The resident `georam_copy_pages` descriptor uses the same leading fields as
+the RAM copy helpers. `X/Y` point to the source descriptor, whose offset, page,
+and length identify the source span. The source descriptor's pointer fields
+point to a destination descriptor; that destination descriptor supplies the
+destination offset and page. The helper copies one byte at a time through
+resident scratch and restores the incoming geoRAM selection on success or
+failure.
 
 No normal code may retain a raw `$DE00` pointer across a gate call.
 

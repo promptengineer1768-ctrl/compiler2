@@ -310,7 +310,13 @@ PRINT EXP(1)     ' Output: 2.71828...
 ### FRE
 **Syntax**: `FRE(numeric-expression)`
 **Type**: Function
-**Description**: Returns the number of bytes of free memory.
+**Description**: Returns free bytes for the active runtime profile. In the
+installed geoRAM development environment, free bytes in the primary
+variable/string arena (geoRAM-backed when that is the active payload class).
+In a source-free `COMPILE` export without geoRAM, free bytes in the normal-RAM
+dynamic region remaining after the exported image. The numeric argument is
+accepted and discarded as in stock BASIC V2. Does not report raw geoRAM device
+capacity.
 **Example**:
 ```basic
 PRINT FRE(0)
@@ -803,6 +809,11 @@ WAIT 53273,255
 **Syntax**: `COMPILE ["filename" [,device]]`
 **Type**: Statement (Immediate mode)
 **Description**: Compiles the current stored BASIC program to an independent, stock-loadable, source-free native PRG. With no filename, the output name is `COMPILED`. With no device, output uses the current disk device, which follows stock KERNAL `fa` at `$BA` and may be changed by DOS wedge commands such as `@10`. The exported program includes its required runtime and a standalone direct-mode environment supporting simple `?`/`PRINT` variable or array-element inspection, valid `CONT`, `RUN`, `LOAD`, `SAVE`, `VERIFY`, `CLR`, and the DOS wedge commands. `LIST` in the standalone environment may show only `2026 SYS2061`.
+
+### QUIT
+**Syntax**: `QUIT`
+**Type**: Statement (Immediate mode; always enabled)
+**Description**: Leaves the Compiler 2 environment and returns to stock C64 BASIC V2. In the minimal no-expansion-device editor, `QUIT` is the only accepted command besides re-display of the expansion error.
 
 ### FPMODE0 / FPMODE1
 **Syntax**: `FPMODE0` or `FPMODE1`

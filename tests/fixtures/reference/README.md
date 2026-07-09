@@ -42,3 +42,7 @@ stock keyword can be observed in VICE.
 
 Plus/4 fixtures are semantic references only. They do not define C64 token
 bytes, memory addresses, screen layout, or hardware behavior.
+
+Run `python tools/generate_vice_fixtures.py` to capture the catalog. Use
+`--profile` or `--case` when adding a single reviewed observation. Each case
+runs in a fresh VICE process so program state cannot leak between fixtures.

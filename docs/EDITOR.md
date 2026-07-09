@@ -1,22 +1,24 @@
 # Editor Requirements
 
-The editor is a stock-compatible BASIC program editor with geoRAM-backed
-services.
+The editor is a stock-compatible BASIC program editor with expansion-native
+services (geoRAM execute-in-place or REU-loaded overlays, per the dual-device
+profile in `DESIGN2.md` §8).
 
 The resident front end owns only timing-sensitive work:
 
 - IRQ keyboard scan and jiffy-clock service;
 - cursor state needed for visible editing;
 - bounded current-line capture;
-- handoff to the geoRAM editor service.
+- handoff to the expansion-native editor service.
 
-The geoRAM service owns tokenization, detokenization, `LIST`, range formatting,
-line insertion/deletion, diagnostics, and program-directory maintenance.
+The expansion-native service owns tokenization, detokenization, `LIST`, range
+formatting, line insertion/deletion, diagnostics, and program-directory
+maintenance.
 
 Line submission should feel interactive. The target for ordinary numbered-line
 entry is about 0.5 seconds or less, measured from Return to the next editor-ready
-state. The editor may use geoRAM-backed services for this work, but long
-services must stay bounded and measurable. Keyword scanning uses the generated
+state. Long services must stay bounded and measurable (and, under REU, chunked
+so pending IRQ service can run). Keyword scanning uses the generated
 first-character-indexed trie defined by `INCREMENTAL_COMPILATION.md`; it does
 not linearly scan the complete keyword table for each candidate. The build
 reports trie bounds and measured tokenizer/line-entry cost in
@@ -37,5 +39,6 @@ Implementation and tests must cover:
 - canonical tokenization of `REM`, `DATA`, quotes, abbreviations, and extended
   tokens.
 
-IRQ code must never enter a geoRAM editor routine. Long editor services must
+IRQ code must never enter an expansion-native editor routine and must never
+program the REU controller. Long editor services must
 permit timer and keyboard progress through bounded entry points.

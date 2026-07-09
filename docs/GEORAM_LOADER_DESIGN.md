@@ -4,8 +4,8 @@
 
 The build produces two disk files:
 
-- `BASICV3`: the BASIC-loadable PRG containing the loader and RAM payload.
-- `GEORAM`: the compressed geoRAM page image loaded by the installer.
+- `basicv3`: the BASIC-loadable PRG containing the loader and RAM payload.
+- `georam`: the compressed installation stream loaded by the installer.
 
 The geoRAM compiler build keeps code that must be RAM-visible in the PRG, moves
 compiler/backend routines to `GEORAM`, and reserves zero-filled compiler
@@ -93,16 +93,24 @@ its own build artifacts:
 | `build/compile.bin` | 28,402 bytes |
 | uncompressed `BASICV3` PRG | 28,414 bytes |
 | compressed `BASICV3` PRG | 20,683 bytes |
-| `build/georam.bin` | 29,952 bytes |
+| `build/georam.bin` | 65,538 bytes including fake `$DE00` PRG header |
+
+`build/georam.bin` is intentionally a PRG-format file. The first two bytes are
+the little-endian address `$DE00`, representing the geoRAM window. This header
+is fake: stock BASIC cannot load directly into geoRAM, and the Compiler 2
+loader must remove the header before writing payload bytes through the geoRAM
+window.
 
 ## Install Flow
 
 1. BASIC loads and starts `BASICV3`.
-2. The loader detects geoRAM.
+2. The loader prints `DETECTING GEORAM` and detects geoRAM.
+3. It prints `GEORAM DETECTED` and `LOADING TO GEORAM`.
 3. RAM payload is installed/decompressed to its runtime locations.
-4. The loader loads `GEORAM` from disk and copies pages into geoRAM.
+4. The loader loads `GEORAM` from disk, strips the two-byte PRG header, and
+   copies pages into geoRAM.
 5. ROM/I/O banking is restored to the expected runtime state.
-6. Control jumps to `compiler_init`.
+6. The installed shell prints `BASIC V3 READY`.
 
 KERNAL disk calls require KERNAL ROM visible. geoRAM access requires I/O visible.
 Writes to RAM under I/O must happen with interrupts disabled while I/O is banked
@@ -139,8 +147,19 @@ The compressor configuration `build/georam_stream.cfg` specifies:
 entry = $0801
 entry_mode = jmp
 
-segment = georam, georam_stream, build/georam.bin, 0, 0, 512, 256, GEORAM
+segment = georam, georam_stream, build/segments/georam_payload.bin, 0, 0, 512, 256, GEORAM
 ```
+
+`build/segments/georam_payload.bin` is `build/georam.bin` without its two-byte
+fake PRG header. After compression, `build/GEORAM_compressed.prg` restores the
+same `$DE00` header before the CGS1 stream so the D64 still contains a PRG
+file named `GEORAM`.
+
+`build/georam.bin` starts from linked cold/compiler bytes and then overlays
+each generated geoRAM routine at the block/page/offset recorded in
+`build/routine_directory.json`, using `build/compiler.lbl` as the linked-label
+source of truth. This keeps the installed sidecar bytes aligned with the
+resident geoRAM call directory rather than the staging RAM order used by ld65.
 
 This produces:
 - `build/GEORAM_compressed.prg`: the compressed GEORAM sidecar
@@ -168,7 +187,8 @@ During installation:
 2. The loader detects geoRAM
 3. RAM payload is installed/decompressed to its runtime locations
 4. The loader calls `georam_stream_load` with the GEORAM filename
-5. The stream reader opens the CGS1 sidecar and decompresses directly to geoRAM
+5. The stream reader opens the PRG sidecar, skips the `$DE00` header, validates
+   `CGS1`, and decompresses directly to geoRAM
 6. ROM/I/O banking is restored to the expected runtime state
 7. Control jumps to `compiler_init`
 
@@ -178,6 +198,7 @@ During installation:
 - Keep no-load workspace in `COMPILER_BSS` and clear it from `compiler_init`.
 - Use `georam_stream` segment type for GEORAM compression, not standard PRG packing.
 - Verify the compressed GEORAM sidecar before packaging into D64.
+- Keep `GEORAM` as PRG type on disk; do not package the geoRAM image as SEQ.
 - Fall back to an uncompressed PRG if the compressor cannot solve staging.
 - The `georam_stream_reader.asm` must fit within the loader budget.
 - The decompressor ZP usage must not conflict with other loader ZP allocations.
@@ -197,9 +218,9 @@ pytest tests\ -v -m "static or georam"
   --decompress-sidecar GEORAM build/georam_check --bin
 ```
 
-2. Compare decompressed output with original:
+2. Compare decompressed output with original payload:
 ```powershell
-fc /b build\georam.bin build\georam_check\georam.bin
+fc /b build\segments\georam_payload.bin build\georam_check\georam.bin
 ```
 
 3. Verify the D64 contains the compressed GEORAM file:

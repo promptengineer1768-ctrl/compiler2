@@ -1,0 +1,28 @@
+{
+  "generator_version": "1.0",
+  "input_sequence": [
+    "FPMODE1",
+    "PRINT SGNBIT(-1)",
+    "PRINT SGNBIT(1)",
+    "RUN"
+  ],
+  "machine": "ORACLE",
+  "normalization_rules": "oracle-v1",
+  "normalized_result": "-1\n0",
+  "profile": "ieee",
+  "raw_error": "",
+  "raw_screen": "-1\n0",
+  "raw_state": {
+    "oracle": "docs/IEEE754.md + docs/KEYWORDS.md"
+  },
+  "reference_mode": "program",
+  "regeneration_fingerprint": "fc422e1aa55fb52a935caf4e7db06e24b49725b0c16699cc752d5ddd470dbe4c",
+  "rom_checksums": {
+    "docs/IEEE754.md": "b446f956fc17ce2379846c5e6fa5e6d45ed9059d0861df2354fff00125ae737f",
+    "docs/KEYWORDS.md": "730af43ac2b1a8f360005d6b55fa0d05cd1e3073eaa991be1d5355dd01985500"
+  },
+  "schema_version": "1.0",
+  "source_text": "FPMODE1\nPRINT SGNBIT(-1)\nPRINT SGNBIT(1)",
+  "vice_executable": "compiler2-ieee-oracle",
+  "vice_version": "oracle-v1"
+}

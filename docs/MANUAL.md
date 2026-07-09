@@ -1,14 +1,10 @@
 # BASIC V3 User Manual
 
-> Status: this manual is a user-facing language reference carried forward from
-> the legacy project. `../REQUIREMENTS.md` is the compatibility authority,
-> `../DESIGN2.md` and `COMPILER_ARCHITECTURE.md` are the architecture
-> authorities, and entries here do not prove
-> implementation status unless the requirements matrix and tests also mark them
-> implemented.
-
-Legacy source build: `14-dirty`
-Legacy source date: 2026-05-07 UTC
+> Status: user-facing language reference for Compiler 2.
+> `../REQUIREMENTS.md` is the compatibility authority; `../DESIGN2.md` and
+> `COMPILER_ARCHITECTURE.md` are architecture authorities. Entries here do not
+> prove implementation status unless the requirements matrix and tests also
+> mark them implemented.
 
 ## Table of Contents
 
@@ -75,7 +71,7 @@ BASIC V3 starts as a Commodore BASIC 2.0 compatible system. New language feature
 Feature summary:
 
 - DOS wedge commands add direct-mode `$`, `/`, and `@` prefix recognition. The resident handler accepts the prefixes at startup; full KERNAL-backed directory/load/command behavior is staged behind the disk bridge.
-- BASIC 3 extensions provide the resident gateway commands `BASIC2`, `BASIC3.5`, `BASIC()`, `COMPILE`, `FPMODE0`, `FPMODE1`, and `FPMODE()`.
+- BASIC 3 extensions provide the resident gateway commands `BASIC2`, `BASIC3.5`, `BASIC()`, `COMPILE`, `QUIT`, `FPMODE0`, `FPMODE1`, and `FPMODE()`.
 - BASIC 3.5 / 7 extensions add opt-in structured keywords: `ELSE`, `DO`, `LOOP`, `EXIT`, `UNTIL`, and `WHILE`.
 - IEEE 754 numeric mode adds special values, rounding control, sticky exception flags, classification functions, and binary32 conversion support.
 - Adaptive numeric types let common integer values use `INT1`, `INT2`, and unsigned `INT3` fast paths before promoting to the existing 5-byte float format when needed.
@@ -83,7 +79,7 @@ Feature summary:
 
 The BASIC 3.5 / 7 subset is enabled with `BASIC3.5` and disabled with `BASIC2`. BASIC starts in 2.0 mode. The gateway statements `BASIC3.5` and `BASIC2`, and the no-argument query function `BASIC()`, are active immediately at startup. In BASIC 2.0 mode, all other BASIC 3.5 structured keywords (`ELSE`, `DO`, `LOOP`, `EXIT`, `UNTIL`, and `WHILE`) produce `?SYNTAX ERROR`.
 
-IEEE numeric mode is enabled with `FPMODE1` and disabled with `FPMODE0`. In normal startup mode, legacy Commodore-style numeric behavior remains active. The gateway statements `FPMODE1` and `FPMODE0`, and the no-argument query function `FPMODE()`, are active immediately at startup and can be used independently of the BASIC 3.5 dialect mode.
+IEEE numeric mode is enabled with `FPMODE1` and disabled with `FPMODE0`. In normal startup mode, stock Commodore-style numeric behavior remains active. The gateway statements `FPMODE1` and `FPMODE0`, and the no-argument query function `FPMODE()`, are active immediately at startup and can be used independently of the BASIC 3.5 dialect mode.
 
 ## Runtime Optimizations
 
@@ -146,6 +142,22 @@ Line-range forms are not part of the resident direct handler yet. BASIC-visible
 file/device statements such as `LOAD`, `SAVE`, and `VERIFY` are part of the
 temporary compiled direct-command path rather than the tiny resident shortcut
 set.
+
+### File, Device, and Secondary-Address Limits
+
+File-command numeric expressions are evaluated normally, then converted to a
+dedicated unsigned argument byte. This storage domain is not the signed `INT1`
+numeric type. Exact integers from `0` through `255` are accepted; negative,
+fractional, or larger values report `?ILLEGAL QUANTITY` before any KERNAL call.
+
+| Argument | Accepted expression | Command-specific behavior |
+|---|---:|---|
+| Logical file / channel | `0..255` | `OPEN` requires `1..255` and rejects duplicate numbers; at most ten files may be open. `CLOSE` accepts any byte and closing an unopened number is harmless. `CMD`, `PRINT#`, `INPUT#`, and `GET#` require a matching open logical file. |
+| Device | `0..255` | `OPEN` recognizes keyboard 0, cassette 1, RS-232 2, screen 3, and serial devices 4–31. `LOAD`, `SAVE`, and `VERIFY` accept cassette 1 or serial devices 4–31; devices 0, 2, and 3 take the stock illegal-device path. Values 32–255 pass BASIC's byte conversion, but are outside the documented KERNAL device range and follow the actual KERNAL/VICE serial-bus result rather than becoming an `ILLEGAL QUANTITY`. |
+| Secondary address | `0..255` | Explicit values use the full byte. `LOAD`, `SAVE`, and `VERIFY` default to 0. `OPEN` defaults to 0 for devices 0–2 and `$FF` for device 3 or higher. For LOAD, zero requests the caller's alternate address and nonzero uses the file's stored address. |
+
+Filename lengths are also unsigned bytes (`0..255`), though individual
+commands may reject an empty name.
 
 ## DOS Wedge Extensions
 
@@ -336,6 +348,18 @@ this command set are rejected. `LIST` may show only:
 
 It does not list tokenized source or decompile the native program image.
 
+### QUIT
+
+Syntax:
+
+```basic
+QUIT
+```
+
+Leaves Compiler 2 and returns to stock C64 BASIC V2 (direct mode only). If
+expansion memory is missing after RESTORE re-detect, the minimal editor still
+accepts `QUIT`; other commands only re-show the expansion-memory error.
+
 ### FPMODE
 
 Syntax:
@@ -346,7 +370,7 @@ FPMODE1
 FPMODE()
 ```
 
-`FPMODE1` enables IEEE numeric semantics. `FPMODE0` restores legacy numeric
+`FPMODE1` enables IEEE numeric semantics. `FPMODE0` restores stock numeric
 semantics. `FPMODE()` returns the current mode, `1` for enabled or `0` for
 disabled. The query form accepts no expression argument.
 
@@ -622,7 +646,7 @@ Enable IEEE mode:
 FPMODE1
 ```
 
-Return to legacy mode:
+Return to stock numeric mode:
 
 ```basic
 FPMODE0
@@ -707,7 +731,7 @@ FPMODE1
 FPMODE()
 ```
 
-`FPMODE1` enables IEEE semantics. `FPMODE0` restores legacy semantics. `FPMODE()` returns the current mode, `1` for enabled or `0` for disabled. The BASIC 3.5 dialect and IEEE mode are independent; `FPMODE1` can be used while BASIC remains in default BASIC 2 mode.
+`FPMODE1` enables IEEE semantics. `FPMODE0` restores stock numeric semantics. `FPMODE()` returns the current mode, `1` for enabled or `0` for disabled. The BASIC 3.5 dialect and IEEE mode are independent; `FPMODE1` can be used while BASIC remains in default BASIC 2 mode.
 
 Examples:
 
@@ -1329,6 +1353,7 @@ These tokens are always available from the resident BASIC 3 gateway layer.
 | Token Bytes | Keyword | Availability | Notes |
 | --- | --- | --- | --- |
 | `$CE` | `COMPILE` | Direct mode | Compiles the current stored BASIC program. |
+| `$D3` | `QUIT` | Direct mode | Return to stock BASIC V2. |
 | `$D4` | `BASIC` | Direct mode / query parsing | Used by `BASIC2`, `BASIC3.5`, and `BASIC()`. |
 | `$FE,$30` | `FPMODE` | Always available | IEEE mode gateway and query token. |
 
@@ -1393,7 +1418,7 @@ The BASIC 3.5 / 7 graphics commands provide C64-compatible graphics manipulation
 - `DEC()`: Converts numeric value to decimal string
 - `HEX$()`: Converts numeric value to hexadecimal string
 
-All graphics commands preserve program state: program exit restores stock text mode and stock colors even on ERROR, STOP keyword, STOP key, or fall-through.
+All graphics commands restore stock text mode and colors on ERROR, STOP keyword, STOP key, or fall-through. After STOP or an error, the bitmap remains reserved and intact so a valid `CONT` can resume it. Natural `END` or fall-through releases the bitmap for the editor/compiler. Editing a line after STOP/error also releases it and may overwrite the previous graphics; that edit deliberately abandons continuation.
 
 ### DOS Wedge SEQ Streaming
 
@@ -1608,7 +1633,7 @@ The following paths intentionally promote to float or are still staged:
 | Division | Promotes to float unless the integer division fast path can prove an exact integer result. |
 | `SIN`, `COS`, `TAN`, `ATN`, `LOG`, `EXP` | Integer inputs are converted to float before calling the numeric routine; results are `TYPE_FLOAT`. |
 | `SGN()` and `ABS()` | Planned to be fully integer-aware; they should return compact integer results where safe. |
-| FOR/NEXT integer loop execution | Frame type storage exists, but dedicated INT1/INT2/INT3 NEXT paths and loop-frame promotion are still staged. |
+| FOR/NEXT numeric loop execution | Compiled FOR start, limit, and step operands are signed INT2 values. Frames also record the assigned variable type, which may be FLOAT, INT1, INT2, or INT3. Fully implemented loops store through that variable type: INT1 is sign-extended for mixed comparisons, INT2 compares signed, INT3 compares unsigned, and FLOAT uses packed runtime arithmetic. Specialized loops are legal only when start through `end + step` is proven to fit both the signed INT2 control fields and the assigned variable type; otherwise the generic path promotes as needed. |
 | Address keywords | `WAIT`, `PEEK()`, `POKE`, and `SYS` should gain explicit `INT3` fast paths because their address operands are unsigned 16-bit values. |
 | Natural small-integer functions | `ASC()`, `CHR$()`, `SPC()`, `TAB()`, and any future `LOCATE` implementation should prefer compact integer argument fast paths where behavior remains compatible. |
 

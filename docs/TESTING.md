@@ -367,6 +367,31 @@ Direct injection is atomic: pause VICE, write the buffer and length/pending
 fields, resume, and wait for consumption. It exercises editor submission and
 all application logic without introducing keyboard timing into every test.
 
+### Layered Input Policy
+
+Use the highest practical layer that still proves the behavior under test:
+
+1. call pure assembly routines directly in the local 6502 emulator;
+2. inject application lines through the editor mailbox for compiler, runtime,
+   and broad language tests;
+3. use KERNAL keyboard-buffer injection only for narrow GETIN integration
+   checks;
+4. use VICE key events/CIA matrix input only for the focused keyboard proof.
+
+Do not make every language test traverse the physical keyboard path. It adds a
+timing race without adding coverage of compiler semantics. Conversely, mailbox
+tests do not prove CIA, IRQ, SCNKEY, the KERNAL queue, or GETIN; Layer 5 must
+prove that complete path independently.
+
+## Smoke Selection
+
+The `smoke` marker selects authoritative tests, never reduced implementations.
+The set must include direct unit execution, a cross-boundary integration path,
+a user-visible functional workflow, generated system contracts, fixture-backed
+E2E cases for every supported mode, and one VICE availability check. Selection
+must be deterministic across repeated collection and complete in under 60
+seconds on the development host. Tests retain all normal category markers.
+
 ## Layer 5: Focused VICE Hardware Tests
 
 The slowest layer is reserved for behavior that requires VICE fidelity.
@@ -408,6 +433,20 @@ capacity profiles, and interrupts at sensitive bank-switch boundaries. Tests
 assert `$35` during normal editor/runtime/geoRAM operation, `$36` only inside a
 KERNAL bridge, and restoration to `$35` after KERNAL and RAM-under-I/O access.
 
+### VICE I/O Constraints
+
+Treat KERNAL LOAD/SAVE and sequential channel I/O as different hardware paths.
+With device traps enabled, KERNAL LOAD/SAVE is reliable, but
+OPEN/CHKIN/CHRIN byte-stream reads require a functioning drive device and may
+hang or return no data when true-drive emulation is disabled. Changing disk
+attachment does not repair a mismatched I/O method.
+
+Tests for OPEN, CHKIN, CHRIN, CHROUT channels, directory streams, or DOS status
+must run with the drive configuration those calls require. Tests that only need
+to transfer a PRG should prefer KERNAL LOAD/SAVE. Never remove device traps as
+a casual workaround: hardware-speed IEC can exceed ordinary test timeouts even
+in warp mode.
+
 ## Canonical and Differential Tests
 
 Stock BASIC implementation details are explained by the ROM source/reference
@@ -435,6 +474,19 @@ must report less than 60 C64 jiffies. Incremental line-entry latency is a
 reported responsiveness metric with an ordinary-line target of about 0.5
 seconds, but it is not a hard pass/fail semantic gate.
 
+The build writes the current benchmark status to
+`build/phase1_for_benchmark.json`, and `build/size_report.json` embeds the same
+record under `profile_guided_optimization.phase1_for_benchmark`. A pending
+record is not a pass. Refresh the VICE-measured native benchmark fixture with:
+
+```powershell
+python tools/phase1_for_benchmark.py --measure-native-fixture --require-measured
+```
+
+The normal build preserves a compatible measured result so generated build
+reports do not regress back to a pending benchmark after the measurement has
+been captured.
+
 ### Stock VICE Oracles
 
 Expected E2E semantics are generated from clean stock VICE machines:
@@ -451,9 +503,16 @@ The installed executables are under:
 `C:\Users\me\Documents\Coding Projects\tools\vice-mcp\dist\HeadlessVICE-windows-x86_64`
 
 Reference generation starts each machine with its stock ROMs and clean default
-state. It executes the exact immediate command or numbered stored program,
-captures raw screen/error/state observations, and writes versioned fixtures
-under `tests/fixtures/reference/`.
+state. It tokenizes the stock BASIC source with `petcat.exe`, autostarts the
+resulting PRG through VICE, captures raw screen/error/state observations, and
+writes versioned fixtures under `tests/fixtures/reference/`.
+
+`petcat.exe` requires lowercase BASIC program text outside quoted strings when
+creating stock PRGs. Keep string literals byte-for-byte, but lowercase
+keywords, variable names, and unquoted syntax before tokenization. Uppercase
+ASCII source can be interpreted as PETSCII/control-token names and produce
+wrong tokens, including valid-looking PRGs that fail with stock `?SYNTAX ERROR`
+at runtime.
 
 Assertions are derived from those fixtures rather than transcribed from memory.
 The stock ROM behavior is immutable, so BASIC V2 and implemented BASIC V3.5
@@ -501,12 +560,55 @@ not become alternate production implementations.
 
 ## Timing Guidance
 
-Prefer state-based waits over fixed sleeps. Keyboard hardware tests may require
-short pacing; mailbox tests should not.
+Prefer state-based waits over fixed sleeps. Wait for MCP readiness before the
+first request and explicitly resume execution. After input, wait for a changed
+READY prompt, submit counter, idle PC range, mailbox consumption, error code,
+or a test-owned completion marker. An old READY already present on screen is
+not evidence that a new command completed.
+
+Submit stored-program lines one at a time and wait for the editor/input loop
+between lines. Do not send a multi-line keyboard payload: Return starts
+tokenization, storage, or compilation while the KERNAL queue is no longer
+being polled. Increasing an arbitrary post-Return delay is not a reliable fix.
+Pause/resume around every keyboard character or chunk is also prohibitively
+slow and can introduce new stalls.
+
+VICE boot and complex I/O commonly take 5-20 seconds. Hardware suites should
+use an outer pytest timeout of about 180 seconds and smaller operation-specific
+deadlines that report the last screen, registers, banking state, and input
+state on failure. MCP calls should retry brief connection resets, but retries
+must remain bounded.
 
 Run layers 1-3 in the foreground. Run broad VICE suites in isolated background
-processes with per-test timeouts, captured output, and stale VICE instances
-removed before a new run.
+processes with unique ports, per-test timeouts, captured output, and cleanup in
+`finally`. Do not run VICE tests in parallel when setup or cleanup can terminate
+machine processes globally. Never reuse a port while a previous process may
+still be exiting.
+
+### Known Reliable and Unreliable Patterns
+
+Reliable:
+
+- start VICE, wait for `vice.ping`, resume, then wait for READY;
+- generate broad stock fixtures by tokenizing lowercase source with `petcat`
+  and using VICE autostart;
+- one short command followed by a state-based completion wait;
+- direct, bank-qualified memory/register inspection;
+- KERNAL LOAD of a PRG from an attached D64;
+- mailbox submission for broad application testing;
+- line-by-line keyboard input when keyboard integration is the subject.
+
+Unreliable:
+
+- fixed sleeps as the only completion signal;
+- uppercase ASCII source passed directly to `petcat -w2` or `petcat -w3`;
+- four or more program lines in one keyboard call;
+- raw `$0277`/`$00C6` stuffing while the CPU is compiling or outside GETIN;
+- rapid MCP calls without bounded retry;
+- reattaching a disk mid-session after autostart and assuming channel state
+  remains valid;
+- expecting device traps to support sequential OPEN/CHKIN/CHRIN streams;
+- shared ports or parallel tests with global VICE cleanup.
 
 ## Completion Rule
 

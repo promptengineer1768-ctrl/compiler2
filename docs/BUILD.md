@@ -157,6 +157,7 @@ build/
   generated/
   compiler.bin
   georam.bin
+  reu.bin                      # REU overlay/arena image (dual-device release)
   GEORAM_compressed.prg        # compressed GEORAM sidecar (when -UseCompressor)
   GEORAM_compressed.json       # sidecar metadata (when -UseCompressor)
   basicv3.prg
@@ -165,7 +166,10 @@ build/
   compiler.d64
   build_manifest.json
   loader_manifest.json
+  reu_loader_manifest.json
   routine_directory.json
+  overlay_directory.json
+  reu_layout.json
   arena_layout.json
   runtime_abi.json
   production_entries.json
@@ -208,26 +212,45 @@ path, final build fingerprint, or self-checksum. This avoids a hash cycle:
 
 ## Packaging
 
-The installable PRG contains the BASIC loader and normal-RAM installation
-payload required to establish the canonical runtime. The geoRAM image is a
-separate ordered page image. A D64 release image contains stable, documented
-filenames for the loader/runtime and geoRAM data.
+The installable PRG contains the common BASIC loader, dual-device detectors,
+expansion dispatcher, and normal-RAM installation payload. Expansion images
+are separate sidecars: `georam.bin` (geoRAM XIP page image) and `reu.bin`
+(REU overlay/arena image). A release D64 always carries both sidecars; startup
+loads only the selected device's sidecar (`DESIGN2.md` §2, §8.3;
+`REU_DESIGN.md` §8).
 
-The release D64 must store `basicv3.prg` with the Commodore filename
-`BASICV3` and `georam.bin` with the Commodore filename `GEORAM`.
+The release D64 must use the lowercase disk title `compiler2` and store:
 
-When `-UseCompressor` is set, the D64 stores the compressed GEORAM sidecar
-as `GEORAM` instead of the raw `georam.bin`. The compressed sidecar is verified
-before packaging.
+| Host file | C64 filename |
+|---|---|
+| `basicv3.prg` | `BASICV3` (or packaging-normalized `basicv3`) |
+| `georam.bin` / compressed stream | `GEORAM` / `georam` |
+| REU patch object | `REU` (small delta/fixup; not a second full image) |
+
+`GEORAM` may be a PRG-format file: bytes 0-1 little-endian fake load address
+`$DE00`, followed by the ordered geoRAM page payload. `$DE00` represents the
+geoRAM window for tooling only; stock BASIC cannot load the file directly into
+geoRAM. The loader strips those two PRG header bytes before copying or
+streaming payload bytes into geoRAM. `REU` is a versioned REU sidecar with
+extent directory, checksums, and capacity requirement (`REU_REQUIREMENTS.md`
+RREU-9).
+
+When `-UseCompressor` is set, the compressed GEORAM sidecar is generated,
+verified, and stored for the loader. The full raw image remains an intermediate
+build artifact. The compressed geoRAM sidecar is a fake-header PRG: `$00 $DE`
+followed by the CGS1 stream. The stream reader skips the header before
+validating `CGS1`. REU compression, if enabled, uses a separate versioned
+stream type, never the CGS1 magic.
 
 Packaging must validate:
 
-- PRG load address and loader record;
+- PRG load address and loader record, including any fake `$DE00` GEORAM header;
 - payload destination ranges;
 - no load-time write through visible I/O or ROM;
 - geoRAM page order, padding, and checksums;
-- D64 directory filenames and file types;
-- agreement with `loader_manifest.json`.
+- REU extent order, padding, checksums, and capacity header;
+- D64 directory filenames and file types for `BASICV3`, `GEORAM`, and `REU`;
+- agreement with `loader_manifest.json` and `reu_loader_manifest.json`.
 
 Compression may be added only behind a versioned format and round-trip
 verification. The uncompressed linked images remain authoritative for maps,

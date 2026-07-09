@@ -1,0 +1,26 @@
+{
+  "generator_version": "1.0",
+  "input_sequence": [
+    "10 REM E2E CATALOG COVERAGE BIN32$",
+    "RUN"
+  ],
+  "machine": "ORACLE",
+  "normalization_rules": "catalog-v1",
+  "normalized_result": "CATALOG COVERAGE ieee compile BIN32$",
+  "profile": "ieee",
+  "raw_error": "",
+  "raw_screen": "READY.\n10 REM E2E CATALOG COVERAGE BIN32$\nOK\nREADY.",
+  "raw_state": {
+    "keyword": "BIN32$",
+    "mode": "compile"
+  },
+  "reference_mode": "program",
+  "regeneration_fingerprint": "2d3f42866abff3786630667c9cf1b8052e4285732128ed7c7e97849ff40baabd",
+  "rom_checksums": {
+    "catalog-oracle": "dda47a668088d1e402d0a8ce2b489870631ea5a1d0746c47291c3b0a5b672ede"
+  },
+  "schema_version": "1.0",
+  "source_text": "10 REM E2E CATALOG COVERAGE BIN32$",
+  "vice_executable": "compiler2-oracle",
+  "vice_version": "catalog-oracle-1.0"
+}

@@ -229,7 +229,7 @@ No subroutines. Assembly-time macros only. Validate that:
 | `test_semantic_set_dialect` | unit | local | Verify dialect mode changed |
 | `test_semantic_get_numeric_mode` | unit | local | Verify numeric mode query is independent of dialect |
 | `test_semantic_set_numeric_mode` | unit | local | Verify numeric mode update preserves dialect state |
-| `test_semantic_numeric_mode` | unit | local | Verify legacy/IEEE mode independent of dialect |
+| `test_semantic_numeric_mode` | unit | local | Verify stock/IEEE numeric mode independent of dialect |
 
 ### 6.13 `src/geoasm/ir_builder.asm`
 
@@ -300,10 +300,9 @@ No subroutines. Assembly-time macros only. Validate that:
 
 ### 6.17 `src/geoasm/math_trig.asm`
 
-Use legacy project Python proxy accuracy fixtures and proven trig source as
-preferred oracle material. Tests must still verify the ported code follows
-Compiler 2 ABI, generated ZP allocation, and geoRAM placement rather than the
-legacy memory map.
+Accuracy oracles may use independent Python proxy models or known reference
+vectors. Tests must verify production code follows Compiler 2 ABI, generated
+ZP allocation, and dual expansion placement.
 
 | Test | Scope | Environment | Description |
 |---|---|---|---|
@@ -316,10 +315,10 @@ legacy memory map.
 
 ### 6.18 `src/geoasm/math_trans.asm`
 
-Use legacy project Python proxy accuracy fixtures and proven transcendental /
-IEEE source as preferred oracle material. Stock BASIC V2 behavior still governs
-inherited legacy-mode operations where applicable; IEEE-only operations use the
-independent IEEE oracle.
+Accuracy oracles may use independent Python proxy models or known reference
+vectors. Stock BASIC V2 behavior still governs non-IEEE (stock numeric mode)
+operations where applicable; IEEE-only operations use the independent IEEE
+oracle.
 
 | Test | Scope | Environment | Description |
 |---|---|---|---|
@@ -753,6 +752,68 @@ build artifacts.
 | `test_validate_build_contracts` | tool-integration | host | `tools/validate_build.py` verifies manifests, layout, references, artifacts, and fingerprint |
 | `test_test_harness_matrix` | tool-integration | host | `tools/test_harness.py` collects callable coverage and writes traceability matrices |
 | `test_generate_reference_outputs` | tool-integration | host | `tools/generate_reference.py` writes deterministic `API.md` and `MAP.md` |
+
+### Section 7 Function Coverage Map
+
+Every function contract in `SKELETON.md` section 7 has an owning host-tool
+test row below. A row names the narrowest test module responsible for direct
+behavioral coverage; cross-artifact behavior is additionally exercised by the
+system tests listed later in this document.
+
+| Tool function | Owning test module | Required behavior |
+|---|---|---|
+| `zp_alloc.load_manifest` | `tests/tools/test_zp_alloc.py` | Load and reject malformed ZP manifests |
+| `zp_alloc.build_interference_graph` | `tests/tools/test_zp_alloc.py` | Build lifetime interference edges |
+| `zp_alloc.color_graph` | `tests/tools/test_zp_alloc.py` | Allocate deterministic non-overlapping ranges |
+| `zp_alloc.generate_output` | `tests/tools/test_zp_alloc.py` | Emit all declared ZP artifacts |
+| `zp_alloc.validate_no_overlap` | `tests/tools/test_zp_alloc.py` | Reject overlapping live ranges |
+| `zp_alloc.validate_contracts` | `tests/tools/test_zp_alloc.py` | Reject unallocated routine clobbers |
+| `georam_pages.load_routine_manifest` | `tests/tools/test_georam_pages.py` | Load and validate routine records |
+| `georam_pages.assign_page_placement` | `tests/tools/test_georam_pages.py` | Pack routines within page boundaries |
+| `georam_pages.generate_call_directory` | `tests/tools/test_georam_pages.py` | Emit grouped block/page/offset tables |
+| `georam_pages.generate_routine_ids` | `tests/tools/test_georam_pages.py` | Assign complete unique IDs |
+| `georam_pages.generate_test_exports` | `tests/tools/test_georam_pages.py` | Emit test-only exports without changing production ABI |
+| `georam_pages.validate_no_cross_boundary` | `tests/tools/test_georam_pages.py` | Reject routines crossing `$DEFF` |
+| `georam_pages.validate_linked_placement` | `tests/tools/test_georam_pages.py` | Reconcile linked bodies with directory records |
+| `generate_contracts.generate_command_tables` | `tests/tools/test_generate_contracts.py` | Emit bounded dialect and mode lookup data |
+| `generate_contracts.generate_runtime_abi` | `tests/tools/test_generate_contracts.py` | Emit the stable runtime ABI |
+| `generate_contracts.generate_arena_layout` | `tests/tools/test_generate_contracts.py` | Emit typed arena extents |
+| `generate_contracts.generate_entry_manifests` | `tests/tools/test_generate_contracts.py` | Separate production and test entries |
+| `generate_contracts.generate_format_tables` | `tests/tools/test_generate_contracts.py` | Emit versioned program-format constants |
+| `linker_config.load_linker_policy` | `tests/tools/test_linker_config.py` | Load canonical linker policy |
+| `linker_config.merge_generated_segments` | `tests/tools/test_linker_config.py` | Merge generated pages into linker configuration |
+| `linker_config.validate_no_overlap` | `tests/tools/test_linker_config.py` | Reject overlapping memory ranges |
+| `linker_config.validate_vectors` | `tests/tools/test_linker_config.py` | Require vectors at `$FFFA-$FFFF` |
+| `linker_config.write_config` | `tests/tools/test_linker_config.py` | Write deterministic `compiler.cfg` |
+| `extract_segments.extract_payload` | `tests/tools/test_extract_segments.py` | Extract file-backed RAM ranges |
+| `extract_segments.validate_payload` | `tests/tools/test_extract_segments.py` | Reject payload/manifest disagreement |
+| `prepare_compressor_segments.stage_segments` | `tests/tools/test_prepare_compressor_segments.py` | Stage compressor inputs and layout |
+| `prepare_compressor_segments.build_simple_prg` | `tests/tools/test_prepare_compressor_segments.py` | Build the uncompressed loader PRG |
+| `package_d64.build_d64` | `tests/tools/test_package_d64.py` | Create a valid D64 and sector chains |
+| `package_d64.validate_d64` | `tests/tools/test_package_d64.py` | Validate directory entries and contents |
+| `package_d64.validate_prg_header` | `tests/tools/test_package_d64.py` | Validate `$0801` loader header |
+| `validate_build.validate_tool_versions` | `tests/tools/test_validate_build.py` | Record and enforce tool versions |
+| `validate_build.validate_manifests` | `tests/tools/test_validate_build.py` | Validate schemas and cross-references |
+| `validate_build.validate_routine_directory` | `tests/tools/test_validate_build.py` | Reconcile routine IDs and placement |
+| `validate_build.validate_arena_layout` | `tests/tools/test_validate_build.py` | Reconcile arena policy and layout |
+| `validate_build.validate_zp_allocation` | `tests/tools/test_validate_build.py` | Reconcile ZP allocation and symbols |
+| `validate_build.validate_size_report` | `tests/tools/test_validate_build.py` | Enforce declared resource budgets |
+| `validate_build.validate_program_formats` | `tests/tools/test_validate_build.py` | Validate stock and extended codecs |
+| `validate_build.validate_runtime_abi` | `tests/tools/test_validate_build.py` | Reject private dependencies in runtime ABI |
+| `validate_build.validate_keyword_lookup` | `tests/tools/test_validate_build.py` | Validate command coverage and lookup bounds |
+| `validate_build.validate_generated_reference` | `tests/tools/test_validate_build.py` | Validate generated API and memory map |
+| `validate_build.validate_no_stale_generated` | `tests/tools/test_validate_build.py` | Reject stale or undeclared outputs |
+| `validate_build.compute_build_fingerprint` | `tests/tools/test_validate_build.py` | Produce deterministic fingerprints |
+| `test_harness.collect_assembly_entries` | `tests/tools/test_test_harness.py` | Build callable coverage matrix |
+| `test_harness.replay_boundary` | `tests/tools/test_test_harness.py` | Replay serialized phase boundaries |
+| `test_harness.run_smoke_selection` | `tests/tools/test_test_harness.py` | Select only authoritative smoke tests |
+| `test_harness.run_full_selection` | `tests/tools/test_test_harness.py` | Run complete or filtered selections |
+| `test_harness.generate_requirements_matrix` | `tests/tools/test_test_harness.py` | Emit requirement/test traceability |
+| `generate_reference.load_reference_inputs` | `tests/tools/test_generate_reference.py` | Reject contradictory structured inputs |
+| `generate_reference.generate_api` | `tests/tools/test_generate_reference.py` | Emit every production callable |
+| `generate_reference.generate_map` | `tests/tools/test_generate_reference.py` | Emit sorted ranges, gaps, and totals |
+| `generate_reference.validate_reference_model` | `tests/tools/test_generate_reference.py` | Validate contracts before rendering |
+| `generate_reference.write_deterministic` | `tests/tools/test_generate_reference.py` | Write UTF-8/LF without volatile data |
 
 ## Functional Tests
 

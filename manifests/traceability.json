@@ -1,0 +1,24 @@
+{
+  "manifest_version": "1.0",
+  "description": "EARS traceability records mapping requirements to design and tests",
+  "records": [
+    {
+      "id": "R0.1-BUILD-BOOTSTRAP",
+      "ears": "The system shall provide a canonical entry point build.ps1 to execute the entire build pipeline checked through tools.",
+      "source_section": "REQUIREMENTS.md#section-build-system",
+      "design_section": "docs/BUILD.md#canonical-entry-point",
+      "implementation": "build.ps1",
+      "tests": ["test_validate_build_contracts"],
+      "status": "planned"
+    },
+    {
+      "id": "R1.0-COMPATIBILITY-LIMITS",
+      "ears": "The system shall enforce stock Commodore BASIC V2 compatibility limits for line numbers, variables, strings, files, and devices.",
+      "source_section": "REQUIREMENTS.md#section-compatibility",
+      "design_section": "docs/BASIC_COMPATIBILITY_LIMITS.md",
+      "implementation": "tests/e2e/cases/basicv2_limits.yaml",
+      "tests": ["test_e2e_coverage_limits"],
+      "status": "planned"
+    }
+  ]
+}

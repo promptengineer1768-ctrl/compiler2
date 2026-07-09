@@ -1,0 +1,25 @@
+{
+  "generator_version": "1.0",
+  "input_sequence": [
+    "10 OPEN1,3:PRINT#1,\"OK\":CLOSE1",
+    "RUN"
+  ],
+  "machine": "C64",
+  "normalization_rules": "screen-v1",
+  "normalized_result": "LOAD\"*\",8,1\nSEARCHING FOR *\nLOADING\nOK",
+  "profile": "basicv2",
+  "raw_error": "",
+  "raw_screen": "\n    **** COMMODORE 64 BASIC V2 ****\n\n 64K RAM SYSTEM  38911 BASIC BYTES FREE\n\nREADY.\nLOAD\"*\",8,1\n\nSEARCHING FOR *\nLOADING\nREADY.\nRUN\nOK\n\nREADY.",
+  "raw_state": {},
+  "reference_mode": "program",
+  "regeneration_fingerprint": "d0b4f4967f3c440a460f5886ba647396d789afe17d0ccd2477564deef522991c",
+  "rom_checksums": {
+    "basic-901226-01.bin": "89878cea0a268734696de11c4bae593eaaa506465d2029d619c0e0cbccdfa62d",
+    "chargen-901225-01.bin": "fd0d53b8480e86163ac98998976c72cc58d5dd8eb824ed7b829774e74213b420",
+    "kernal-901227-03.bin": "83c60d47047d7beab8e5b7bf6f67f80daa088b7a6a27de0d7e016f6484042721"
+  },
+  "schema_version": "1.0",
+  "source_text": "10 OPEN1,3:PRINT#1,\"OK\":CLOSE1",
+  "vice_executable": "x64sc.exe",
+  "vice_version": "3.10"
+}

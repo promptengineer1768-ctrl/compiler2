@@ -1,91 +1,84 @@
 # Documentation Map
 
-## Normative
+Compiler 2 is a new native 6502 BASIC compiler and interactive environment for
+the Commodore 64 with dual expansion support (geoRAM and REU). Design and
+requirements in this tree are the source of truth.
 
-These documents define Compiler 2:
+## Authority order
 
-- `../REQUIREMENTS.md`
-- `../DESIGN2.md`
-- `COMPILER_ARCHITECTURE.md`
-- `GEORAM_BANKING.md`
-- `ZERO_PAGE.md`
-- `KERNAL_ABI.md`
-- `BASIC_COMPATIBILITY_LIMITS.md`
-- `LOOP_OPTIMIZATION.md`
-- `INCREMENTAL_COMPILATION.md`
-- `COMPILE_EXPORT.md`
-- `DOS_WEDGE.md`
-- `IEEE754.md`
-- `MEMORY_BUDGETS.md`
-- `EDITOR.md`
-- `TESTING.md`
-- `BUILD.md`
-- `GENERATED_REFERENCE.md`
-- `VICE_TOOLS.md`
-- `GRAPHICS_MEMORY.md`
-- `GEORAM_LOADER_DESIGN.md`
-- `TRACEABILITY.md`
+1. **Requirements** — externally visible behavior and acceptance criteria  
+   - `../REQUIREMENTS.md` — product, language, memory, expansion summary, tests  
+   - `../REU_REQUIREMENTS.md` — dual-device detection, REU DMA/overlays, dual packaging  
+2. **Design** — architecture that satisfies those requirements  
+   - `../DESIGN2.md` — top-level design index  
+   - `../REU_DESIGN.md` — dual-device / REU detailed design  
+3. **Focused design docs** (this directory) — subsystem contracts named by
+   `DESIGN2.md`  
+4. **Implementation maps** — `../SKELETON.md`, `../TASKS.md`, `../REU_TASKS.md`,
+   `../TESTS.md` (not authorities when they conflict with 1–3)  
+5. **Generated build references** — `build/API.md`, `build/MAP.md` (current
+   build only; never normative inputs)
 
-`REQUIREMENTS.md` has priority when documents disagree.
+When documents disagree, a higher tier wins. When a focused doc and
+`DESIGN2.md` disagree on architecture, update the focused doc or reconcile
+through requirements first.
 
-## Language References
+## Normative design documents (`docs/`)
 
-These references describe the intended language and user surface. They must be
-reconciled with the requirements as implementation proceeds:
+| Document | Role |
+|---|---|
+| `COMPILER_ARCHITECTURE.md` | Layer map, program store, runtime ABI sketch |
+| `GEORAM_BANKING.md` | geoRAM hardware contract and call ABI |
+| `GEORAM_LOADER_DESIGN.md` | geoRAM install stream (CGS1) |
+| `ZERO_PAGE.md` | Zero-page manifest and interference graph |
+| `KERNAL_ABI.md` | KERNAL bridge contract |
+| `BASIC_COMPATIBILITY_LIMITS.md` | Stock edge-limit contracts |
+| `SYSTEM_PRIMITIVES.md` | PEEK/POKE/SYS/USR/WAIT/TI |
+| `LOOP_OPTIMIZATION.md` | Loop descriptors and fast paths |
+| `CONTROL_FLOW.md` | FOR/DO frames, STOP/CONT |
+| `INCREMENTAL_COMPILATION.md` | Per-line compile/publish |
+| `COMPILE_EXPORT.md` | Stock-C64 export format and budget |
+| `RUNTIME_IO.md` | Channel/file runtime request records |
+| `DOS_WEDGE.md` | `$` `@` `/` `!` direct-mode commands |
+| `EDITOR.md` | Resident / expansion-native editor split |
+| `IEEE754.md` | IEEE 754 numeric profile summary |
+| `MEMORY_BUDGETS.md` | Normal-RAM and expansion accounting |
+| `GRAPHICS_MEMORY.md` | Bitmap / screen-matrix layout |
+| `BUILD.md` | Toolchain, build order, artifacts |
+| `GENERATED_REFERENCE.md` | `API.md` / `MAP.md` schemas |
+| `VICE_TOOLS.md` | D64/PETCAT recipes |
+| `TESTING.md` | Test hierarchy and fixture mechanics |
+| `CANONICAL_TESTS.md` | Fixture regeneration policy |
+| `TRACEABILITY.md` | EARS trace-record format |
+
+## Language references
+
+User-facing and keyword references. They must stay consistent with
+requirements; they do not reduce the BASIC V2 surface if an entry is missing.
 
 - `KEYWORDS.md`
 - `MANUAL.md`
-- `CANONICAL_TESTS.md`
+- `CANONICAL_TESTS.md` (fixture policy; also under testing)
 
-`REQUIREMENTS.md` is the complete language-compatibility authority. If
-`KEYWORDS.md`, `MANUAL.md`, or `CANONICAL_TESTS.md` omits or contradicts a
-stock BASIC V2 requirement, the requirement still applies and the reference
-document must be corrected.
+Planned entries are not implemented solely because they appear in a reference.
 
-An entry described as planned is not implemented merely because it appears in a
-reference document.
+## Generated build references
 
-## Generated Build References
+Every build produces non-normative, current-build references:
 
-Every build creates these non-normative, current-build references:
+- `build/API.md` — production callables and calling conventions  
+- `build/MAP.md` — CPU, zero-page, segment, geoRAM/REU, arena, graphics,
+  vector, standalone, dynamic, and free summaries  
 
-- `build/API.md` — production callable entries and complete calling
-  conventions;
-- `build/MAP.md` — CPU, zero-page, segment, geoRAM, arena, graphics, vector,
-  standalone, dynamic, and free memory summaries.
+Schemas: `GENERATED_REFERENCE.md`. Safe to delete with `build/`; never edit by
+hand or use as inputs to the next build.
 
-Their schema and generation rules are in `GENERATED_REFERENCE.md`. They are
-derived from validated build artifacts, are safe to delete with `build/`, and
-must not be edited by hand or treated as inputs to the next build.
+## External references
 
-## Legacy Implementation References
-
-These files came from or summarize the legacy compiler and contain useful
-formats, terms, and lessons. They are not Compiler 2 architecture:
-
-- `ir.md`
-- `save_format.md`
-
-Do not copy fixed addresses, old memory regions, fallback machinery, or
-generated XIP assumptions from them without a new requirement and design
-review.
-
-Exception: trig, transcendental, and IEEE extension math should reuse the
-legacy algorithms and source where practical. Their numerical calculations
-were already proven with Python proxies and validated for accuracy. Even in
-that case, the legacy memory map and fixed ZP/address choices are guidance
-only; Compiler 2 generated manifests and ABI remain authoritative.
-
-The former full-compiler specification was superseded and removed. The old XIP
-and memory-map documents were intentionally not copied. The useful indexed
-geoRAM call concept has been re-derived in `GEORAM_BANKING.md`.
-
-## External References
-
-Stock BASIC V2 and KERNAL behavior, symbols, and zero-page use come from:
+Stock BASIC V2 and KERNAL behavior:
 
 `C:\Users\me\Documents\Coding Projects\c64rom`
 
-The legacy implementation and its tests remain available at:
-
-`C:\Users\me\Documents\Coding Projects\compiler`
+An earlier external compiler tree may be consulted during implementation for
+algorithms or measurements only; it is not part of Compiler 2 documentation
+and is not a design or compatibility authority.

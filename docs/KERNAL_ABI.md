@@ -85,6 +85,15 @@ by `LOAD`/`SAVE` paths. Compiler 2 also treats `$BA` as the current disk device
 state for direct file commands, DOS wedge device selection, and `COMPILE`
 default-device selection. Supported disk-device values are 8 through 11.
 
+File-command operands reach the bridge as unsigned argument bytes, not as
+signed `INT1` or ordinary `INT2` numeric fields. Source expressions are first
+evaluated through the shared `math_to_arg_byte` contract, which accepts exact
+FLOAT/INT1/INT2/INT3 values in `0..255` and reports `?ILLEGAL QUANTITY` for
+negative, fractional, larger, or unknown values before `SETLFS`, `SETNAM`,
+`LOAD`, `SAVE`, `VERIFY`, `OPEN`, or channel I/O can run. The stock KERNAL then
+applies command-specific logical-file, device, and secondary-address behavior
+to the preserved eight-bit value.
+
 ## IRQ Call Order
 
 The pinned timer/keyboard IRQ follows the stock ordering:

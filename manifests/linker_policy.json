@@ -1,0 +1,22 @@
+{
+  "manifest_version": "1.0",
+  "description": "Linker policy definitions for memory areas and segments layout",
+  "memory_areas": [
+    { "name": "ZP", "start": 2, "size": 254, "type": "rw" },
+    { "name": "RAM", "start": 2049, "size": 51199, "type": "rw" },
+    { "name": "IO", "start": 53248, "size": 4096, "type": "rw" },
+    { "name": "RAM_HIGH", "start": 57344, "size": 8184, "type": "rw" },
+    { "name": "VECTORS", "start": 65530, "size": 6, "type": "ro" }
+  ],
+  "fixed_segments": [
+    { "name": "LOADER", "memory_area": "RAM", "start": 2049, "max_size": 256 },
+    { "name": "RESIDENT", "memory_area": "RAM", "max_size": 16384 },
+    { "name": "COMPILER_BSS", "memory_area": "RAM", "max_size": 8192 },
+    { "name": "VECTORS", "memory_area": "VECTORS", "start": 65530, "max_size": 6 }
+  ],
+  "banking_policy": {
+    "default_cpu_port_val": 53,
+    "all_ram_cpu_port_val": 52,
+    "kernal_rom_visible_val": 55
+  }
+}

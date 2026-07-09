@@ -1,0 +1,96 @@
+{
+  "manifest_version": "1.0",
+  "description": "geoRAM arenas and capacity allocations",
+  "arenas": [
+    {
+      "id": 1,
+      "name": "tokenized_program",
+      "type_code": 1,
+      "format_version": 1,
+      "description": "Tokenized source program statements",
+      "capacity_pages_minimum": 128,
+      "reset_rule": "clear_pages",
+      "failure_behavior": "return_out_of_memory"
+    },
+    {
+      "id": 2,
+      "name": "compiled_image",
+      "type_code": 2,
+      "format_version": 1,
+      "description": "Compiled native 6502 code and relocation tables",
+      "capacity_pages_minimum": 128,
+      "reset_rule": "clear_pages",
+      "failure_behavior": "return_out_of_memory"
+    },
+    {
+      "id": 3,
+      "name": "scalars",
+      "type_code": 3,
+      "format_version": 1,
+      "description": "Scalar descriptors and cold scalar payloads",
+      "capacity_pages_minimum": 32,
+      "reset_rule": "increment_generation",
+      "failure_behavior": "return_out_of_memory"
+    },
+    {
+      "id": 4,
+      "name": "arrays",
+      "type_code": 4,
+      "format_version": 1,
+      "description": "Array descriptors and array data pages",
+      "capacity_pages_minimum": 64,
+      "reset_rule": "increment_generation",
+      "failure_behavior": "return_out_of_memory"
+    },
+    {
+      "id": 5,
+      "name": "strings",
+      "type_code": 5,
+      "format_version": 1,
+      "description": "Dynamic string page allocator and descriptors",
+      "capacity_pages_minimum": 64,
+      "reset_rule": "increment_generation",
+      "failure_behavior": "return_out_of_memory"
+    },
+    {
+      "id": 6,
+      "name": "symbols_ir",
+      "type_code": 6,
+      "format_version": 1,
+      "description": "Compiler symbol table and intermediate representation",
+      "capacity_pages_minimum": 64,
+      "reset_rule": "clear_pages",
+      "failure_behavior": "return_out_of_memory"
+    },
+    {
+      "id": 7,
+      "name": "overlay_metadata",
+      "type_code": 7,
+      "format_version": 1,
+      "description": "geoRAM routine placement directory and overlay control structures",
+      "capacity_pages_minimum": 16,
+      "reset_rule": "none",
+      "failure_behavior": "fatal_error"
+    },
+    {
+      "id": 8,
+      "name": "scratch",
+      "type_code": 8,
+      "format_version": 1,
+      "description": "Temporary scratchpad and diagnostics logging",
+      "capacity_pages_minimum": 128,
+      "reset_rule": "clear_pages",
+      "failure_behavior": "fatal_error"
+    },
+    {
+      "id": 9,
+      "name": "program_staging",
+      "type_code": 9,
+      "format_version": 1,
+      "description": "Isolated whole-program staging for transactional source publication",
+      "capacity_pages_minimum": 128,
+      "reset_rule": "clear_pages",
+      "failure_behavior": "return_out_of_memory"
+    }
+  ]
+}

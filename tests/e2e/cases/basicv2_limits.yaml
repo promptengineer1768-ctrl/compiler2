@@ -1,0 +1,631 @@
+# BASIC V2 Compatibility Limit Case Manifest
+#
+# Every row in docs/BASIC_COMPATIBILITY_LIMITS.md must have at least one
+# named case here. Each case carries:
+#
+#   id:           Unique stable identifier: <profile>-<mode>-<area>-<description>
+#   area:         The contract area from BASIC_COMPATIBILITY_LIMITS.md
+#   profile:      basicv2 | basicv35
+#   mode:         immediate | program | compile
+#   description:  Human-readable summary
+#   source_note:  Reference to c64rom label, local source, or public reference
+#   vice_pending: true = VICE fixture not yet generated; assertion is source-derived
+#   expect_error: Stock error string when the case must produce an error
+#   expect_ok:    true when the case must succeed without error
+#
+# Case IDs must remain stable. Add new rows; do not renumber existing ones.
+# Mark vice_pending: false only after a VICE capture confirms the assertion.
+
+schema_version: "1.0"
+profile: basicv2
+
+# Stable machine-readable mapping from every normative BASIC V2 table row to
+# its feature group and authoritative local source. Cases link to this table
+# through their `area` field.
+contract_areas:
+  line_number:
+    document_area: "Program line numbers"
+    feature_group: "program_storage"
+    source_ref: "basic/control/flow_control.s:linget"
+  line_record:
+    document_area: "Tokenized line record"
+    feature_group: "program_storage"
+    source_ref: "basic/parsing/tokenize.s:fndlin"
+  screen_editor:
+    document_area: "Screen-editor input line"
+    feature_group: "editor"
+    source_ref: "kernal/declare.s:llen,llen2"
+  line_payload:
+    document_area: "Tokenized line payload"
+    feature_group: "program_storage"
+    source_ref: "basic/parsing/tokenize.s"
+  variable_name:
+    document_area: "Variable names"
+    feature_group: "variables"
+    source_ref: "basic/variables/array_lookup.s:ptrget"
+  variable_type:
+    document_area: "Variable type suffixes"
+    feature_group: "variables"
+    source_ref: "basic/variables/array_lookup.s:ptrget"
+  reserved_name:
+    document_area: "Reserved names"
+    feature_group: "system_variables"
+    source_ref: "basic/variables/variable_resolution.s"
+  string_length:
+    document_area: "String length"
+    feature_group: "strings"
+    source_ref: "basic/strings/string_memory.s:midd"
+  integer_range:
+    document_area: "Integer variables"
+    feature_group: "variables"
+    source_ref: "basic/numeric/integer_conversion.s"
+  byte_argument:
+    document_area: "Byte arguments"
+    feature_group: "numeric_conversion"
+    source_ref: "basic/numeric/parse_and_address.s:getbyt"
+  address_argument:
+    document_area: "Address arguments"
+    feature_group: "numeric_conversion"
+    source_ref: "basic/numeric/parse_and_address.s:getadr"
+  arrays:
+    document_area: "Arrays"
+    feature_group: "arrays"
+    source_ref: "basic/variables/array_dimensions.s"
+  logical_files:
+    document_area: "Logical files"
+    feature_group: "file_io"
+    source_ref: "kernal/open.s:nopen"
+  load_save_device:
+    document_area: "LOAD and SAVE devices"
+    feature_group: "file_io"
+    source_ref: "kernal/load.s,kernal/save.s"
+  open_device:
+    document_area: "OPEN devices and secondary addresses"
+    feature_group: "file_io"
+    source_ref: "basic/system/file_commands.s:paoc"
+  filename:
+    document_area: "Filename length"
+    feature_group: "file_io"
+    source_ref: "kernal/declare.s:fnlen"
+  data_input:
+    document_area: "DATA and INPUT fields"
+    feature_group: "data_input"
+    source_ref: "basic/io/data_input.s"
+
+cases:
+
+  # -------------------------------------------------------------------------
+  # Area: Program line numbers
+  # Contract: Accept 0..63999; reject 64000 and above with ?SYNTAX ERROR.
+  # Source: c64rom basic/control/flow_control.s:linget, linnum high-byte check
+  # -------------------------------------------------------------------------
+
+  - id: basicv2-program-line_number-0
+    area: line_number
+    profile: basicv2
+    mode: program
+    description: "Line number 0 is a valid stored program line"
+    source_note: "linget accepts 0; no lower bound check"
+    vice_pending: true
+    expect_ok: true
+
+  - id: basicv2-program-line_number-1
+    area: line_number
+    profile: basicv2
+    mode: program
+    description: "Line number 1 is a valid stored program line"
+    source_note: "linget accepts any value below the threshold"
+    vice_pending: true
+    expect_ok: true
+
+  - id: basicv2-program-line_number-63999
+    area: line_number
+    profile: basicv2
+    mode: program
+    description: "Line number 63999 is the highest portable line number (accepted)"
+    source_note: "linget accumulates decimal text; high byte 0xF9 < threshold"
+    vice_pending: true
+    expect_ok: true
+
+  - id: basicv2-program-line_number-64000-syntax_error
+    area: line_number
+    profile: basicv2
+    mode: program
+    description: "Line number 64000 must be rejected with ?SYNTAX ERROR"
+    source_note: "linget high-byte threshold reached before absorbing the next digit"
+    vice_pending: true
+    expect_error: "?SYNTAX ERROR"
+
+  - id: basicv2-program-line_number-65535-syntax_error
+    area: line_number
+    profile: basicv2
+    mode: program
+    description: "Line number 65535 must be rejected with ?SYNTAX ERROR"
+    source_note: "linget overflow guard"
+    vice_pending: true
+    expect_error: "?SYNTAX ERROR"
+
+  # -------------------------------------------------------------------------
+  # Area: Tokenized line record
+  # Contract: Linked record format (next-ptr, lineno LE, tokens, NUL).
+  #           Zero next-pointer terminates program.
+  # Source: c64rom basic/parsing/tokenize.s:fndlin
+  # -------------------------------------------------------------------------
+
+  - id: basicv2-program-line_record-round_trip
+    area: line_record
+    profile: basicv2
+    mode: program
+    description: "A saved stock BASIC V2 line round-trips through LOAD/SAVE without corruption"
+    source_note: "fndlin walks linked line records; canonical stock PRG format"
+    vice_pending: true
+    expect_ok: true
+
+  - id: basicv2-program-line_record-zero_next_ptr_terminates
+    area: line_record
+    profile: basicv2
+    mode: program
+    description: "A zero next-line pointer correctly terminates the program"
+    source_note: "fndlin stops when next-ptr == 0"
+    vice_pending: true
+    expect_ok: true
+
+  # -------------------------------------------------------------------------
+  # Area: Screen-editor input line
+  # Contract: 80-column logical line (two 40-column physical rows).
+  # Source: c64rom kernal/declare.s llen=40, llen2=80; input buffer 89 bytes
+  # -------------------------------------------------------------------------
+
+  - id: basicv2-immediate-screen_editor-40col_line
+    area: screen_editor
+    profile: basicv2
+    mode: immediate
+    description: "A 40-character input line is accepted by the stock editor"
+    source_note: "kernal/declare.s llen=40"
+    vice_pending: true
+    expect_ok: true
+
+  - id: basicv2-immediate-screen_editor-80col_logical_line
+    area: screen_editor
+    profile: basicv2
+    mode: immediate
+    description: "An 80-character logical line (two physical rows) is accepted"
+    source_note: "kernal/declare.s llen2=80"
+    vice_pending: true
+    expect_ok: true
+
+  # -------------------------------------------------------------------------
+  # Area: Tokenized line payload
+  # Contract: Stock-only SAVE never emits malformed line records.
+  #           Extended programs use the versioned extension envelope.
+  # Source: c64rom basic/parsing/tokenize.s; REQUIREMENTS.md section 5
+  # -------------------------------------------------------------------------
+
+  - id: basicv2-program-line_payload-stock_save_valid
+    area: line_payload
+    profile: basicv2
+    mode: program
+    description: "Stock SAVE produces only valid linked-line records"
+    source_note: "program encoder/decoder canonical save tests"
+    vice_pending: true
+    expect_ok: true
+
+  # -------------------------------------------------------------------------
+  # Area: Variable names
+  # Contract: Two significant name characters; longer names accepted but aliased.
+  # Source: c64rom basic/variables/array_lookup.s:ptrget; varnam/varnam+1
+  # -------------------------------------------------------------------------
+
+  - id: basicv2-immediate-variable_name-single_letter
+    area: variable_name
+    profile: basicv2
+    mode: immediate
+    description: "Single-letter variable name A is valid"
+    source_note: "ptrget stores first character in varnam"
+    vice_pending: true
+    expect_ok: true
+
+  - id: basicv2-immediate-variable_name-letter_digit
+    area: variable_name
+    profile: basicv2
+    mode: immediate
+    description: "Two-character name A1 is valid"
+    source_note: "ptrget stores A and 1 in varnam, varnam+1"
+    vice_pending: true
+    expect_ok: true
+
+  - id: basicv2-immediate-variable_name-first_two_alias
+    area: variable_name
+    profile: basicv2
+    mode: immediate
+    description: "Names AB, ABC, and AB9 all alias to the same variable (first-two rule)"
+    source_note: "ptrget only stores varnam and varnam+1; rest consumed but discarded"
+    vice_pending: true
+    expect_ok: true
+
+  # -------------------------------------------------------------------------
+  # Area: Variable type suffixes
+  # Contract: No suffix = float; % = int16; $ = string. Type participates in identity.
+  # Source: c64rom basic/variables/array_lookup.s:ptrget; intflg, valtyp
+  # -------------------------------------------------------------------------
+
+  - id: basicv2-immediate-variable_type-float_no_suffix
+    area: variable_type
+    profile: basicv2
+    mode: immediate
+    description: "Variable without suffix is floating point"
+    source_note: "ptrget default path; valtyp cleared"
+    vice_pending: true
+    expect_ok: true
+
+  - id: basicv2-immediate-variable_type-integer_percent
+    area: variable_type
+    profile: basicv2
+    mode: immediate
+    description: "Variable with % suffix is signed 16-bit integer"
+    source_note: "ptrget sets intflg on %"
+    vice_pending: true
+    expect_ok: true
+
+  - id: basicv2-immediate-variable_type-string_dollar
+    area: variable_type
+    profile: basicv2
+    mode: immediate
+    description: "Variable with $ suffix is string"
+    source_note: "ptrget sets valtyp on $"
+    vice_pending: true
+    expect_ok: true
+
+  - id: basicv2-immediate-variable_type-distinct_identities
+    area: variable_type
+    profile: basicv2
+    mode: immediate
+    description: "AB, AB%, and AB$ are three distinct variables"
+    source_note: "type suffix folded into stored two-byte name"
+    vice_pending: true
+    expect_ok: true
+
+  # -------------------------------------------------------------------------
+  # Area: Reserved names
+  # Contract: TI, TI$, ST keep special-variable behavior; cannot become ordinary vars.
+  # Source: c64rom basic/variables/array_lookup.s and variable_resolution.s
+  # -------------------------------------------------------------------------
+
+  - id: basicv2-immediate-reserved_name-TI_readonly
+    area: reserved_name
+    profile: basicv2
+    mode: immediate
+    description: "TI is a read-only elapsed-time special variable"
+    source_note: "variable_resolution.s special-cases TI"
+    vice_pending: true
+    expect_ok: true
+
+  - id: basicv2-immediate-reserved_name-TI_dollar_set_clock
+    area: reserved_name
+    profile: basicv2
+    mode: immediate
+    description: "Assigning TI$ sets the system clock through the stock-compatible path"
+    source_note: "variable_resolution.s TI$ assignment path"
+    vice_pending: true
+    expect_ok: true
+
+  - id: basicv2-immediate-reserved_name-ST_status
+    area: reserved_name
+    profile: basicv2
+    mode: immediate
+    description: "ST reflects KERNAL I/O status and cannot be overwritten as an ordinary variable"
+    source_note: "variable_resolution.s special-cases ST"
+    vice_pending: true
+    expect_ok: true
+
+  # -------------------------------------------------------------------------
+  # Area: String length
+  # Contract: 0..255 PETSCII bytes. Longer result must raise ?STRING TOO LONG.
+  # Source: c64rom basic/strings/string_memory.s:midd; descriptor byte
+  # -------------------------------------------------------------------------
+
+  - id: basicv2-immediate-string_length-0
+    area: string_length
+    profile: basicv2
+    mode: immediate
+    description: "Empty string (length 0) is valid"
+    source_note: "string descriptor allows 0"
+    vice_pending: true
+    expect_ok: true
+
+  - id: basicv2-immediate-string_length-255
+    area: string_length
+    profile: basicv2
+    mode: immediate
+    description: "String of length 255 is valid (maximum)"
+    source_note: "midd lda #255 default; descriptor byte max value"
+    vice_pending: true
+    expect_ok: true
+
+  - id: basicv2-immediate-string_length-256-string_too_long
+    area: string_length
+    profile: basicv2
+    mode: immediate
+    description: "String of length 256 must raise ?STRING TOO LONG"
+    source_note: "one-byte descriptor overflows on 256"
+    vice_pending: true
+    expect_error: "?STRING TOO LONG"
+
+  # -------------------------------------------------------------------------
+  # Area: Integer variables
+  # Contract: % variables are signed 16-bit: -32768..32767.
+  # Source: c64rom basic/numeric/integer_conversion.s
+  # -------------------------------------------------------------------------
+
+  - id: basicv2-immediate-integer_range-min
+    area: integer_range
+    profile: basicv2
+    mode: immediate
+    description: "Integer variable minimum value -32768 is valid"
+    source_note: "integer_conversion.s lower bound"
+    vice_pending: true
+    expect_ok: true
+
+  - id: basicv2-immediate-integer_range-max
+    area: integer_range
+    profile: basicv2
+    mode: immediate
+    description: "Integer variable maximum value 32767 is valid"
+    source_note: "integer_conversion.s upper bound"
+    vice_pending: true
+    expect_ok: true
+
+  - id: basicv2-immediate-integer_range-overflow
+    area: integer_range
+    profile: basicv2
+    mode: immediate
+    description: "Coercing 32768 to an integer variable raises ?ILLEGAL QUANTITY"
+    source_note: "integer_conversion.s overflow path"
+    vice_pending: true
+    expect_error: "?ILLEGAL QUANTITY"
+
+  # -------------------------------------------------------------------------
+  # Area: Byte arguments
+  # Contract: CHR$, ASC, SPC, TAB, file numbers, device, secondary address: 0..255.
+  # Source: c64rom basic/numeric/parse_and_address.s:getbyt
+  # -------------------------------------------------------------------------
+
+  - id: basicv2-immediate-byte_argument-chr_0
+    area: byte_argument
+    profile: basicv2
+    mode: immediate
+    description: "CHR$(0) is valid (byte argument minimum)"
+    source_note: "getbyt accepts 0"
+    vice_pending: true
+    expect_ok: true
+
+  - id: basicv2-immediate-byte_argument-chr_255
+    area: byte_argument
+    profile: basicv2
+    mode: immediate
+    description: "CHR$(255) is valid (byte argument maximum)"
+    source_note: "getbyt accepts 255"
+    vice_pending: true
+    expect_ok: true
+
+  - id: basicv2-immediate-byte_argument-chr_256-illegal_quantity
+    area: byte_argument
+    profile: basicv2
+    mode: immediate
+    description: "CHR$(256) must raise ?ILLEGAL QUANTITY"
+    source_note: "getbyt overflow branches to illegal-quantity path"
+    vice_pending: true
+    expect_error: "?ILLEGAL QUANTITY"
+
+  - id: basicv2-immediate-byte_argument-chr_neg-illegal_quantity
+    area: byte_argument
+    profile: basicv2
+    mode: immediate
+    description: "CHR$(-1) must raise ?ILLEGAL QUANTITY"
+    source_note: "getbyt negative check"
+    vice_pending: true
+    expect_error: "?ILLEGAL QUANTITY"
+
+  # -------------------------------------------------------------------------
+  # Area: Address arguments
+  # Contract: PEEK, POKE, SYS, WAIT: 0..65535. Negative or >65535 = ?ILLEGAL QUANTITY.
+  # Source: c64rom basic/numeric/parse_and_address.s:getadr
+  # -------------------------------------------------------------------------
+
+  - id: basicv2-immediate-address_argument-peek_0
+    area: address_argument
+    profile: basicv2
+    mode: immediate
+    description: "PEEK(0) is valid (address minimum)"
+    source_note: "getadr accepts 0"
+    vice_pending: true
+    expect_ok: true
+
+  - id: basicv2-immediate-address_argument-peek_65535
+    area: address_argument
+    profile: basicv2
+    mode: immediate
+    description: "PEEK(65535) is valid (address maximum)"
+    source_note: "getadr accepts 65535"
+    vice_pending: true
+    expect_ok: true
+
+  - id: basicv2-immediate-address_argument-peek_neg-illegal_quantity
+    area: address_argument
+    profile: basicv2
+    mode: immediate
+    description: "PEEK(-1) must raise ?ILLEGAL QUANTITY"
+    source_note: "getadr rejects negative values"
+    vice_pending: true
+    expect_error: "?ILLEGAL QUANTITY"
+
+  - id: basicv2-immediate-address_argument-poke_65536-illegal_quantity
+    area: address_argument
+    profile: basicv2
+    mode: immediate
+    description: "POKE 65536,0 must raise ?ILLEGAL QUANTITY"
+    source_note: "getadr rejects >65535"
+    vice_pending: true
+    expect_error: "?ILLEGAL QUANTITY"
+
+  # -------------------------------------------------------------------------
+  # Area: Arrays
+  # Contract: Default dimensions; DIM and subscript rules; REDIM'D ARRAY / BAD SUBSCRIPT.
+  # Source: c64rom basic/variables/array_dimensions.s, array_access.s
+  # -------------------------------------------------------------------------
+
+  - id: basicv2-program-arrays-default_dim_10
+    area: arrays
+    profile: basicv2
+    mode: program
+    description: "Undimensioned array defaults to 10 elements (0..10)"
+    source_note: "array_dimensions.s default DIM path"
+    vice_pending: true
+    expect_ok: true
+
+  - id: basicv2-program-arrays-redim_error
+    area: arrays
+    profile: basicv2
+    mode: program
+    description: "DIM on an already-dimensioned array raises ?REDIM'D ARRAY"
+    source_note: "array_dimensions.s redim guard"
+    vice_pending: true
+    expect_error: "?REDIM'D ARRAY"
+
+  - id: basicv2-program-arrays-bad_subscript
+    area: arrays
+    profile: basicv2
+    mode: program
+    description: "Accessing an out-of-range subscript raises ?BAD SUBSCRIPT"
+    source_note: "array_access.s bounds check"
+    vice_pending: true
+    expect_error: "?BAD SUBSCRIPT"
+
+  # -------------------------------------------------------------------------
+  # Area: Logical files
+  # Contract: At most 10 logical files open; file 0 is not openable.
+  # Source: c64rom kernal/declare.s lat/fat/sat (10 entries); kernal/open.s:nopen
+  # -------------------------------------------------------------------------
+
+  - id: basicv2-immediate-logical_files-max_10
+    area: logical_files
+    profile: basicv2
+    mode: immediate
+    description: "Opening an 11th logical file raises ?TOO MANY FILES"
+    source_note: "nopen checks ldtnd against 10"
+    vice_pending: true
+    expect_error: "?TOO MANY FILES"
+
+  - id: basicv2-immediate-logical_files-file_0_invalid
+    area: logical_files
+    profile: basicv2
+    mode: immediate
+    description: "Logical file number 0 is not a normal openable file"
+    source_note: "nopen rejects la=0"
+    vice_pending: true
+    expect_error: "?ILLEGAL QUANTITY"
+
+  # -------------------------------------------------------------------------
+  # Area: LOAD and SAVE devices
+  # Contract: Cassette (1,2) and serial (4..31) valid for LOAD/SAVE; 0 and 3 invalid.
+  # Source: c64rom kernal/load.s, kernal/save.s
+  # -------------------------------------------------------------------------
+
+  - id: basicv2-immediate-load-device_0-illegal_device
+    area: load_save_device
+    profile: basicv2
+    mode: immediate
+    description: "LOAD with device 0 raises the stock illegal-device error"
+    source_note: "kernal/load.s rejects device 0"
+    vice_pending: true
+    expect_error: "?ILLEGAL DEVICE NUMBER"
+
+  - id: basicv2-immediate-load-device_3-illegal_device
+    area: load_save_device
+    profile: basicv2
+    mode: immediate
+    description: "LOAD with device 3 (screen) raises the stock illegal-device error"
+    source_note: "kernal/load.s rejects device 3"
+    vice_pending: true
+    expect_error: "?ILLEGAL DEVICE NUMBER"
+
+  - id: basicv2-immediate-save-device_0-illegal_device
+    area: load_save_device
+    profile: basicv2
+    mode: immediate
+    description: "SAVE with device 0 raises the stock illegal-device error"
+    source_note: "kernal/save.s rejects device 0"
+    vice_pending: true
+    expect_error: "?ILLEGAL DEVICE NUMBER"
+
+  # -------------------------------------------------------------------------
+  # Area: OPEN devices and secondary addresses
+  # Contract: Device 0=keyboard, 3=screen, 1/2=cassette, 4..31=serial.
+  # Source: c64rom kernal/open.s; basic/system/file_commands.s:paoc
+  # -------------------------------------------------------------------------
+
+  - id: basicv2-immediate-open-too_many_files
+    area: open_device
+    profile: basicv2
+    mode: immediate
+    description: "Opening more than 10 files with OPEN raises ?TOO MANY FILES"
+    source_note: "nopen ldtnd check"
+    vice_pending: true
+    expect_error: "?TOO MANY FILES"
+
+  - id: basicv2-immediate-open-duplicate_logical_file
+    area: open_device
+    profile: basicv2
+    mode: immediate
+    description: "Duplicate logical file number raises stock file error"
+    source_note: "nopen duplicate check"
+    vice_pending: true
+    expect_error: "?FILE ALREADY OPEN"
+
+  # -------------------------------------------------------------------------
+  # Area: Filename length
+  # Contract: fnlen stored in one byte; too-long or missing filenames per stock behavior.
+  # Source: c64rom kernal/declare.s fnlen; KERNAL SETNAM
+  # -------------------------------------------------------------------------
+
+  - id: basicv2-immediate-filename-empty_load
+    area: filename
+    profile: basicv2
+    mode: immediate
+    description: "LOAD with empty filename uses stock default behavior"
+    source_note: "SETNAM fnlen=0 path"
+    vice_pending: true
+    expect_ok: true
+
+  # -------------------------------------------------------------------------
+  # Area: DATA and INPUT fields
+  # Contract: Stock delimiters, quote handling, type checks, line/field length.
+  # Source: c64rom basic/io/data_input.s, basic/io/console_input_output.s
+  # -------------------------------------------------------------------------
+
+  - id: basicv2-program-data_input-type_mismatch
+    area: data_input
+    profile: basicv2
+    mode: program
+    description: "INPUT# with a string value into a numeric variable raises ?TYPE MISMATCH"
+    source_note: "data_input.s type check path"
+    vice_pending: true
+    expect_error: "?TYPE MISMATCH"
+
+  - id: basicv2-program-data_input-out_of_data
+    area: data_input
+    profile: basicv2
+    mode: program
+    description: "READ past the last DATA item raises ?OUT OF DATA"
+    source_note: "data_input.s end-of-data path"
+    vice_pending: true
+    expect_error: "?OUT OF DATA"
+
+  - id: basicv2-program-data_input-extra_ignored
+    area: data_input
+    profile: basicv2
+    mode: program
+    description: "Extra INPUT fields beyond variables are silently ignored (stock behavior)"
+    source_note: "console_input_output.s extra-field discard"
+    vice_pending: true
+    expect_ok: true

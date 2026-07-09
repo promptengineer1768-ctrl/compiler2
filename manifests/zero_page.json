@@ -532,7 +532,8 @@
       "alignment": 1,
       "domain": "stmt_scratch",
       "lifetimes": [
-        "stmt_scratch"
+        "stmt_scratch",
+        "georam_gate"
       ],
       "aliases_allowed": [],
       "interference_overrides": [],
@@ -544,11 +545,40 @@
       "alignment": 1,
       "domain": "stmt_scratch",
       "lifetimes": [
-        "stmt_scratch"
+        "stmt_scratch",
+        "georam_gate"
       ],
       "aliases_allowed": [],
       "interference_overrides": [],
       "notes": "Current statement argument pointer"
+    },
+    {
+      "name": "zp_src",
+      "size": 2,
+      "alignment": 1,
+      "domain": "stmt_scratch",
+      "lifetimes": [
+        "stmt_scratch",
+        "georam_gate",
+        "math_fac"
+      ],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Source pointer for bounded RAM-under-I/O copies"
+    },
+    {
+      "name": "zp_dest",
+      "size": 2,
+      "alignment": 1,
+      "domain": "stmt_scratch",
+      "lifetimes": [
+        "stmt_scratch",
+        "georam_gate",
+        "math_fac"
+      ],
+      "aliases_allowed": [],
+      "interference_overrides": [],
+      "notes": "Destination pointer for bounded RAM-under-I/O copies"
     },
     {
       "name": "zp_tmp1",
@@ -556,7 +586,8 @@
       "alignment": 1,
       "domain": "stmt_scratch",
       "lifetimes": [
-        "stmt_scratch"
+        "stmt_scratch",
+        "georam_gate"
       ],
       "aliases_allowed": [],
       "interference_overrides": [],
@@ -568,7 +599,8 @@
       "alignment": 1,
       "domain": "stmt_scratch",
       "lifetimes": [
-        "stmt_scratch"
+        "stmt_scratch",
+        "georam_gate"
       ],
       "aliases_allowed": [],
       "interference_overrides": [],
@@ -580,7 +612,8 @@
       "alignment": 1,
       "domain": "stmt_scratch",
       "lifetimes": [
-        "stmt_scratch"
+        "stmt_scratch",
+        "georam_gate"
       ],
       "aliases_allowed": [],
       "interference_overrides": [],
@@ -592,7 +625,8 @@
       "alignment": 1,
       "domain": "stmt_scratch",
       "lifetimes": [
-        "stmt_scratch"
+        "stmt_scratch",
+        "georam_gate"
       ],
       "aliases_allowed": [],
       "interference_overrides": [],
@@ -604,7 +638,8 @@
       "alignment": 1,
       "domain": "editor",
       "lifetimes": [
-        "editor"
+        "editor",
+        "georam_gate"
       ],
       "aliases_allowed": [],
       "interference_overrides": [],
@@ -616,7 +651,8 @@
       "alignment": 1,
       "domain": "editor",
       "lifetimes": [
-        "editor"
+        "editor",
+        "georam_gate"
       ],
       "aliases_allowed": [],
       "interference_overrides": [],
@@ -628,7 +664,8 @@
       "alignment": 1,
       "domain": "editor",
       "lifetimes": [
-        "editor"
+        "editor",
+        "georam_gate"
       ],
       "aliases_allowed": [],
       "interference_overrides": [],
@@ -640,7 +677,8 @@
       "alignment": 1,
       "domain": "editor",
       "lifetimes": [
-        "editor"
+        "editor",
+        "georam_gate"
       ],
       "aliases_allowed": [],
       "interference_overrides": [],
@@ -652,7 +690,8 @@
       "alignment": 1,
       "domain": "editor",
       "lifetimes": [
-        "editor"
+        "editor",
+        "georam_gate"
       ],
       "aliases_allowed": [],
       "interference_overrides": [],
@@ -664,7 +703,8 @@
       "alignment": 1,
       "domain": "editor",
       "lifetimes": [
-        "editor"
+        "editor",
+        "georam_gate"
       ],
       "aliases_allowed": [],
       "interference_overrides": [],
@@ -676,7 +716,8 @@
       "alignment": 1,
       "domain": "stop_cont",
       "lifetimes": [
-        "stop_cont"
+        "stop_cont",
+        "error_cont"
       ],
       "aliases_allowed": [],
       "interference_overrides": [],
@@ -700,7 +741,8 @@
       "alignment": 1,
       "domain": "stop_cont",
       "lifetimes": [
-        "stop_cont"
+        "stop_cont",
+        "error_cont"
       ],
       "aliases_allowed": [],
       "interference_overrides": [],
@@ -712,7 +754,8 @@
       "alignment": 1,
       "domain": "error_unwind",
       "lifetimes": [
-        "error_unwind"
+        "error_unwind",
+        "error_cont"
       ],
       "aliases_allowed": [],
       "interference_overrides": [],
@@ -724,7 +767,8 @@
       "alignment": 1,
       "domain": "error_unwind",
       "lifetimes": [
-        "error_unwind"
+        "error_unwind",
+        "error_cont"
       ],
       "aliases_allowed": [],
       "interference_overrides": [],

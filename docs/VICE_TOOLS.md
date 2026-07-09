@@ -14,6 +14,31 @@ In PowerShell:
 $ViceTools = "C:\Users\me\Documents\Coding Projects\tools\vice-mcp\dist\HeadlessVICE-windows-x86_64"
 ```
 
+## Generating Stock Semantic Fixtures
+
+The shared MCP process/client implementation is `tools/vice_harness.py`.
+Generate the checked-in C64 BASIC V2 and Plus/4 BASIC 3.5 observations with:
+
+```powershell
+python tools/generate_vice_fixtures.py
+python tools/generate_vice_fixtures.py --profile basicv2
+python tools/generate_vice_fixtures.py --case basicv35-program-WHILE
+```
+
+The harness starts a fresh emulator for every case, uses the documented
+`/mcp` endpoint, tokenizes stock BASIC source with `petcat.exe`, autostarts the
+resulting PRG, and records the VICE version and SHA-256 identities of the
+available machine ROMs. C64 screen observations use `$0400`; Plus/4
+observations use `$0C00`.
+
+Do not use keyboard injection for broad fixture generation. It is useful for
+focused keyboard-path tests, but rapid MCP screen polling can race with Return
+processing. For stock BASIC semantic fixtures, prefer tokenized PRG autostart
+and wait for the final stable `READY.` prompt.
+
+Regeneration logs and emulator diagnostics are written under `debug/`.
+Checked-in observations are written under `tests/fixtures/reference/`.
+
 Temporary images, extracted files, listings, and diagnostic output belong
 under `debug/`. Release D64 images are generated under `build/`.
 
@@ -95,3 +120,9 @@ PETCAT can also create a stock tokenized fixture from an ASCII listing:
 Use `-w3` for BASIC 3.5. Tokenized fixtures used as semantic or binary
 references must still record their machine, dialect, PETCAT/VICE version, and
 source provenance.
+
+PETCAT tokenization expects BASIC program text to be lowercase outside quoted
+strings. Uppercase ASCII keywords can be interpreted as PETSCII/control-token
+names and produce invalid or surprising token streams. Fixture generators
+should lowercase only the unquoted BASIC text and preserve string literals
+exactly.

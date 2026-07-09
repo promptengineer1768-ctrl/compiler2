@@ -3,9 +3,12 @@
 ## 1. Status and Priority
 
 This document defines required externally visible behavior and engineering
-acceptance criteria. `DESIGN2.md` and `docs/COMPILER_ARCHITECTURE.md`
-describe the implementation architecture that satisfies these requirements.
-If the design documents and this file disagree, this document wins.
+acceptance criteria. Dual-device expansion detail is specified in
+`REU_REQUIREMENTS.md`. `DESIGN2.md`, `REU_DESIGN.md`, and
+`docs/COMPILER_ARCHITECTURE.md` describe the architecture that satisfies these
+requirements. If design documents and this file disagree on common product
+behavior, this document wins; if they disagree on dual-device expansion
+detection, REU hardware, or dual packaging, `REU_REQUIREMENTS.md` wins.
 
 Requirements use these terms:
 
@@ -30,7 +33,27 @@ stable suffixes such as `R8-NESTED-CALL`.
 ## 2. Product Requirements
 
 The product must be a native 6502 compiler and interactive BASIC environment
-for the Commodore 64 with geoRAM.
+for the Commodore 64 with a supported expansion-memory device. The release is
+a **dual-capable** installation: one common `BASICV3` program detects
+**geoRAM** and/or a **Commodore REU** (REC at `$DF00-$DF0A`) at startup and
+uses **exactly one** device for the session. **geoRAM is preferred** when both
+are present and valid (more efficient execute-in-place). When only REU is
+valid, REU is used.
+
+`REU_REQUIREMENTS.md` and `REU_DESIGN.md` detail dual-device detection, REU
+hardware, the geoRAM-canonical image + REU patch packaging model, and REU
+verification. This document remains authoritative for language behavior, the
+runtime ABI, `COMPILE` exports, the canonical CPU map, KERNAL use, testing
+hierarchy, and build reproducibility.
+
+**geoRAM-canonical implementation.** Expansion-native code is designed and
+built as geoRAM 256-byte XIP pages. The REU path does **not** use a separate
+service-sized overlay architecture: it DMA-copies the equivalent 256-byte page
+into a designated normal-RAM XIP buffer (ideally the RAM-under-I/O image of
+`$DE00-$DEFF` when hardware and banking allow, otherwise a fixed normal-RAM
+window) and executes that page in place. Only fetch/stash/call gate routines
+differ between backends. One source tree; deployment differs by a small REU
+patch applied after loading the geoRAM-canonical expansion image.
 
 It must:
 
@@ -38,17 +61,32 @@ It must:
 - retain an editable tokenized program;
 - compile stored programs to native 6502 code;
 - execute compiled programs with BASIC-compatible results;
-- load and save tokenized BASIC programs;
-- save compiled programs in a documented executable format;
+- load and save tokenized BASIC programs in stock-compatible form for the
+  target dialect machine (C64 for BASIC V2; Plus/4-compatible linked form for
+  supported BASIC 3.5 programs);
+- save compiled programs in a documented executable format for the **C64**;
 - provide large dynamic arenas for tokenized programs, compiled programs,
   scalar variables, arrays, strings, compiler data, and diagnostics;
 - leave the largest practical amount of ordinary C64 RAM available to running
   programs;
-- fail cleanly if geoRAM is absent, too small, corrupt, or changes unexpectedly.
+- fail cleanly if no supported expansion device is present, if the selected
+  device is too small, corrupt, or changes unexpectedly, or if both devices
+  fail validation.
 
-The minimum supported geoRAM size must be 512 KiB. The build must declare the
-minimum and detected capacity. Larger supported devices must increase arena
-capacity without changing language semantics.
+The minimum supported capacity for **each** backend is 512 KiB of non-aliased
+expansion memory. The build must declare the minimum and the detector's
+measured capacity for the selected device. Larger supported devices must
+increase arena capacity without changing language semantics. Language,
+editor, compiler, runtime ABI, and numeric-profile behavior must be the same
+whether geoRAM or REU is selected.
+
+When both devices are present and valid, **prefer geoRAM** as the expansion
+store and XIP backend. The REU remains available for an **internal DMA-assisted
+memcopy** used by large block moves (see design: shared copy helper). When
+exactly one device is valid, that device is the expansion store (REU-only also
+uses REU for DMA). When neither is valid, installation aborts. After probe, the
+non-selected store is not used for arenas/XIP; a co-detected REU may still be
+used only for DMA-assist when geoRAM is the store.
 
 ### 2.1 Phase 1 Install and Editor Slice
 
@@ -60,15 +98,27 @@ a stock BASIC loader line:
 ```
 
 The loader machine code must begin at decimal address 2061 (`$080D`). Starting
-the loader must detect geoRAM presence and capacity, reject absent or
-unsupported geoRAM cleanly, load the geoRAM payload, install it, and jump to
-the Compiler 2 project initialization entry. Initialization must enter the
-interactive editor.
+the loader must non-destructively probe geoRAM and REU, select one supported
+backend per the dual-device rules above, reject the case where neither device
+is usable, install the common normal-RAM payload, load **only** the selected
+device's sidecar payload, initialize that backend, and jump to the Compiler 2
+project initialization entry. Initialization must enter the interactive
+editor.
 
-The build-system geoRAM payload object must be named `georam.bin`. Disk-image
-packaging must materialize that payload as a C64 file named `GEORAM` on the
-D64 image. Loader and packaging tests must verify that this host-build name and
-C64 disk filename remain consistent.
+The release D64 must carry one common PRG, the **geoRAM-canonical** expansion
+image, and a **small REU patch** (not a second full assembly of the product):
+
+| Host build object | C64 D64 filename | Role |
+|---|---|---|
+| `basicv3.prg` | `BASICV3` | Common loader, detectors, RAM payload |
+| `georam.bin` | `GEORAM` | Normative expansion image (XIP pages/directories) |
+| REU patch object | `REU` | Small delta/patch + optional deterministic fixup code for REU |
+
+Install sequence: detect device → load `GEORAM` image into the selected
+expansion store (geoRAM pages, or REU memory via DMA) → if REU was selected,
+load and apply the `REU` patch (and any in-place deterministic fixup loops) →
+enter `compiler_init`. A geoRAM session must not require the `REU` patch after
+selection.
 
 The first editor/runtime slice must support enough BASIC V2 behavior to enter,
 list, save, load, and run this timing program:
@@ -118,7 +168,24 @@ Compatibility includes:
 - deterministic `RND` behavior where the stock seed and call sequence are
   defined;
 - `PEEK`, `POKE`, `SYS`, `USR`, and `WAIT` effects on the real C64 address
-  space, subject to documented protected compiler storage.
+  space, subject to documented protected compiler storage. Protected storage
+  is limited to the control plane required for system integrity: hardware
+  vectors and the high-memory guard (`$FFF9-$FFFF`), pinned IRQ/NMI and
+  resident control blocks, geoRAM gate/selection state, arena-directory
+  mirrors that must remain consistent, and compiler-owned zero-page ranges
+  from the generated allocation map. Ordinary program, variable, string,
+  compiled-image, screen, I/O, and free dynamic RAM ranges remain
+  user-accessible through `PEEK`/`POKE` as on stock BASIC; user corruption of
+  those ranges is allowed and produces stock-like or fail-clean consequences
+  rather than silent protection. The build publishes the exact protected
+  intervals in generated map artifacts;
+- `FRE` free-memory reporting that is profile-aware: in the installed
+  geoRAM-backed development environment, `FRE` returns free bytes in the
+  primary variable/string arena used by running programs (which may be
+  geoRAM-backed); in a source-free `COMPILE` export without geoRAM, `FRE`
+  returns free bytes in the normal-RAM dynamic region remaining after the
+  exported image. The argument to `FRE` is accepted and discarded as in stock
+  BASIC V2;
 
 The required stock keyword surface is:
 
@@ -150,9 +217,44 @@ The required BASIC 3 gateway surface is:
 - `BASIC3.5`
 - `BASIC()`
 - `COMPILE`
+- `QUIT`
 - `FPMODE0`
 - `FPMODE1`
 - `FPMODE()`
+
+`QUIT` is direct-mode only. It must leave the Compiler 2 environment via a
+**soft reset into stock BASIC V2** with this **locked sequence**:
+
+1. restore CPU banking, BASIC/KERNAL map pointers (including `txttab`/`vartab`/
+   `memsiz` consistency for the retained program), and IRQ/NMI vectors so
+   stock BASIC can run;
+2. clean any Compiler 2-owned normal-RAM control state not fixed by that
+   restore;
+3. perform **CLR semantics explicitly** (reset `vartab`/`arytab`/`strend`/
+   `fretop` and the string stack while leaving the program) — stock warm-start
+   `panic` alone is **not** sufficient (it does not call `clear`/`clearc`);
+4. enter stock **READY** (or the stock path that reaches READY after CLR).
+
+Do **not** take cold `init`/`initcz` (rebinding `txttab` / zeroing the
+program). Do **not** bare-`panic` without the explicit CLR step. Variables
+need not be preserved. The **tokenized program remains** in BASIC program
+memory. **Expansion device contents are left untouched** (no wipe of
+geoRAM/REU images).
+
+**Test contract:** after `QUIT`, a program that contains **only stock BASIC V2
+tokens** must be `LIST`able and `RUN`nable under stock BASIC V2 with the same
+source semantics. If the program contains BASIC 3/3.5 or other non-V2 tokens,
+stock BASIC may error; that is acceptable and need not be mitigated.
+
+**Re-entry:** the user must be able to load the Compiler 2 installer again
+after `QUIT`. Skip-reload integrity uses the **same content-based install
+image fingerprint(s)** already required for GEORAM/REU validation (not a
+separate ad hoc checksum). If resident expansion images still match those
+fingerprints for what the installer would load, the installer may **skip
+reloading** those images and proceed to verify and re-enter Compiler 2.
+Expansion RAM is expected to remain intact across a normal `QUIT`.
+
+`QUIT` must remain available in the minimal no-expansion-device editor (§8.5).
 
 The required opt-in BASIC 3.5/7 structured subset is:
 
@@ -212,7 +314,7 @@ The following are direct-mode only:
 
 | Group | Commands |
 |---|---|
-| Program/session | `NEW`, `RUN`, `CONT`, `CLR`, `LIST`, `COMPILE` |
+| Program/session | `NEW`, `RUN`, `CONT`, `CLR`, `LIST`, `COMPILE`, `QUIT` |
 | File program management | `LOAD`, `SAVE`, `VERIFY` |
 | Dialect/policy | `BASIC2`, `BASIC3.5`, `FPMODE0`, `FPMODE1` |
 | DOS wedge | `$`, `/`, `@`, `!` |
@@ -249,19 +351,54 @@ This requires:
 - correct quote, `DATA`, and `REM` tokenization rules;
 - canonical relinking when materializing a program for save.
 
-A stock BASIC V2 PRG loaded and saved without editing must preserve its program
-semantics. A canonical-save test must compare the resulting token stream and
-line structure with stock output.
+**Stock tokenize / LOAD / SAVE / VERIFY compatibility** is required for the
+target dialect machine:
 
-Programs containing extended keywords are exempt from stock binary
-compatibility. Their encoding must nevertheless be versioned, unambiguous,
-round-trippable, and unable to reinterpret stock token bytes. Loading an
-unsupported extension version must report an error instead of corrupting the
-program.
+- **BASIC V2 programs** must use unmodified C64 BASIC V2 linked-line PRG form
+  (load address `$0801`, stock links, stock token bytes). A stock V2 PRG
+  loaded and saved without editing must preserve program semantics; canonical
+  save tests compare against stock C64 output. `petcat -2` and stock C64 VICE
+  are valid tooling oracles for this surface.
+- **Supported BASIC 3.5 programs** must use **Plus/4 PRG headers and token
+  bytes** for LOAD/SAVE/VERIFY so that (a) a real Plus/4 stock 3.5 program can
+  be loaded and run on the C64 host under Compiler 2, and (b) a 3.5 program
+  edited on the C64 host and SAVEd can run under stock Plus/4 BASIC 3.5.
+  Plus/4 VICE and `petcat -3` are oracles for that surface. The C64 host must
+  accept Plus/4-style PRG headers on load.
+- **Compiler 2-only keywords** (BASIC 3 gateway, IEEE, and other non-stock
+  tokens) are not expected to round-trip through `petcat` or stock ROMs. They
+  must still use unambiguous token bytes that do not remap stock V2 tokens,
+  remain round-trippable in Compiler 2, and fail cleanly on unsupported
+  versions.
 
-The internal geoRAM representation may use handles or indexes, but `LOAD`,
-`SAVE`, `LIST`, and compatibility tests must observe the canonical BASIC V2
-form.
+**LOAD recognizes program version/format** from the file (C64 V2 PRG vs Plus/4
+3.5 PRG vs Compiler 2-only encoding) before replacing the program directory.
+On successful LOAD of a recognized stock V2 or stock 3.5 file, the session
+dialect must match that program class (auto-select `BASIC2` or `BASIC3.5` as
+appropriate) so subsequent editing uses the correct token set.
+
+**SAVE chooses format from tokenized content**, not REM/string text and not
+merely the current dialect mode:
+
+1. if any **Compiler 2-only tokens** appear outside REM/string contexts →
+   Compiler 2-only encoding;
+2. else if any **BASIC 3.5 tokens** appear outside REM/string contexts →
+   **Plus/4 3.5 PRG** (do not translate to V2; stock V2 may fail to LIST/RUN);
+3. else → **C64 V2 PRG**.
+
+**VERIFY** must compare the file on disk to **exactly what SAVE would write**
+for the current program (same format class and bytes). VERIFY is intended for
+use after SAVE. Comparison is **pure byte equality** against the SAVE emission
+path (including Plus/4-format files on the C64 host); it must not require a
+Plus/4 ROM or interpreter.
+
+Compiled native programs run on the **C64** only and may use any implemented
+keywords (V2, 3.5, or Compiler 2 extensions). Plus/4 already runs a BASIC
+superset of C64 V2; compiled output is not a Plus/4 target.
+
+The internal expansion representation may use handles or indexes, but `LOAD`,
+`SAVE`, `LIST`, and compatibility tests must observe the stock form rules
+above.
 
 ## 6. Compilation and Runtime
 
@@ -297,22 +434,33 @@ The runtime ABI must cover at least:
 
 ### 6.1 Incremental Compilation
 
-Incremental compilation is required. The system must compile each numbered
-program line when that line is entered, deleted, or replaced. Immediate mode
-must compile a full temporary program for execution, and the same machinery
-must be reusable for per-line program compilation.
+The hard interactive requirement is **line entry responsiveness**: ordinary
+numbered-line entry (Return to editor-ready) must complete in about **0.5
+seconds or less**.
+
+**Error reporting matches stock BASIC:** on line entry, report only what stock
+does when tokenizing/storing a line (tokenization failures and any other
+entry-time errors stock raises). Do **not** report full parse/semantic/runtime
+errors at entry beyond stock. Those surface at **`RUN`** or immediate
+execution. Immediate-mode lines still execute after entry as stock does.
+
+**Full per-line code generation may be deferred** when it would violate the
+0.5-second budget. Deferred compile work must complete no later than the next
+`RUN` (or other execution entry) that needs a consistent compiled image.
+Immediate mode must still compile a temporary program for execution through
+the same machinery. There is no interpreter fallback: a program is executable
+only when the compiled image is consistent with the current source generation
+at the moment of execution. Deferred-compile state must be **test-observable**
+(e.g. a documented dirty flag or generation mismatch) so automated tests can
+assert entry-without-full-compile and compile-on-`RUN` without relying on
+timing alone.
 
 The tokenized source remains canonical. Per-line compiled records are cache
 entries tied to source generation, dialect, numeric mode, runtime ABI version,
-and dependency fingerprints. Replacing a line must publish the new compiled
-record only after tokenization, validation, code generation, relocation, and
-cross-line dependency checks succeed. On failure, the previous stored line and
-published compiled state must remain intact.
-
-Structural changes may invalidate dependent lines or trigger a whole-program
-rebuild for branch, `DATA`, loop, or subroutine metadata. They must not fall
-back to an interpreter path. A program is executable only when the compiled
-image is consistent with the current source generation.
+and dependency fingerprints. Publishing a fully compiled record requires
+tokenization, validation, code generation, relocation, and cross-line checks
+to succeed. On failure of a published compile step, the previous valid
+compiled state remains intact.
 
 ### 6.2 COMPILE Export
 
@@ -347,44 +495,71 @@ direct-mode environment may show only the exact loader stub:
 It must not include tokenized source and must not attempt to decompile or
 reconstruct BASIC source from the compiled image.
 
-Every source-free compiled program produced by `COMPILE` must fit the memory
-available to a stock C64 without geoRAM. The exported PRG load range, including
-the BASIC loader line and every byte loaded by the PRG, must stay within
-`$0801-$CFFF`. The standard standalone loader line is `2026 SYS2061`, so the
-longest possible contiguous machine-code/runtime payload starts at `$080D` and
-ends at `$CFFF`.
-
-The build and compiler must report a standalone code budget for each compiled
-program:
+**Primary goal:** support programs that export cleanly to a **stock C64**
+without expansion. The compiler must continuously report the standalone code
+budget:
 
 ```text
 standalone_code_budget = standalone_loader_bytes + compiled_program_bytes
 ```
 
+with the conventional stock ceiling at the PRG image ending by `$CFFF`
+(payload from `$080D` with loader line `2026 SYS2061`). Soft warnings:
+
+- stock-size **status messages are edge-triggered on the 80% boundary**:
+  - when estimated standalone size **crosses from below 80% to ≥ 80%**, issue
+    the near-limit warning once for that crossing;
+  - when it **crosses from ≥ 80% back below 80%** (program shrunk), issue a
+    clear/recovery status once for that crossing;
+  - hovering around the boundary may produce multiple warnings/clears over
+    time, one per crossing, not a continuous spam on every keystroke while
+    staying on one side of the threshold;
+- when the image would exceed the stock C64 code ceiling, issue
+  **`WARNING: EXCEEDS STOCK RAM`** (or equivalent documented wording) but
+  **do not hard-reject** the program solely for that reason. (Exceed-ceiling
+  messages follow the same edge-triggered pattern relative to the 100%
+  boundary unless a higher layer documents otherwise.)
+
+Programs that require expansion-backed storage at runtime or exceed stock
+export size remain legal in the development environment. The user is expected
+to adapt such programs; release to stock machines is best-effort with warnings.
+This supersedes earlier requirements that forced hard rejection of oversize
+exports.
+
+**Export layout profiles (stock vs developer).** `COMPILE` must choose a
+runtime memory layout based on whether the program can run on a stock C64:
+
+1. **Stock-compatible layout** — when the current program (code + required
+   variables/strings/stack) is small enough to work **standalone without
+   expansion** and without the development-time XIP reservations: the export
+   must assume **`$CE00` is free** in the resulting stock runtime environment,
+   even though `$CE00` is reserved on the development machine for REU XIP.
+   Hot pages `$C800–$CDFF` are never treated as permanent export reservations.
+2. **Developer layout** — when the program/variables would only work in the
+   installed Compiler 2 development environment (expansion-backed storage,
+   larger workspace, or other non-stock dependencies): compile against the
+   **development runtime layout**, which **reserves the fixed `$CE00` page**
+   (and any other documented developer-only reservations). Soft stock-size
+   warnings still apply when the image would not fit a stock machine.
+
+User-visible size messaging remains the existing edge-triggered stock
+budget warnings only (including **`WARNING: EXCEEDS STOCK RAM`**). Layout
+profile (stock vs developer / `$CE00` reserved) is an **internal and
+export-metadata** fact for linker/tests; it is **not** a second user banner.
+
+Layout choice must be deterministic and testable from program/workspace
+measurements; it must not silently use developer-only pages in a stock export.
+
 `compiled_program_bytes` includes emitted user code, required runtime helpers,
-relocation or metadata needed at runtime, variable descriptors, the standalone
-direct-mode environment, and any other bytes that occupy the standalone PRG load
-range. Tokenized source is not part of `compiled_program_bytes` and does not
-count against the standalone code budget.
-The installed development environment may store the compiled cache, compiler
-metadata, diagnostics, and editor state in geoRAM or other extra memory, but
-the published compiled cache for a program must obey the same standalone code
-budget that `COMPILE` will enforce. A program that cannot be exported within
-the stock C64 budget must be rejected as too large rather than accepted only in
-the geoRAM-backed development environment.
+relocation or runtime metadata, variable descriptors, the standalone
+direct-mode environment, and any other bytes that occupy the standalone PRG
+load range. Tokenized source is excluded. Development may store source,
+metadata, and caches in expansion memory independently of the stock export
+warning threshold.
 
-During development, tokenized source may live entirely in geoRAM and may grow
-independently of the standalone compiled-code budget. The maximum normal-RAM
-compiled cache budget remains the standalone payload range `$080D-$CFFF`
-plus the loader bytes accounted from `$0801`.
-
-The stock C64 export budget leaves little or no normal RAM for variables when
-code approaches `$CFFF`. Runtime variable, array, string, stack, and minimal
-inspection-shell storage for an exported program must be budgeted separately
-from the code image and must fit normal C64 RAM available after the exported
-code is loaded. A graphics-mode exported program may use RAM beneath I/O at
-`$D000-$D7FF` only through documented banking gates and only when that memory is
-compatible with the selected graphics layout and hardware-visible I/O needs.
+Variable/array/string/stack/inspection storage for a stock export must still
+be budgeted against remaining normal RAM after the image loads. Graphics-mode
+exports may use `$D000-$D7FF` RAM under I/O only through documented gates.
 
 A compiled export must provide a source-free standalone direct-mode environment
 after program stop/end/error where state remains valid. For inspection, that
@@ -415,7 +590,9 @@ compiled image.
 
 Normal RAM must contain only behavior needed while compiled code or the
 foreground editor is actively running. Human-latency operations and slow
-numeric operations should be geoRAM-native.
+numeric operations should be expansion-native: execute-in-place through the
+geoRAM window when geoRAM is active, or through normal-RAM overlay slots
+loaded from REU when REU is active (`REU_REQUIREMENTS.md` RREU-5).
 
 ### 7.1 Nominal CPU Memory Map
 
@@ -453,8 +630,7 @@ transfer, restore I/O visibility, and then restore the incoming interrupt state.
 
 ### 7.2 Graphics Memory Contract
 
-Bitmap graphics must preserve the proven C64 layout carried forward from the
-legacy implementation:
+Bitmap graphics must use the documented C64 layout:
 
 - the 8000-byte bitmap occupies RAM at `$E000-$FF3F`;
 - the 1000-byte bitmap screen/color matrix occupies RAM beneath I/O at
@@ -472,6 +648,15 @@ Graphics mode must always exit to text mode with stock C64 colors. This restore
 is required on normal end of program, any BASIC error, `STOP` statement, and
 STOP-key interruption.
 
+The installed environment may place edit/compile-only `HIBASIC` code at
+`$E000+`; it must not be a running-program runtime dependency. Before `RUN`
+permits graphics to claim an overlapping range, occupied `HIBASIC` bytes must
+be copied transactionally to a dedicated geoRAM buffer. `END` or fall-through
+ends the graphics reservation and restores those bytes. Error, `STOP`, and
+STOP-key paths restore the display but retain graphics memory for `CONT`.
+Editing a line invalidates continuation and lazily restores `HIBASIC`, knowingly
+overwriting the old graphics. Compiler entry must also force this restore.
+
 ### 7.3 Hard Memory Budgets
 
 Normal RAM may be used up to the documented hardware and system reservations:
@@ -479,7 +664,15 @@ Normal RAM may be used up to the documented hardware and system reservations:
 - `$0000-$0001` are the 6510 processor port registers;
 - `$0100-$01FF` is reserved for inherent CPU stack operation;
 - `$D000-$DFFF` is the visible I/O window in the canonical map;
-- `$FFF9-$FFFF` is reserved high memory, including hardware vectors.
+- `$FFF9-$FFFF` is reserved high memory, including hardware vectors;
+- when REU XIP is active, **`$CE00–$CEFF` is reserved** as the primary XIP miss
+  slot; **`$C800–$CDFF` hot slots are optional cache** and may be reclaimed
+  under memory pressure (not permanent reservations).
+
+POKE/PEEK protection remains the **narrow control-plane** policy in §3.1
+(vectors, gates, profile mirrors, compiler ZP). Do **not** blanket-protect
+`$C800–$CDFF` solely because they may hold hot XIP; `$CE00` may be listed as
+protected while REU XIP is active if corruption would crash the gate.
 
 All other normal RAM is available to the implementation subject to the
 canonical banking contract. All geoRAM memory provided by the supported device
@@ -501,8 +694,8 @@ GeoRAM-backed string payloads must not span pages. Normal-RAM-backed string
 payloads must have equivalent ownership, bounds, and stale-handle checks, but
 are not required to use page-sized allocation.
 
-The following must be geoRAM-backed unless measurement proves that a small
-resident component is necessary:
+The following must be expansion-backed (selected geoRAM or REU backend) unless
+measurement proves that a small resident component is necessary:
 
 - editor parsing and line editing transforms;
 - lexer and tokenizer;
@@ -513,18 +706,18 @@ resident component is necessary:
 - tokenized program storage;
 - compiled program storage;
 - cold scalar variables and arrays;
-- string payloads when the active runtime profile has geoRAM available.
+- string payloads when the active runtime profile has expansion memory
+  available.
 
 Large objects must be addressed by stable logical handles rather than raw
-window addresses.
+window addresses, REU physical addresses, or DMA staging pointers.
 
-Trig, transcendental, and IEEE extension math should reuse algorithms and
-source from the legacy compiler when practical. That legacy work has already
-been proven through Python proxy calculations and accuracy validation, so
-Compiler 2 should treat it as preferred implementation evidence. The legacy
-memory map, fixed addresses, and zero-page assignments are not requirements;
-they are guidance to be adapted to Compiler 2's generated manifests, ABI, and
-placement model.
+Trig, transcendental, and IEEE extension math must meet the accuracy and ABI
+contracts in `docs/IEEE754.md` and the generated runtime ABI. Implementations
+may adopt proven external algorithms when they fit Compiler 2 contracts.
+Memory map, fixed addresses, and zero-page assignments from any external
+codebase are not requirements; all placement follows Compiler 2 generated
+manifests, ABI, and expansion policy.
 
 Every arena must have:
 
@@ -550,44 +743,223 @@ At minimum, separate ownership must exist for:
 An arena may share a physical free-page allocator, but one region must not be
 able to corrupt another without an integrity check detecting it.
 
-## 8. geoRAM Requirements
+## 8. Expansion Memory Requirements (geoRAM and REU)
 
-The implementation must follow `docs/GEORAM_BANKING.md`.
+The product uses one **active expansion backend** per session. **geoRAM XIP is
+normative.** REU emulates the same 256-byte page model by DMA into a
+designated XIP RAM buffer. Detail: `docs/GEORAM_BANKING.md`,
+`REU_REQUIREMENTS.md`, `REU_DESIGN.md`.
 
-In particular:
+### 8.1 Common dual-device rules
 
-- detection must be non-destructive;
-- the selected block/page, interrupt state, registers, and probe bytes must be
-  restored;
-- size detection must detect aliasing and reject unsupported capacities;
-- every geoRAM routine must have a generated ABI contract;
-- nested calls and callbacks must restore the caller's selected page;
-- returning calls and true tail transfers must have distinct stack-correct
-  mechanisms;
-- no routine may execute across the 256-byte window boundary;
-- build checks must validate every routine ID and dispatch-table record;
-- IRQ/NMI code must be pinned and must not depend on the current geoRAM page.
+- Startup must probe geoRAM and REU non-destructively, prefer geoRAM when both
+  are valid, select exactly one **store** backend, load the geoRAM-canonical
+  expansion image into that store, and apply the `REU` patch only when REU is
+  the selected store.
+- Supported geoRAM capacity is **always at least 512 KiB**. The geoRAM-canonical
+  project image (XIP pages, directories, required fixed arenas) must **fully fit
+  in 512 KiB**. A **build that exceeds 512 KiB must fail**. Larger detected
+  geoRAM may be used **only as extra dynamic storage** (e.g. strings, growth),
+  never as a requirement for the base image. XIP pages must be packed into
+  **lower geoRAM space first** (low block/page numbers before high).
+- REU store sessions use the same logical page image; REU patching of XIP
+  routines must **not** require the geoRAM device size—only the canonical
+  image layout, page IDs, and fixup bases (`$CE00` / optional hot slots). Patch
+  metadata must include image fingerprint/version (and other validation) but
+  not a geoRAM capacity field used for fixup.
+- Expansion-native services share one source and one logical page/directory
+  model; backends differ only in page select vs DMA-to-buffer and install
+  patching.
+- Logical handles, routine IDs, and the runtime ABI must not expose physical
+  geoRAM or REU addresses to compiled user programs.
+- IRQ/NMI code must be pinned in normal RAM and must not depend on the
+  selected geoRAM page or program the REU controller during normal service.
+- Interactive DMA must complete within **one jiffy** (≤ ~17 000 cycles on the
+  C64) per transfer quantum; XIP page fills are one 256-byte page at a time.
+- **“Both present”** means both geoRAM and REU were successfully detected at
+  cold install **or** after an NMI re-detect (§8.5). The session then uses
+  geoRAM as store and may set REU assist for memcopy/memfill.
+- Tests must cover: geoRAM only; REU only; both present (geoRAM store + REU
+  assist); neither (abort or minimal editor per §8.5). Layered testing: full
+  low-level fetch/stash/call per backend; bulk language E2E on geoRAM; REU
+  smoke. VICE snapshots must use the explicit names in the design (§ testing).
+
+### 8.1.1 Expansion profile record (R8.1.1)
+
+After successful install (and after each successful NMI re-detect that keeps
+full capability), the system must publish one immutable-for-the-interval
+**expansion profile** in resident storage, readable by all gates. It must
+include at least:
+
+- store kind (`georam` | `reu` | `none` for degraded mode);
+- `reu_assist` boolean;
+- detected capacities/fingerprints as applicable;
+- XIP slot bases and counts;
+- memcopy/memfill thresholds in force (`N_dma`, `N_fill`);
+- optional feature bits (`verify`, `swap`) if implemented;
+- generation/status for assist-off and degraded modes.
+
+Gates must not re-probe hardware on every call; they consult the profile.
+Every re-detect that changes store or assist must bump **profile generation**;
+in-flight DMA/XIP ops that observe a generation mismatch must abort cleanly.
+Assist-only REU failure must clear `reu_assist` and continue the session on
+CPU memcopy/memfill without requiring reinstall (§8.5). Profile fingerprints
+for `GEORAM`/`REU` images must be content-based (reproducible), not host paths
+or wall-clock times.
+
+### 8.1.2 DMA range classes (R8.1.2)
+
+All REU DMA (memcopy, memfill, optional swap/verify, install) must classify
+C64 endpoints before programming the REC. The design owns the class table;
+required classes include at least: normal RAM, bitmap RAM, colour RAM (I/O
+visible), matrix under I/O (only inside the RAM-under-I/O gate), and
+forbidden ranges (I/O registers, stack, unprotected project control). DMA
+into a forbidden class must fail cleanly without programming an illegal
+transfer.
+
+### 8.2 Shared memcopy policy (R8.2)
+
+The system must provide one internal **memcopy** helper for block moves of
+**1–256 bytes** between validated C64 normal-RAM ranges (and, with staging,
+to/from expansion pages). Callers that perform bulk payload or page-sized
+copies (including string payloads, geoRAM page-to-page moves, program-stream
+shifts/clones, and similar) must use this helper rather than ad hoc per-byte
+loops, except where a shorter specialized sequence is provably fixed-size and
+below the DMA threshold.
+
+**When REU DMA is available** (REU selected as store, or geoRAM selected as
+store with REU co-detected for assist):
+
+- transfers of length **N &lt; N_dma** must use a native 6502 path (abs,X or
+  equivalent zp-indirect form suitable for the addresses);
+- transfers of length **N ≥ N_dma** must use REU DMA when the ranges are
+  DMA-legal (1-hop or 2-hop as required by the endpoints);
+- **N_dma** is an integer **1 ≤ N_dma ≤ 256**, published in the design and as a
+  checked-in or generated production constant shared with tests;
+- initial required default: **N_dma = 32**, chosen at the conservative
+  C64↔C64 (2-hop) break-even from scratch measurement; the design may document
+  a lower 1-hop floor (~16) only as measurement context, not as a second
+  production threshold unless later re-measure justifies splitting;
+- **N_dma** may change only with recorded re-measurement and updates to the
+  design section that implements this requirement;
+- each interactive DMA quantum still obeys the one-jiffy bound.
+
+**When REU is not available**, memcopy always uses the native path.
+
+Memcopy must not be used for tiny fixed descriptor/math copies that are
+structurally shorter than a call+threshold check would justify; those remain
+inline. System or unit tests must prove: (a) lengths below threshold never
+program the REC; (b) lengths at/above threshold use DMA when REU is available;
+(c) result bytes match the native path for representative lengths and
+alignments.
+
+### 8.2.1 Shared memfill policy (R8.2.1)
+
+When REU DMA is available, the system must provide an internal **memfill**
+helper that sets **1–65536 bytes** of a DMA-legal C64 range to one constant
+byte by storing that byte once in REU (or using a fixed fill cell) and
+executing REU→C64 DMA with **REU address fixed** and **C64 address
+incrementing** (`$DF0A` bit 6 set, bit 7 clear). Chunking must obey the
+one-jiffy interactive DMA quantum; long fills (e.g. 8000-byte bitmap clear)
+must yield between quanta so IRQ/timer/keyboard service can run.
+
+When REU is not available, memfill uses a native 6502 fill path.
+
+Bulk clear/fill of graphics bitmap, bitmap screen matrix, color RAM (with I/O
+visible as required), and arena/string page zeroing must use memfill when the
+length is at least **N_fill** bytes. Default **N_fill = 32** (same order as
+`N_dma`) unless re-measurement documents a different constant. Tiny fixed
+clears remain inline.
+
+### 8.3 geoRAM backend
+
+When geoRAM is selected, follow `docs/GEORAM_BANKING.md`: non-destructive
+detection; page/block ownership; nested call page restore; distinct return vs
+tail transfer; no execute across the 256-byte window boundary; generated ABI
+and directory checks; IRQ independent of selected page. Minimum **512 KiB**
+must hold the entire project image; pack XIP from low addresses first.
+
+### 8.4 REU backend (page-buffer XIP)
+
+When REU is selected:
+
+- REU memory is DMA-only; code never executes from REU itself;
+- each logical XIP page is DMA'd (256 bytes) into the designated XIP buffer
+  before entry; optional multi-buffer cache of hot pages is allowed when
+  normal RAM permits, prefilled for invariant hot paths (e.g. lexer/keyword
+  tables);
+- XIP runs from normal-RAM slots (primary `$CE00`, optional hot slots in
+  `$C800–$CDFF`); each slot is fixed for its own base at DMA-in so calls route
+  directly into hot slots without recopying through `$CE00`;
+- only the pinned REU gate writes REC `$DF01-$DF0A` in production;
+- transfers use explicit `$DF01` execute; `$FF00` trigger disabled by default;
+- DMA stalls the 6510; quanta ≤ one jiffy with IRQ service between quanta.
+- REU patching must not depend on geoRAM device size; pack and fixup use the
+  canonical page image only (§8.1).
+
+### 8.5 Re-detect, assist degradation, and minimal editor (R8.5)
+
+**RESTORE / NMI.** The user is assumed to press RESTORE because of a **hang or
+untrusted state**. The NMI path must be **minimal and distrustful**:
+
+- must not resume the interrupted program or trust its stack/code;
+- must invalidate **CONT** and any continuation frames;
+- must mark compile state **fully dirty** (any in-flight or aborted compile is
+  discarded as untrusted);
+- must trust existing RAM as little as practical beyond source the design
+  marks durable (prefer re-validate generation/canaries; do not resume
+  mid-statement);
+- must re-enter editor init far enough to **re-probe** devices and republish
+  the expansion profile (or degraded mode);
+- must not depend on expansion-resident code before re-detect succeeds.
+
+**Assist degradation.** If the expansion **store** remains valid but REU assist
+fails mid-session, clear `reu_assist`, keep the session, use CPU memcopy/memfill,
+and report once (design-defined message).
+
+**Store loss / no devices after re-detect.** If re-detect finds **no** usable
+expansion store (neither device valid), the system must enter a **minimal
+resident editor** that:
+
+- displays a clear error that expansion memory is missing or failed;
+- accepts **`QUIT`** to return to stock BASIC;
+- on any other direct command, re-displays the same expansion-memory error
+  without invoking expansion-native services.
+
+The minimal editor must **not** pull the full editor/compiler into resident
+RAM—only enough UI and input path to show the error and honor `QUIT`.
+
+**Cold install with neither device** still aborts before trusting expansion
+state (R2); the minimal editor applies after a session that later loses
+devices (e.g. NMI re-detect), or as design specifies for post-install loss.
 
 ## 9. Editor and Interrupt Requirements
 
-The foreground editor may use geoRAM because human response time is the target,
-not instruction-level latency. A small pinned screen/keyboard front end may
-remain resident.
+The foreground editor may use expansion-native services because human response
+time is the target, not instruction-level latency. A small pinned
+screen/keyboard front end may remain resident.
 
-Line submission must be transactional:
+Line submission must be transactional for source:
 
-- tokenize and validate into scratch storage;
+- tokenize into scratch storage (stock-equivalent entry errors only);
 - allocate or resize the destination record;
 - commit the new program directory atomically;
 - leave the old line intact on failure.
 
-The IRQ path must remain resident, bounded, and geoRAM-independent. It must:
+Deferred full compile until `RUN` is permitted per §6.1. The implementation
+must expose a testable **compile-dirty** (or equivalent) state so tests can
+prove entry without full compile and successful compile-on-`RUN`.
+
+The IRQ path must remain resident, bounded, and expansion-selection-
+independent. It must:
 
 - update the KERNAL jiffy clock;
 - scan the keyboard;
 - maintain required cursor state;
 - acknowledge the interrupt source;
-- preserve the interrupted CPU-port and geoRAM context.
+- preserve the interrupted CPU-port and expansion context.
+
+The NMI path must satisfy §8.5 (RESTORE re-detect / editor re-entry).
 
 Long compilation and math operations must not stop timer or keyboard service.
 
@@ -890,8 +1262,8 @@ Machine-specific screen, memory, color, and token differences must be retained
 in raw observations and excluded only by documented normalization.
 
 Compiler 2-only BASIC V3 and IEEE keywords have no stock equivalent. Their
-legacy-mode behavior and inherited operands/errors must still be compared with
-the appropriate stock reference. Extension-specific results must use the
+stock-numeric-mode behavior and inherited operands/errors must still be
+compared with the appropriate stock reference. Extension-specific results must use the
 normative Compiler 2 specification and, for IEEE operations, an independent
 IEEE oracle. A stock `?SYNTAX ERROR` for an extension token is provenance, not
 the expected extension result.

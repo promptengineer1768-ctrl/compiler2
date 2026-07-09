@@ -1,0 +1,24 @@
+{
+  "generator_version": "1.0",
+  "input_sequence": [
+    "LOAD \"NO SUCH FILE\",8"
+  ],
+  "machine": "C64",
+  "normalization_rules": "screen-v1",
+  "normalized_result": "SEARCHING FOR NO SUCH FILE\n?FILE NOT FOUND ERROR",
+  "profile": "basicv2",
+  "raw_error": "?FILE NOT FOUND ERROR",
+  "raw_screen": "\n    **** COMMODORE 64 BASIC V2 ****\n\n 64K RAM SYSTEM  38911 BASIC BYTES FREE\n\nREADY.\nLOAD \"NO SUCH FILE\",8\n\nSEARCHING FOR NO SUCH FILE\n?FILE NOT FOUND  ERROR\nREADY.",
+  "raw_state": {},
+  "reference_mode": "immediate",
+  "regeneration_fingerprint": "1fa5db93e893b4342a37a9e8d71034d77034db31da8fad9753913ade50904dc5",
+  "rom_checksums": {
+    "basic-901226-01.bin": "89878cea0a268734696de11c4bae593eaaa506465d2029d619c0e0cbccdfa62d",
+    "chargen-901225-01.bin": "fd0d53b8480e86163ac98998976c72cc58d5dd8eb824ed7b829774e74213b420",
+    "kernal-901227-03.bin": "83c60d47047d7beab8e5b7bf6f67f80daa088b7a6a27de0d7e016f6484042721"
+  },
+  "schema_version": "1.0",
+  "source_text": "LOAD \"NO SUCH FILE\",8",
+  "vice_executable": "x64sc.exe",
+  "vice_version": "3.10"
+}

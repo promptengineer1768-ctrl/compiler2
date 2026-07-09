@@ -1,15 +1,15 @@
 # Compiler 2 Source Skeleton
 
-This document is the implementation skeleton for `DESIGN2.md`. It assigns
-every design responsibility to a checked-in manifest, assembly module, host
-tool, generated artifact, and test layer. It is not itself an implementation:
-a row in a routine table is an implementation obligation, not evidence that
-the behavior exists.
+This document is the implementation skeleton for Compiler 2. It assigns every
+design responsibility to a checked-in manifest, assembly module, host tool,
+generated artifact, and test layer. It is not itself an implementation: a row
+in a routine table is an obligation, not evidence that the behavior exists.
 
-`REQUIREMENTS.md` remains authoritative. Focused documents named by
-`DESIGN2.md` refine the contracts summarized here. Generated manifests are the
-source of truth for concrete addresses, IDs, ABI records, and sizes; prose in
-this file must not duplicate generated values as if they were current output.
+**Authority:** `REQUIREMENTS.md` / `REU_REQUIREMENTS.md`, then `DESIGN2.md` /
+`REU_DESIGN.md`, then focused `docs/`. This skeleton must not invent architecture
+or reintroduce a geoRAM-only product model. Generated manifests are the source
+of truth for concrete addresses, IDs, ABI records, and sizes; prose here must
+not duplicate generated values as if they were current output.
 
 ## 0. Validation Status
 
@@ -24,15 +24,13 @@ closes the structural gaps found during the design audit:
 | Source-free `COMPILE` export and its restricted shell | `geoasm/compile_export.asm`, `runtime/inspection.asm`, standalone linker profile |
 | DOS wedge before BASIC tokenization | `geoasm/dos_wedge.asm`, `runtime/wedge.asm`, resident input dispatch |
 | Graphics ownership and one exit path | `runtime/graphics.asm`, generated memory policy |
-| geoRAM profile continuity and fatal integrity handling | `arena/georam_detect.asm`, `resident/fatal.asm` |
+| Dual-device expansion profile and fatal integrity handling | `arena/georam_detect.asm`, REU detect/gate, `resident/fatal.asm`, expansion dispatcher |
 | Generated ABI, arena, ZP, placement, test-entry, and traceability contracts | structured manifests and `tools/` generators |
 | Current-build API and memory-map references | `tools/generate_reference.py`, `build/API.md`, `build/MAP.md` |
 
-One defect is in `DESIGN2.md` itself: §1 describes 512 KiB as eight 64 KiB
-"blocks", while the authoritative hardware contract defines `$DFFF` blocks
-as 16 KiB. This skeleton follows `REQUIREMENTS.md` and
-`docs/GEORAM_BANKING.md`: the minimum is 512 KiB = 32 hardware blocks =
-2,048 256-byte pages. `DESIGN2.md` should be corrected separately.
+geoRAM capacity: minimum 512 KiB = 32 hardware 16 KiB blocks = 2,048
+256-byte pages (`docs/GEORAM_BANKING.md`). REU minimum is also 512 KiB of
+non-aliased DMA memory (`REU_REQUIREMENTS.md`).
 
 The routine tables below are a coverage inventory. Before an assembly entry is
 implemented, its machine ABI must be expressible without placeholders such as
@@ -160,7 +158,21 @@ meaning (for example loop-complete), but then it is not also an error flag;
 errors must use a separately declared path. Exact preservation and result
 flags come from `manifests/routines.json`.
 
-### 2.2 Stack Discipline
+### 2.2 Static Output String ABI
+
+Every compile-time string whose purpose is direct output uses one packed
+representation: bytes are stored in output order and bit 7 is set on the final
+character. The final byte is still a character; the shared emitter masks bit 7
+before writing it. Empty static output strings are forbidden. Static output
+strings must not use NUL termination or a stored length, and modules must not
+carry private terminator-scanning print loops. Dynamic BASIC string values and
+non-output byte records retain their own descriptor formats.
+
+`kernal_print_packed` is the sole static-message emitter. Tests must verify the
+packed bytes, final-character marker, emitted characters, and rejection by
+build validation of NUL-terminated or length-prefixed static output literals.
+
+### 2.3 Stack Discipline
 
 - Every normally returning public subroutine restores SP to its entry value
   before `RTS`.
@@ -176,7 +188,7 @@ flags come from `manifests/routines.json`.
   The pinned IRQ is the sole exception and directly invokes only its approved
   `UDTIM`/`SCNKEY` calls in the fixed IRQ sequence.
 
-### 2.3 Zero-Page Clobber Contract
+### 2.4 Zero-Page Clobber Contract
 
 Every subroutine declares which ZP bytes it writes (clobbers). A routine that
 reads ZP bytes not listed as inputs or clobbers is a bug. The graph-coloring
@@ -185,7 +197,7 @@ allocator uses these clobber lists to build the interference graph.
 ZP reads and writes are listed per routine in the tables below using symbols
 imported through `src/common/zp.inc` from `build/zp_symbols.inc`.
 
-### 2.4 Branch Conventions
+### 2.5 Branch Conventions
 
 - The 6502 has a 16-bit address space; there is no 24-bit branch form.
 - Relative and absolute control flow is permitted within one linked 256-byte
@@ -194,7 +206,7 @@ imported through `src/common/zp.inc` from `build/zp_symbols.inc`.
 - Every cross-page call or jump uses a generated resident gate entry. No raw
   branch, `JSR`, or `JMP` may cross a page-selection boundary.
 
-### 2.5 GeoRAM Routine Constraints
+### 2.6 GeoRAM Routine Constraints
 
 - Each routine fits entirely within one selected geoRAM page.
 - Entry is only at a generated offset within that page.
@@ -656,6 +668,7 @@ visible; masking interrupts for an entire blocking call is forbidden.
 | `kernal_clrchn` | — | — | A X Y | Restores default channels | `zp_c3po`, `zp_d7`, channel workspace | CLRCHN bridge |
 | `kernal_chrin` | — | A=byte | A X Y | Reads byte from input channel | `zp_pntr`, channel workspace | CHRIN bridge |
 | `kernal_chrout` | A=byte | C=error | A X Y | Writes byte to output channel | generated channel workspace | CHROUT bridge |
+| `kernal_print_packed` | X/Y=packed static string | C=0 | A X Y | Masks and emits bytes through the bit-7 final-character marker | `zp_src`, generated channel workspace | Sole static-output-string emitter |
 | `kernal_load` | A=mode, X/Y=addr | C=error, X/Y=ended addr | A X Y | Loads from device | `zp_status`, `zp_fa`, `zp_eal` | LOAD bridge |
 | `kernal_save` | A=ZP-ptr, X/Y=end | C=error | A X Y | Saves to device | `zp_fa`, `zp_sal`, `zp_eal` | SAVE bridge |
 | `kernal_settim` | A=lo, X=mid, Y=hi | — | A X Y | Sets jiffy clock | `zp_time` | SETTIM bridge |
@@ -801,7 +814,7 @@ against active dialect before compilation.
 | `semantic_validate_line` | X/Y=token stream | C=error, A=error code | A X Y | Full syntax/dialect validation of one line | `zp_txtptr`, `zp_forlev`, `zp_sublev` | Transactional syntax validation (step 3 of line entry) |
 | `semantic_check_for_dialect` | — | A=current dialect | A | Returns BASIC2_DIALECT or BASIC35_DIALECT | — | Dialect query for compiler passes |
 | `semantic_set_dialect` | A=dialect | — | A | Sets active dialect mode | — | BASIC2 / BASIC3.5 direct command handler |
-| `semantic_get_numeric_mode` | — | A=current numeric mode | A | Reads legacy/IEEE mode independently of dialect | — | `FPMODE()` query |
+| `semantic_get_numeric_mode` | — | A=current numeric mode | A | Reads stock/IEEE mode independently of dialect | — | `FPMODE()` query |
 | `semantic_set_numeric_mode` | A=mode | C=error if unsupported | A, flags | Changes numeric policy and invalidates mode-keyed compiled records | — | `FPMODE0` / `FPMODE1` |
 
 ---
@@ -895,10 +908,9 @@ Error and warning formatting. Produces source-line context for error output.
 Trigonometric functions, geoRAM-resident. IEEE 754 variants use the active
 numeric policy and sticky-flag machinery.
 
-Prefer porting the legacy project's proven trig kernels when they satisfy the
-routine contracts below. The legacy algorithms and source are reusable; the
-legacy memory map, fixed addresses, and ZP choices are porting references only
-and must be adapted to Compiler 2 generated placement and ZP manifests.
+Implementations must satisfy the routine contracts below and Compiler 2
+placement (generated ZP, expansion policy, ABI). External algorithms may be
+adapted when they fit those contracts.
 
 | Routine | In | Out | Clob | Side | ZP (W) | Purpose |
 |---|---|---|---|---|---|---|
@@ -913,14 +925,9 @@ and must be adapted to Compiler 2 generated placement and ZP manifests.
 
 ### 6.18 `src/geoasm/math_trans.asm`
 
-Transcendental and IEEE 754 extended operations. Legacy `EXP`, `LOG`, `SQR`,
-`RND`, and power remain callable in legacy mode; IEEE-specific entries are
-enabled only when `FPMODE1` is selected.
-
-Prefer reusing the legacy project's transcendental and IEEE extension
-algorithms/source where practical. Their numerical behavior has already been
-validated with Python proxy models and accuracy tests, but their storage
-layout is not authoritative for Compiler 2.
+Transcendental and IEEE 754 extended operations. Stock-mode `EXP`, `LOG`,
+`SQR`, `RND`, and power remain callable when IEEE mode is off; IEEE-specific
+entries are enabled only when `FPMODE1` is selected.
 
 | Routine | In | Out | Clob | Side | ZP (W) | Purpose |
 |---|---|---|---|---|---|---|

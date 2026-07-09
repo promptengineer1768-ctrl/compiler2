@@ -1,0 +1,144 @@
+"""Unit tests for the geoasm intermediate-representation builder."""
+
+from __future__ import annotations
+
+import json
+import re
+import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[2]
+TOOLS_ROOT = ROOT.parent / "tools"
+if str(TOOLS_ROOT) not in sys.path:
+    sys.path.insert(0, str(TOOLS_ROOT))
+
+try:
+    from emu6502_c64_bindings import C64Emu6502
+except ImportError:
+    C64Emu6502 = None
+
+IR_END = 0x00
+IR_STMT = 0x01
+IR_EXPR = 0x02
+IR_VAR_REF = 0x03
+IR_ARRAY_REF = 0x04
+IR_STRING_REF = 0x05
+IR_BRANCH = 0x06
+IR_LOOP = 0x07
+IR_LITERAL_INT = 0x08
+IR_LITERAL_FLOAT = 0x09
+IR_LITERAL_STR = 0x0A
+
+
+def _dll_path() -> Path:
+    path = ROOT.parent / "tools" / "emu6502.dll"
+    if not path.exists():
+        path = ROOT.parent / "tools" / "msys-emu6502.dll"
+    if not path.exists():
+        pytest.skip("Emulator DLL not found in tools folder.")
+    return path
+
+
+def _symbol_address(symbol: str) -> int:
+    labels = (ROOT / "build" / "compiler.lbl").read_text(encoding="utf-8")
+    match = re.search(rf"\bal\s+([0-9A-Fa-f]{{6}})\s+\.{re.escape(symbol)}\b", labels)
+    if match is not None:
+        return int(match.group(1), 16)
+    data = json.loads(
+        (ROOT / "build" / "routine_directory.json").read_text(encoding="utf-8")
+    )
+    raw = data["routines"].get(symbol, {}).get("address", "")
+    assert raw.startswith("$")
+    return int(raw[1:], 16)
+
+
+def _new_emu() -> C64Emu6502:
+    if C64Emu6502 is None:
+        pytest.skip("Emulator binding unavailable")
+    emu = C64Emu6502(lib_path=_dll_path())
+    payload = (ROOT / "build" / "compiler.bin").read_bytes()
+    load_addr = payload[0] | (payload[1] << 8)
+    emu.write_mem_range(load_addr, payload[2:])
+    emu.write_mem(0x0000, 0x2F)
+    emu.write_mem(0x0001, 0x35)
+    emu.execute(_symbol_address("ir_init"), 1000)
+    return emu
+
+
+def _emit(emu: C64Emu6502, name: str, payload: tuple[int, int, int]) -> None:
+    emu.set_a(payload[0])
+    emu.set_x(payload[1])
+    emu.set_y(payload[2])
+    emu.execute(_symbol_address(name), 1000)
+
+
+def _records(emu: C64Emu6502) -> bytes:
+    length = emu.read_mem(_symbol_address("ir_buffer_len"))
+    start = _symbol_address("ir_buffer")
+    return emu.read_mem_range(start, start + length - 1) if length else b""
+
+
+@pytest.mark.unit
+@pytest.mark.local
+class TestIrBuilder:
+    """IR emission behavior tests."""
+
+    def test_init_statement_expression_and_finish(self) -> None:
+        emu = _new_emu()
+        assert _records(emu) == b""
+
+        _emit(emu, "ir_emit_stmt", (0x11, 0x22, 0x33))
+        _emit(emu, "ir_emit_expr", (0x44, 0x55, 0x66))
+        emu.execute(_symbol_address("ir_finish_line"), 1000)
+
+        assert _records(emu) == bytes(
+            [
+                IR_STMT,
+                0x11,
+                0x22,
+                0x33,
+                IR_EXPR,
+                0x44,
+                0x55,
+                0x66,
+                IR_END,
+                0,
+                0,
+                0,
+            ]
+        )
+
+    @pytest.mark.parametrize(
+        ("name", "opcode"),
+        [
+            ("ir_emit_var_ref", IR_VAR_REF),
+            ("ir_emit_array_ref", IR_ARRAY_REF),
+            ("ir_emit_string_ref", IR_STRING_REF),
+            ("ir_emit_branch", IR_BRANCH),
+            ("ir_emit_loop", IR_LOOP),
+            ("ir_emit_literal_int", IR_LITERAL_INT),
+            ("ir_emit_literal_float", IR_LITERAL_FLOAT),
+            ("ir_emit_literal_str", IR_LITERAL_STR),
+        ],
+    )
+    def test_each_ir_emission_operation(self, name: str, opcode: int) -> None:
+        emu = _new_emu()
+        _emit(emu, name, (0xA1, 0xB2, 0xC3))
+        assert _records(emu) == bytes([opcode, 0xA1, 0xB2, 0xC3])
+
+    def test_init_resets_existing_records(self) -> None:
+        emu = _new_emu()
+        _emit(emu, "ir_emit_branch", (1, 2, 3))
+        assert _records(emu)
+        emu.execute(_symbol_address("ir_init"), 1000)
+        assert _records(emu) == b""
+
+    def test_get_buf_ptr_tracks_current_write_position(self) -> None:
+        """ir_get_buf_ptr returns the address following the last real record."""
+        emu = _new_emu()
+        _emit(emu, "ir_emit_stmt", (1, 2, 3))
+        emu.execute(_symbol_address("ir_get_buf_ptr"), 1000)
+        state = emu.get_state()
+        assert state.x | (state.y << 8) == _symbol_address("ir_buffer") + 4

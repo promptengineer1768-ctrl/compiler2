@@ -1,0 +1,23 @@
+{
+  "region": {
+    "name": "compiler_workarea",
+    "size": 64,
+    "segment": "BSS"
+  },
+  "nodes": [
+    {
+      "name": "io_output",
+      "size": 64,
+      "alignment": 1,
+      "lifetimes": ["runtime_io_output"],
+      "owners": ["src/runtime/io.asm:io_buffer"]
+    },
+    {
+      "name": "io_input",
+      "size": 64,
+      "alignment": 1,
+      "lifetimes": ["runtime_io_input"],
+      "owners": ["src/runtime/io.asm:io_input_buf"]
+    }
+  ]
+}
