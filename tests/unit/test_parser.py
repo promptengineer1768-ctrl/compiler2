@@ -18,8 +18,9 @@ try:
 except ImportError:
     C64Emu6502 = None
 
-# Keep parser input outside the linked image and geoRAM execution window.
-SOURCE_ADDR = 0xC900
+# Keep parser input below the linked image and outside the geoRAM window.  The
+# production image may validly occupy normal RAM all the way through $CFFF.
+SOURCE_ADDR = 0x0500
 
 NODE_LINE = 0x01
 NODE_STATEMENT = 0x02

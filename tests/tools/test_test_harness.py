@@ -26,6 +26,7 @@ MINIMAL_TRACE: dict[str, Any] = {
         {
             "id": "REQ-001",
             "ears": "When a program line number is stored, the system shall accept values 0 through 63999.",
+            "source_section": "REQUIREMENTS.md#3.1",
             "design_section": "docs/BASIC_COMPATIBILITY_LIMITS.md#line-numbers",
             "implementation": "src/geoasm/program_codec.asm",
             "tests": [
@@ -96,6 +97,20 @@ class TestGenerateRequirementsMatrix:
             },
         ]
 
+    def test_json_preserves_requirement_source(
+        self, trace_file: Path, tmp_path: Path
+    ) -> None:
+        """The generated matrix retains the normative source link."""
+        out_json = tmp_path / "requirements_matrix.json"
+        out_md = tmp_path / "requirements_matrix.md"
+        test_harness.generate_requirements_matrix(
+            str(trace_file), str(out_json), str(out_md)
+        )
+        data = json.loads(out_json.read_text(encoding="utf-8"))
+        assert data["mapped_requirements"][0]["source_section"] == (
+            "REQUIREMENTS.md#3.1"
+        )
+
     def test_md_contains_header(self, trace_file: Path, tmp_path: Path) -> None:
         out_json = tmp_path / "requirements_matrix.json"
         out_md = tmp_path / "requirements_matrix.md"
@@ -104,6 +119,7 @@ class TestGenerateRequirementsMatrix:
         )
         content = out_md.read_text(encoding="utf-8")
         assert "# Requirements Traceability Matrix" in content
+        assert "Source Section" in content
 
     def test_md_contains_requirement_id(self, trace_file: Path, tmp_path: Path) -> None:
         out_json = tmp_path / "requirements_matrix.json"

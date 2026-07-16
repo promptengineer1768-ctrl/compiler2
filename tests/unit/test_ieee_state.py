@@ -77,7 +77,13 @@ def _new_emu() -> C64Emu6502:
     payload = bin_path.read_bytes()
     load_addr = payload[0] | (payload[1] << 8)
     emu.write_mem_range(load_addr, payload[2:])
+    hibasic = ROOT / "build" / "hibasic.bin"
+    if hibasic.exists():
+        emu.write_mem_range(0xE000, hibasic.read_bytes())
+        emu.write_mem(0x0001, 0x35)
     emu.set_georam_enabled(True)
+    if hasattr(emu, "set_sp"):
+        emu.set_sp(0xFF)
     return emu
 
 
@@ -93,8 +99,14 @@ def _fac1_bytes(emu: C64Emu6502) -> bytes:
 
 
 def _linked_bytes(symbol_name: str, length: int) -> bytes:
-    """Read linked compiler bytes for a symbol body."""
+    """Read linked compiler/HIBASIC bytes for a symbol body."""
     address = _load_symbol_address(symbol_name)
+    if address >= 0xE000:
+        hibasic = (ROOT / "build" / "hibasic.bin").read_bytes()
+        start = address - 0xE000
+        if start < 0 or start + length > len(hibasic):
+            pytest.fail(f"Symbol {symbol_name!r} is outside build/hibasic.bin.")
+        return hibasic[start : start + length]
     bin_path = ROOT / "build" / "compiler.bin"
     payload = bin_path.read_bytes()
     load_addr = payload[0] | (payload[1] << 8)

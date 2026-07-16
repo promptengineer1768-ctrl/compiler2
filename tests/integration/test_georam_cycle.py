@@ -164,8 +164,11 @@ class TestGeoramCycle:
         )
         target = directory["routines"]["wedge_parse"]
 
-        command = 0xC300
-        emu.write_mem(command, ord("$"))
+        # Use free high RAM above the linked normal-RAM image (RODATA ends
+        # below $C800). wedge_parse requires a NUL-terminated direct-mode
+        # buffer; bare "$" must not leave a non-zero trailing byte.
+        command = 0xCF00
+        emu.write_mem_range(command, bytes([ord("$"), 0x00]))
         emu.execute(_load_symbol_address("ctx_init"), 10_000)
         emu.set_a(target["page"])
         emu.set_x(target["block"])

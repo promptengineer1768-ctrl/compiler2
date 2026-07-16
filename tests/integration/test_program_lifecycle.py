@@ -162,6 +162,17 @@ def _normalized_program(lines: list[tuple[int, bytes]]) -> bytes:
     return bytes(result)
 
 
+def _extended_program(body: bytes) -> bytes:
+    """Build a canonical C2P1 envelope around a normalized body."""
+    checksum = sum(body) & 0xFF
+    return (
+        b"C2P1"
+        + bytes([1, 1, len(body) & 0xFF, len(body) >> 8, checksum, 0])
+        + bytes(6)
+        + body
+    )
+
+
 def _write_put_request(
     emu: C64Emu6502, address: int, transaction: int, line_descriptor: int
 ) -> None:
@@ -179,6 +190,50 @@ def _write_put_request(
 @pytest.mark.local
 class TestProgramLifecycle:
     """Integration coverage for codec and store routines."""
+
+    def test_extended_decode_store_and_encode_round_trip(self) -> None:
+        """C2P1 data crosses the normalized program-store boundary intact."""
+        emu = C64Emu6502(lib_path=_dll_path())
+        _load_binary(emu)
+        assert not _call(emu, "arena_init_all")
+
+        logical = _normalized_program(
+            [(10, bytes([0x99, ord("1")])), (20, bytes([0x80]))]
+        )
+        descriptor = 0xC300
+        _write_stream(
+            emu,
+            descriptor,
+            _extended_program(logical),
+            arena=INPUT_ARENA,
+        )
+
+        assert not _call(
+            emu,
+            "program_decode_extended",
+            x=descriptor & 0xFF,
+            y=descriptor >> 8,
+        )
+        decoded = int(emu.get_state().x) | (int(emu.get_state().y) << 8)
+        assert _read_stream(emu, decoded) == logical
+
+        assert not _call(
+            emu,
+            "program_replace_from_load",
+            x=decoded & 0xFF,
+            y=decoded >> 8,
+        )
+        published = _load_symbol_address("__program_store_published")
+        assert _read_stream(emu, published) == logical
+
+        assert not _call(
+            emu,
+            "program_encode_extended",
+            x=published & 0xFF,
+            y=published >> 8,
+        )
+        encoded = int(emu.get_state().x) | (int(emu.get_state().y) << 8)
+        assert _read_stream(emu, encoded) == _extended_program(logical)
 
     def test_decode_store_edit_and_encode_round_trip(self) -> None:
         """Stock input decodes to normalized store state and exports canonically."""

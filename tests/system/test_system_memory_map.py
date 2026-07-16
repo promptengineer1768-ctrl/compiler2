@@ -93,16 +93,33 @@ class TestGeneratedMemoryMap:
     def test_code_segment_stays_out_of_io_and_vector_space(self) -> None:
         """Loader-resident payload stays below I/O; cold high code avoids vectors."""
         segments = _parse_segments(_load_text(COMPILER_MAP))
-        cold_high = {"HIBASIC"}
-        payload_segments = [
-            segment for segment in segments if str(segment["name"]) not in cold_high
-        ]
+        # Edit/compile-only cold code lives in RAM_HIGH ($E000+) per
+        # tools/linker_config.py and docs/MEMORY_BUDGETS.md: HIBASIC plus
+        # EDITOR(_PINNED)/WEDGE/COMPRESSOR. GeoRAM XIP pages link at the
+        # $DE00 window into georam.bin and are not loader-resident payload.
+        cold_high = {
+            "HIBASIC",
+            "EDITOR_PINNED",
+            "EDITOR",
+            "WEDGE",
+            "COMPRESSOR",
+        }
+        payload_segments = []
+        for segment in segments:
+            name = str(segment["name"])
+            start = int(segment["start"])
+            end = int(segment["end"])
+            assert end < 0xFFF9
+            if name.startswith("GEORAM_PAGE") or start == 0xDE00:
+                continue
+            if name in cold_high or start >= 0xE000:
+                # Named cold-high segments and any other RAM_HIGH placement.
+                assert start >= 0xE000
+                continue
+            payload_segments.append(segment)
+        assert payload_segments
         highest_payload_end = max(int(segment["end"]) for segment in payload_segments)
         assert highest_payload_end < 0xD000
-        for segment in segments:
-            assert int(segment["end"]) < 0xFFF9
-            if str(segment["name"]) in cold_high:
-                assert int(segment["start"]) >= 0xE000
 
     def test_zero_page_allocation_starts_at_reserved_base(self) -> None:
         """The generated zero-page allocation uses the reserved page only."""

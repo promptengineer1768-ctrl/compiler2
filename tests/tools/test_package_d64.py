@@ -129,10 +129,15 @@ class TestBuildD64:
 
     def test_direct_build_records_dual_sidecars(self, tmp_path: Path) -> None:
         """Fallback D64 manifests basicv3, georam, and reu as PRG files."""
+        from prepare_compressor_segments import build_simple_prg
+
+        payload = tmp_path / "payload.bin"
+        payload.write_bytes(b"\xea" * 64)
         basicv3 = tmp_path / "basicv3.prg"
-        basicv3.write_bytes(b"\x01\x08" + b"\xea" * 32)
+        build_simple_prg(str(payload), str(basicv3))
         georam = tmp_path / "georam.bin"
-        georam.write_bytes(b"\x00\xde" + b"\x00" * 64)
+        # Full geoRAM PRG header + 64 KiB payload (release size contract).
+        georam.write_bytes(b"\x00\xde" + b"\x00" * 65536)
         reu = tmp_path / "reu.bin"
         package_d64.build_reu_patch(georam, reu)
         out_d64 = tmp_path / "compiler.d64"
@@ -141,16 +146,20 @@ class TestBuildD64:
 
         manifest = package_d64.validate_d64(str(out_d64))
         assert manifest["disk_title"] == "compiler2"
+        assert manifest["valid"] is True
         names = [item["name"] for item in manifest["files"]]
         assert names == ["basicv3", "georam", "reu"]
         assert all(item["type"] == "PRG" for item in manifest["files"])
+        assert package_d64.validate_dual_d64_release(
+            out_d64, basicv3, georam, reu
+        ) == []
 
     def test_direct_build_auto_generates_reu_patch(self, tmp_path: Path) -> None:
         """Omitting reu_path still produces a dual-device D64 with REU."""
         basicv3 = tmp_path / "basicv3.prg"
         basicv3.write_bytes(b"\x01\x08" + b"\xea" * 32)
         georam = tmp_path / "georam.bin"
-        georam.write_bytes(b"\x00\xde" + b"\x55" * 64)
+        georam.write_bytes(b"\x00\xde" + b"\x55" * (8 * 254))
         out_d64 = tmp_path / "compiler.d64"
 
         package_d64.build_d64("", str(basicv3), str(georam), str(out_d64))
@@ -162,6 +171,17 @@ class TestBuildD64:
             "georam",
             "reu",
         ]
+
+    def test_validate_d64_rejects_missing_reu(self, tmp_path: Path) -> None:
+        """Directory without REU fails the dual-device contract."""
+        basicv3 = tmp_path / "basicv3.prg"
+        basicv3.write_bytes(b"\x01\x08" + b"\xea" * 32)
+        georam = tmp_path / "georam.bin"
+        georam.write_bytes(b"\x00\xde" + b"\x00" * (8 * 254))
+        out_d64 = tmp_path / "compiler.d64"
+        package_d64._build_direct(str(basicv3), str(georam), str(out_d64), None)
+        with pytest.raises(ValueError, match="reu"):
+            package_d64.validate_d64(str(out_d64))
 
     def test_direct_build_writes_prg_sector_chain(self, tmp_path: Path) -> None:
         """Fallback D64 data sectors contain the exact PRG payload."""

@@ -211,11 +211,13 @@ _err_format:
     rts
 
 ; Emit the formatted message, unwind runtime state, and enter development READY.
+; ctrl_reset runs after READY publication: kernal_print_packed uses zp_tmptr,
+; which is co-allocated with zp_cont_handle, so an earlier reset would be
+; clobbered by the message path.
 _err_unwind:
     jsr kernal_clrchn
     lda #0
     jsr graphics_exit
-    jsr ctrl_reset
     ldy #0
 @emit:
     cpy err_message_length
@@ -228,6 +230,7 @@ _err_unwind:
     lda #$0d
     jsr kernal_chrout
     jsr editor_ready_transition
+    jsr ctrl_reset
     lda err_saved_code
     sec
     rts

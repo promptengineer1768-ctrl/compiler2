@@ -47,8 +47,6 @@ page_ready:                  .res 1
 .segment "RODATA"
 page_bit_masks:
     .byte $01, $02, $04, $08, $10, $20, $40, $80
-page_bit_clear_masks:
-    .byte $FE, $FD, $FB, $F7, $EF, $DF, $BF, $7F
 
 .segment "CODE"
 
@@ -223,8 +221,9 @@ page_bitmap_write:
     sta page_bitmap,y
     rts
 @clear:
-    lda page_bitmap,y
-    and page_bit_clear_masks,x
+    lda page_bit_masks,x
+    eor #$FF
+    and page_bitmap,y
     sta page_bitmap,y
     rts
 

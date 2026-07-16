@@ -50,11 +50,19 @@ def test_smoke_collection_is_stable_and_covers_critical_layers() -> None:
         any(f"tests/{category}/" in node.replace("\\", "/") for node in first)
         for category in required
     )
+    assert any(
+        "tests/hardware/test_vice_infrastructure.py::test_x64sc_version_is_reported"
+        in node.replace("\\", "/")
+        for node in first
+    )
+    assert not any(
+        "tests/e2e/test_loader_smoke.py" in node.replace("\\", "/") for node in first
+    )
 
 
 @pytest.mark.system
-def test_smoke_selection_completes_under_thirty_two_minutes() -> None:
-    """Smoke includes the real IEC loader path while remaining bounded."""
+def test_smoke_selection_completes_under_sixty_seconds() -> None:
+    """The fast authoritative selection must meet the documented host budget."""
     started = time.perf_counter()
     result = subprocess.run(
         [sys.executable, "-m", "pytest", "tests", "-q", "-m", "smoke"],
@@ -62,8 +70,8 @@ def test_smoke_selection_completes_under_thirty_two_minutes() -> None:
         check=False,
         capture_output=True,
         text=True,
-        timeout=1920,
+        timeout=60,
     )
     elapsed = time.perf_counter() - started
     assert result.returncode == 0, result.stdout + result.stderr
-    assert elapsed < 1920
+    assert elapsed < 60

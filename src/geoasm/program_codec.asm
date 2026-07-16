@@ -1,8 +1,11 @@
 ; src/geoasm/program_codec.asm
-; Minimal stock and extended program codec helpers.
+; Stock V2, Plus/4 BASIC 3.5, and optional C2P1 program codec helpers.
+; SAVE format selection follows DESIGN2.md §5: C2-only > Plus/4 3.5 > V2,
+; scanning tokens outside REM/string/DATA contexts.
 
 .include "common/zp.inc"
 .include "common/constants.asm"
+.include "program_formats.inc"
 
 .macro jcs target
     bcc *+5
@@ -41,8 +44,14 @@ program_stream_selected_page: .res 1
 program_stream_page_valid: .res 1
 program_stream_target_page: .res 1
 program_codec_copy_count: .res 1
+program_stream_validation_start: .res 2
 program_codec_output_descriptor: .res 8
 program_codec_page_buffer: .res 256
+program_codec_load_lo: .res 1
+program_codec_load_hi: .res 1
+program_codec_link_base_hi: .res 1
+program_codec_save_flags: .res 1
+program_codec_scan_mode: .res 1
 
 .segment "CODE"
 
@@ -55,6 +64,26 @@ PROGRAM_STREAM_DESC_GENERATION = 5
 PROGRAM_STREAM_DESC_START_PAGE = 6
 PROGRAM_CODEC_OUTPUT_ARENA = 8
 PROGRAM_CODEC_OUTPUT_GENERATION = 1
+
+; Token bytes used by SAVE format classification (outside REM/string/DATA).
+TOKEN_DATA = $83
+TOKEN_REM = $8F
+TOKEN_C2_COMPILE = $CE
+TOKEN_C2_QUIT = $D3
+TOKEN_C2_BASIC = $D4
+TOKEN_C2_PREFIX = $FE
+TOKEN_STOCK_MAX = $CB
+
+; program_codec_save_flags bits while scanning.
+SAVE_FLAG_BASIC35 = $01
+SAVE_FLAG_C2 = $02
+
+; Scan modes for program_select_save_format.
+SCAN_MODE_NORMAL = 0
+SCAN_MODE_STRING = 1
+SCAN_MODE_REM = 2
+SCAN_MODE_DATA = 3
+SCAN_MODE_DATA_STRING = 4
 
 ; Load and validate the arena-backed whole-program descriptor from X/Y.
 ; The former one-byte bounded record ABI is rejected.
@@ -142,6 +171,28 @@ PROGRAM_CODEC_OUTPUT_GENERATION = 1
     rts
 .endproc
 
+; Set linked-line load base for BASIC V2 ($0801 / link base $07FF).
+.proc __program_stream_set_v2_base
+    lda #STOCK_BASICV2_LOAD_LO
+    sta program_codec_load_lo
+    lda #STOCK_BASICV2_LOAD_HI
+    sta program_codec_load_hi
+    lda #$07
+    sta program_codec_link_base_hi
+    rts
+.endproc
+
+; Set linked-line load base for Plus/4 BASIC 3.5 ($1001 / link base $0FFF).
+.proc __program_stream_set_plus4_base
+    lda #STOCK_BASICV35_LOAD_LO
+    sta program_codec_load_lo
+    lda #STOCK_BASICV35_LOAD_HI
+    sta program_codec_load_hi
+    lda #$0F
+    sta program_codec_link_base_hi
+    rts
+.endproc
+
 ; Replace validated external stock link fields with canonical internal record
 ; lengths. The normalized stream retains a final zero-length terminator.
 .proc __program_stream_normalize_stock
@@ -172,13 +223,13 @@ PROGRAM_CODEC_OUTPUT_GENERATION = 1
     clc
     rts
 @record:
-    ; External next address minus $0801 is the normalized next-record offset.
+    ; External next address minus load address is the normalized next offset.
     sec
     lda program_stream_link
-    sbc #$01
+    sbc program_codec_load_lo
     sta program_stream_link
     lda program_stream_link+1
-    sbc #$08
+    sbc program_codec_load_hi
     sta program_stream_link+1
     bcc @error
     ; Stored record length excludes its own two-byte length field.
@@ -224,9 +275,11 @@ PROGRAM_CODEC_OUTPUT_GENERATION = 1
 ; Validate normalized logical line records before stock export.
 .proc __program_stream_validate_normalized
     jsr __program_stream_load_start
-    lda #$00
+    lda program_stream_validation_start
     sta program_stream_index
+    lda program_stream_validation_start+1
     sta program_stream_index+1
+    lda #$00
     sta program_stream_prev_line
     sta program_stream_prev_line+1
     sta program_stream_have_line
@@ -367,13 +420,13 @@ PROGRAM_CODEC_OUTPUT_GENERATION = 1
     adc program_stream_record_length+1
     sta program_stream_scan+1
     jcs @error
-    ; External offset maps to absolute address $07ff + offset.
+    ; External offset maps to absolute address (load - 2) + offset.
     clc
     lda program_stream_scan
     adc #$FF
     sta program_stream_record_length
     lda program_stream_scan+1
-    adc #$07
+    adc program_codec_link_base_hi
     sta program_stream_record_length+1
     lda program_stream_link
     sta program_stream_index
@@ -521,6 +574,9 @@ PROGRAM_CODEC_OUTPUT_GENERATION = 1
 .endproc
 
 __program_stream_encode_stock:
+    lda #$00
+    sta program_stream_validation_start
+    sta program_stream_validation_start+1
     jsr __program_stream_validate_normalized
     bcs @error
     jsr __program_stream_clone_for_encode
@@ -532,12 +588,12 @@ __program_stream_encode_stock:
     lda #$00
     sta program_stream_index
     sta program_stream_index+1
-    lda #$01
+    lda program_codec_load_lo
     sta program_stream_value
     jsr __program_stream_write
     bcs @error
     inc program_stream_index
-    lda #$08
+    lda program_codec_load_hi
     sta program_stream_value
     jsr __program_stream_write
     bcs @error
@@ -668,6 +724,19 @@ __program_stream_encode_stock:
 __program_stream_decode_extended:
     jsr __program_stream_validate_extended
     bcs @error
+    ; A zero-length body is the valid empty-program representation. Any
+    ; non-empty body must be the normalized logical stream before the header
+    ; is removed, so malformed input cannot be published in place.
+    lda program_stream_scan
+    ora program_stream_scan+1
+    beq @body_valid
+    lda #$10
+    sta program_stream_validation_start
+    lda #$00
+    sta program_stream_validation_start+1
+    jsr __program_stream_validate_normalized
+    bcs @error
+@body_valid:
     lda #$10
     jsr __program_stream_shift_left
     bcs @error
@@ -685,6 +754,15 @@ __program_stream_decode_extended:
     rts
 
 __program_stream_encode_extended:
+    lda program_stream_length
+    ora program_stream_length+1
+    beq @body_valid
+    lda #$00
+    sta program_stream_validation_start
+    sta program_stream_validation_start+1
+    jsr __program_stream_validate_normalized
+    jcs @error
+@body_valid:
     jsr __program_stream_clone_for_encode
     jcs @error
     jsr __program_stream_load_start
@@ -893,12 +971,13 @@ program_classify_file:
 
 ; program_decode_stock
 ; Inputs/outputs: X/Y = arena-backed whole-program descriptor.
-; Removes the stock load address only after validating the complete program.
+; Removes the BASIC V2 $0801 load address only after validating the program.
 ; Clobbers: A, X, Y. Zero page: expression pointer workspace.
 .export program_decode_stock
 program_decode_stock:
     jsr __program_stream_probe
     bcs @error
+    jsr __program_stream_set_v2_base
     jmp __program_stream_decode_stock
 @error:
     rts
@@ -911,37 +990,73 @@ program_decode_stock:
 program_encode_stock:
     jsr __program_stream_probe
     bcs @error
+    jsr __program_stream_set_v2_base
+    jmp __program_stream_encode_stock
+@error:
+    rts
+
+; program_decode_basic35
+; Inputs/outputs: X/Y = arena-backed whole-program descriptor.
+; Validates Plus/4 $1001 linked-line PRG and normalizes to logical records.
+; Clobbers: A, X, Y. Zero page: expression pointer workspace.
+.export program_decode_basic35
+program_decode_basic35:
+    jsr __program_stream_probe
+    bcs @error
+    jsr __program_stream_set_plus4_base
+    jmp __program_stream_decode_stock
+@error:
+    rts
+
+; program_encode_basic35
+; Inputs/outputs: X/Y = arena-backed whole-program descriptor.
+; Prepends $1001 and canonically rebuilds Plus/4 linked-line pointers.
+; Clobbers: A, X, Y. Zero page: expression pointer workspace.
+.export program_encode_basic35
+program_encode_basic35:
+    jsr __program_stream_probe
+    bcs @error
+    jsr __program_stream_set_plus4_base
     jmp __program_stream_encode_stock
 @error:
     rts
 
 ; program_decode_extended / program_encode_extended
-; SKELETON for product SAVE path (design audit 2026-07-09): DESIGN2 §5 chooses
-; format by tokens (C2-only > Plus/4 3.5 PRG > V2). C2P1 is optional only for
-; Compiler 2-only packages; Plus/4 3.5 and token-driven classification are
-; missing. These entries fail until re-implemented.
 ; Inputs/outputs: X/Y = arena-backed whole-program descriptor.
+; Decode validates and removes the C2P1 envelope. Encode prepends a canonical
+; C2P1 envelope around the logical stream, cloning non-scratch input first.
 ; Clobbers: A, X, Y. Zero page: expression pointer workspace.
 .export program_decode_extended
 program_decode_extended:
-    lda #ERR_UNDEFINED_FUNCTION
-    sec
+    jsr __program_stream_probe
+    bcs @error
+    jmp __program_stream_decode_extended
+@error:
     rts
 
 .export program_encode_extended
 program_encode_extended:
-    lda #ERR_UNDEFINED_FUNCTION
-    sec
+    jsr __program_stream_probe
+    bcs @error
+    jmp __program_stream_encode_extended
+@error:
     rts
 
-; program_select_save_format - token-class SAVE format selection (SKELETON)
-; Design: scan tokens outside REM/string; emit C2-only / Plus/4 3.5 / V2.
+; program_select_save_format
+; Inputs: X/Y = arena-backed normalized logical program descriptor.
+; Outputs: A = SAVE_FORMAT_V2 / SAVE_FORMAT_BASICV35 / SAVE_FORMAT_C2P1, C=error.
+; Scans tokens outside REM, string, and DATA contexts. Priority: C2 > 3.5 > V2.
+; Clobbers: A, X, Y. Zero page: expression pointer workspace.
 .export program_select_save_format
 program_select_save_format:
-    lda #ERR_UNDEFINED_FUNCTION
-    sec
+    jsr __program_stream_probe
+    bcs @error
+    jmp __program_stream_select_save_format
+@error:
     rts
 
+; Classify on-disk image: A=0 V2 ($0801), A=1 C2P1, A=2 Plus/4 ($1001).
+; Note: file-class ids differ from SAVE_FORMAT_* (select uses C2 > 3.5 > V2).
 __program_stream_classify:
     jsr __program_stream_load_start
     lda program_stream_length+1
@@ -958,12 +1073,21 @@ __program_stream_classify:
     lda $DE00
     cmp #'C'
     beq @extended
+    ; Both V2 and Plus/4 PRG headers begin with $01.
     cmp #$01
     bne @error
     lda $DE01
-    cmp #$08
-    bne @error
+    cmp #STOCK_BASICV2_LOAD_HI
+    beq @v2
+    cmp #STOCK_BASICV35_LOAD_HI
+    beq @plus4
+    jmp @error
+@v2:
     lda #$00
+    clc
+    rts
+@plus4:
+    lda #$02
     clc
     rts
 @extended:
@@ -991,7 +1115,7 @@ __program_stream_classify:
     jmp __program_stream_read
 .endproc
 
-; Validate the stock linked-line stream without changing it.
+; Validate the linked-line stream for the active load base without changing it.
 .proc __program_stream_validate_stock
     jsr __program_stream_load_start
     lda program_stream_length+1
@@ -1004,13 +1128,13 @@ __program_stream_classify:
     ldx #$00
     jsr __program_stream_read_ax
     jcs @error
-    cmp #$01
+    cmp program_codec_load_lo
     jne @error
     lda #$01
     ldx #$00
     jsr __program_stream_read_ax
     jcs @error
-    cmp #$08
+    cmp program_codec_load_hi
     jne @error
     lda #$00
     sta program_stream_prev_line
@@ -1082,13 +1206,13 @@ __program_stream_classify:
     jsr __program_stream_inc_index
     cmp #$00
     bne @body
-    ; Expected pointer is $0801 + (next stream offset - 2) = $07ff + offset.
+    ; Expected pointer is load + (next stream offset - 2) = (load-2) + offset.
     clc
     lda program_stream_index
     adc #$FF
     sta program_stream_scan
     lda program_stream_index+1
-    adc #$07
+    adc program_codec_link_base_hi
     sta program_stream_scan+1
     lda program_stream_scan
     cmp program_stream_link
@@ -1102,6 +1226,194 @@ __program_stream_classify:
     sec
     rts
 .endproc
+
+; Classify a token byte in A for SAVE format selection.
+; Sets SAVE_FLAG_C2 / SAVE_FLAG_BASIC35 in program_codec_save_flags.
+.proc __program_codec_classify_token
+    cmp #TOKEN_C2_COMPILE
+    beq @c2
+    cmp #TOKEN_C2_QUIT
+    beq @c2
+    cmp #TOKEN_C2_BASIC
+    beq @c2
+    cmp #TOKEN_C2_PREFIX
+    beq @c2
+    cmp #TOKEN_STOCK_MAX
+    bcc @stock
+    beq @stock
+    ; Token above stock V2 range and not C2-only → BASIC 3.5 / Plus/4.
+    lda program_codec_save_flags
+    ora #SAVE_FLAG_BASIC35
+    sta program_codec_save_flags
+    rts
+@c2:
+    lda program_codec_save_flags
+    ora #SAVE_FLAG_C2
+    sta program_codec_save_flags
+@stock:
+    rts
+.endproc
+
+; Scan normalized logical program for SAVE format class.
+__program_stream_select_save_format:
+    jsr __program_stream_load_start
+    lda #$00
+    sta program_codec_save_flags
+    sta program_stream_index
+    sta program_stream_index+1
+@line:
+    jsr __program_stream_index_before_length
+    jcs @done_error
+    jsr __program_stream_read
+    jcs @done_error
+    sta program_stream_record_length
+    jsr __program_stream_inc_index
+    jsr __program_stream_index_before_length
+    jcs @done_error
+    jsr __program_stream_read
+    jcs @done_error
+    sta program_stream_record_length+1
+    jsr __program_stream_inc_index
+    ora program_stream_record_length
+    bne @record
+    ; Terminal zero-length record must consume the stream exactly.
+    lda program_stream_index
+    cmp program_stream_length
+    jne @done_error
+    lda program_stream_index+1
+    cmp program_stream_length+1
+    jne @done_error
+    jmp @finish
+@record:
+    ; Skip line number.
+    jsr __program_stream_index_before_length
+    jcs @done_error
+    jsr __program_stream_inc_index
+    jsr __program_stream_index_before_length
+    jcs @done_error
+    jsr __program_stream_inc_index
+    ; Remaining body bytes after line number = record_length - 2.
+    sec
+    lda program_stream_record_length
+    sbc #$02
+    sta program_stream_scan
+    lda program_stream_record_length+1
+    sbc #$00
+    sta program_stream_scan+1
+    jcc @done_error
+    lda #SCAN_MODE_NORMAL
+    sta program_codec_scan_mode
+@body:
+    lda program_stream_scan
+    ora program_stream_scan+1
+    bne @body_more
+    jmp @line
+@body_more:
+    jsr __program_stream_index_before_length
+    jcs @done_error
+    jsr __program_stream_read
+    jcs @done_error
+    sta program_stream_value
+    jsr __program_stream_inc_index
+    ; Decrement remaining body counter.
+    lda program_stream_scan
+    bne @dec_lo
+    dec program_stream_scan+1
+@dec_lo:
+    dec program_stream_scan
+    lda program_codec_scan_mode
+    cmp #SCAN_MODE_REM
+    bne @not_rem_mode
+    jmp @body
+@not_rem_mode:
+    cmp #SCAN_MODE_STRING
+    beq @in_string
+    cmp #SCAN_MODE_DATA_STRING
+    beq @in_data_string
+    cmp #SCAN_MODE_DATA
+    beq @in_data
+    ; NORMAL
+    lda program_stream_value
+    cmp #'"'
+    bne @not_quote
+    lda #SCAN_MODE_STRING
+    sta program_codec_scan_mode
+    jmp @body
+@not_quote:
+    cmp #TOKEN_REM
+    bne @not_rem
+    lda #SCAN_MODE_REM
+    sta program_codec_scan_mode
+    jmp @body
+@not_rem:
+    cmp #TOKEN_DATA
+    bne @not_data
+    lda #SCAN_MODE_DATA
+    sta program_codec_scan_mode
+    jmp @body
+@not_data:
+    cmp #$80
+    bcs @token
+    jmp @body
+@token:
+    jsr __program_codec_classify_token
+    ; Early exit if C2-only already found.
+    lda program_codec_save_flags
+    and #SAVE_FLAG_C2
+    bne @finish
+    jmp @body
+@in_string:
+    lda program_stream_value
+    cmp #'"'
+    bne @string_cont
+    lda #SCAN_MODE_NORMAL
+    sta program_codec_scan_mode
+@string_cont:
+    jmp @body
+@in_data_string:
+    lda program_stream_value
+    cmp #'"'
+    bne @data_string_cont
+    lda #SCAN_MODE_DATA
+    sta program_codec_scan_mode
+@data_string_cont:
+    jmp @body
+@in_data:
+    lda program_stream_value
+    cmp #'"'
+    bne @data_colon
+    lda #SCAN_MODE_DATA_STRING
+    sta program_codec_scan_mode
+    jmp @body
+@data_colon:
+    cmp #':'
+    bne @data_cont
+    lda #SCAN_MODE_NORMAL
+    sta program_codec_scan_mode
+@data_cont:
+    jmp @body
+@finish:
+    lda program_codec_save_flags
+    and #SAVE_FLAG_C2
+    beq @check_35
+    lda #SAVE_FORMAT_C2P1
+    clc
+    rts
+@check_35:
+    lda program_codec_save_flags
+    and #SAVE_FLAG_BASIC35
+    beq @v2
+    lda #SAVE_FORMAT_BASICV35
+    clc
+    rts
+@v2:
+    lda #SAVE_FORMAT_V2
+    clc
+    rts
+@done_error:
+    lda #ERR_SYNTAX
+    sec
+    rts
 
 ; Move [source,length) to destination zero, where source is A (0, 2, or 16).
 .proc __program_stream_shift_left

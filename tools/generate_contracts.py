@@ -49,10 +49,14 @@ def _abbreviation_minima(commands: list[dict[str, object]]) -> dict[str, int]:
 def _token_byte(command: dict[str, object]) -> int:
     """Return the primary token byte for a command entry."""
     if "token_val" in command:
-        return int(command["token_val"])  # type: ignore[arg-type]
+        token_value = command["token_val"]
+        if isinstance(token_value, int):
+            return token_value
     token_bytes = command.get("token_bytes")
     if isinstance(token_bytes, list) and token_bytes:
-        return int(token_bytes[0])
+        token_value = token_bytes[0]
+        if isinstance(token_value, int):
+            return token_value
     raise KeyError(f"command {command.get('keyword')!r} lacks token_val/token_bytes")
 
 
@@ -79,11 +83,7 @@ def generate_command_tables(commands_path: str, output_dir: str) -> None:
     commands = data.get("commands", [])
     # Letter-led keywords feed the first-character trie; operators/punctuation
     # still emit token symbols but are matched by dedicated scanner paths.
-    letter_commands = [
-        c
-        for c in commands
-        if str(c["keyword"])[:1].upper().isalpha()
-    ]
+    letter_commands = [c for c in commands if str(c["keyword"])[:1].upper().isalpha()]
     minima = _abbreviation_minima(letter_commands)
     sorted_commands = sorted(
         letter_commands,
@@ -178,9 +178,7 @@ def generate_command_tables(commands_path: str, output_dir: str) -> None:
     inc_lines.append("keyword_modes:")
     for command in sorted_commands:
         modes = command.get("modes", [])
-        mode_mask = (1 if "program" in modes else 0) | (
-            2 if "direct" in modes else 0
-        )
+        mode_mask = (1 if "program" in modes else 0) | (2 if "direct" in modes else 0)
         inc_lines.append(f"    .byte {mode_mask}")
     inc_lines.append("")
     for idx, command in enumerate(sorted_commands):
@@ -192,6 +190,15 @@ def generate_command_tables(commands_path: str, output_dir: str) -> None:
         os.path.join(output_dir, "keyword_lookup.inc"), "w", encoding="utf-8"
     ) as f:
         f.write("\n".join(inc_lines) + "\n")
+    with open(
+        os.path.join(output_dir, "keyword_constants.inc"), "w", encoding="utf-8"
+    ) as f:
+        constants = [
+            line
+            for line in inc_lines[: inc_lines.index('.segment "GEOASM"')]
+            if not line.startswith(".export")
+        ]
+        f.write("\n".join(constants) + "\n")
 
 
 def generate_runtime_abi(abi_path: str, output_dir: str) -> None:
@@ -319,10 +326,29 @@ def generate_format_tables(formats_path: str, output_dir: str) -> None:
     ]
 
     stock = formats.get("stock_basicv2", {})
-    inc_lines.append(
-        f"STOCK_BASICV2_LOAD_ADDR = {stock.get('default_load_address', 2049)}"
-    )
+    stock_load = int(stock.get("default_load_address", 2049))
+    stock_bytes = stock.get("load_address_bytes", [stock_load & 0xFF, stock_load >> 8])
+    inc_lines.append(f"STOCK_BASICV2_LOAD_ADDR = {stock_load}")
+    inc_lines.append(f"STOCK_BASICV2_LOAD_LO = {int(stock_bytes[0])}")
+    inc_lines.append(f"STOCK_BASICV2_LOAD_HI = {int(stock_bytes[1])}")
     inc_lines.append(f"STOCK_BASICV2_MAX_LINE = {stock.get('max_line_length', 80)}")
+
+    basic35 = formats.get("stock_basicv35", {})
+    basic35_load = int(basic35.get("default_load_address", 4097))
+    basic35_bytes = basic35.get(
+        "load_address_bytes", [basic35_load & 0xFF, basic35_load >> 8]
+    )
+    inc_lines.append(f"STOCK_BASICV35_LOAD_ADDR = {basic35_load}")
+    inc_lines.append(f"STOCK_BASICV35_LOAD_LO = {int(basic35_bytes[0])}")
+    inc_lines.append(f"STOCK_BASICV35_LOAD_HI = {int(basic35_bytes[1])}")
+    inc_lines.append(
+        f"STOCK_BASICV35_MAX_LINE = {basic35.get('max_line_length', 80)}"
+    )
+
+    save_ids = data.get("save_format_ids", {})
+    inc_lines.append(f"SAVE_FORMAT_V2 = {int(save_ids.get('v2', 0))}")
+    inc_lines.append(f"SAVE_FORMAT_BASICV35 = {int(save_ids.get('basicv35', 1))}")
+    inc_lines.append(f"SAVE_FORMAT_C2P1 = {int(save_ids.get('c2p1', 2))}")
 
     extended = formats.get("extended_c2p1", {})
     magic = extended.get("magic_bytes", [67, 50, 80, 49])

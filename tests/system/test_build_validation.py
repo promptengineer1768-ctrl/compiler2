@@ -5,6 +5,7 @@ Tests verify toolchain versions, manifest schemas, and cross-artifact consistenc
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -117,6 +118,22 @@ class TestBuildArtifacts:
         if not path.exists():
             pytest.skip("build/routine_directory.json not found")
         assert path.exists()
+
+    def test_manifest_records_toolchain_and_reference_checksums(self) -> None:
+        """The final manifest binds tool versions and generated references."""
+        manifest = json.loads(
+            (ROOT / "build" / "build_manifest.json").read_text(encoding="utf-8")
+        )
+
+        toolchain = manifest["toolchain"]
+        assert "V2.19" in toolchain["ca65"]["version"]
+        assert "V2.19" in toolchain["ld65"]["version"]
+
+        artifacts = manifest["artifacts"]
+        for name in ("API.md", "MAP.md"):
+            payload = (ROOT / "build" / name).read_bytes()
+            assert artifacts[name]["size"] == len(payload)
+            assert artifacts[name]["sha256"] == hashlib.sha256(payload).hexdigest()
 
 
 @pytest.mark.system

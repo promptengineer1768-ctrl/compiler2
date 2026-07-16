@@ -24,11 +24,14 @@ KIND_INT = 1
 KIND_STRING = 3
 ARRAY_ARENA = 4
 ARENA_GENERATION = 1
-DESCRIPTOR = 0xC000
-REQUEST = 0xC100
-SOURCE_SD = 0xC200
-RESULT_SD = 0xC220
-SECOND_SD = 0xC240
+# Keep test records below the linked image at $0801.  The production image can
+# legitimately grow through $CFFF, so $C000 scratch records would overwrite the
+# string and variable routines that these tests execute.
+DESCRIPTOR = 0x0500
+REQUEST = 0x0520
+SOURCE_SD = 0x0540
+RESULT_SD = 0x0560
+SECOND_SD = 0x0580
 
 
 def _artifact_root() -> Path:

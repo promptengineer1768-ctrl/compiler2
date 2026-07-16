@@ -3,7 +3,7 @@
 ;
 ; Public entries take X/Y = zero-terminated source text.  They return C clear
 ; after consuming the complete requested production, or C set after discarding
-; all partial IR.  Expressions emit operands followed by IR_EXPR operators.
+; the IR stream.  Expressions emit operands followed by IR_EXPR operators.
 ; Zero-page read/write: zp_tmp1 (through tokenizer)
 ; Clobbers: A, X, Y
 
@@ -234,6 +234,8 @@ parse_for:
     jne _parse_error
     jsr _parse_for_after_keyword
     jcs _parse_error
+    lda #STMT_FOR
+    sta parse_last_stmt
     lda parse_token
     jne _parse_error
     lda #NODE_STATEMENT
@@ -312,6 +314,10 @@ _parse_statement_current:
     jmp ir_emit_stmt
 @for:
     jsr _parse_for_after_keyword
+    bcs @for_done
+    lda #STMT_FOR
+    sta parse_last_stmt
+@for_done:
     rts
 @gosub:
     jsr _parse_gosub_after_keyword
@@ -322,8 +328,6 @@ _parse_for_after_keyword:
     bcs @bad
     lda parse_token
     cmp #TOKEN_IDENTIFIER
-    bne @bad
-    lda token_keyword_id
     bne @bad
     jsr _parse_identifier_valid
     bcs @bad
@@ -355,8 +359,6 @@ _parse_for_after_keyword:
     jsr _parse_comparison_current
     bcs @bad
 @no_step:
-    lda #STMT_FOR
-    sta parse_last_stmt
     lda #STMT_FOR
     ldx parse_saved_start
     ldy parse_saved_len
@@ -644,8 +646,6 @@ _parse_named_call_current:
     lda parse_token
     cmp #TOKEN_IDENTIFIER
     bne @bad
-    lda token_keyword_id
-    bne @bad
     jsr _parse_identifier_valid
     bcs @bad
     jsr _parse_save_span
@@ -762,8 +762,6 @@ _parse_word2:
     lda parse_token
     cmp #TOKEN_IDENTIFIER
     bne @bad
-    lda token_keyword_id
-    bne @bad
     lda token_last_len
     cmp #2
     bne @bad
@@ -786,8 +784,6 @@ _parse_word_step:
     sty parse_word_char2
     lda parse_token
     cmp #TOKEN_IDENTIFIER
-    bne @bad
-    lda token_keyword_id
     bne @bad
     lda token_last_len
     cmp #4

@@ -1,23 +1,427 @@
 {
-  "manifest_version": "1.0",
-  "description": "EARS traceability records mapping requirements to design and tests",
+  "manifest_version": "2.0",
+  "description": "Section-level EARS traceability from normative requirements to design, implementation, and test nodes",
+  "requirement_sources": [
+    "REQUIREMENTS.md",
+    "REU_REQUIREMENTS.md"
+  ],
   "records": [
     {
-      "id": "R0.1-BUILD-BOOTSTRAP",
-      "ears": "The system shall provide a canonical entry point build.ps1 to execute the entire build pipeline checked through tools.",
-      "source_section": "REQUIREMENTS.md#section-build-system",
-      "design_section": "docs/BUILD.md#canonical-entry-point",
-      "implementation": "build.ps1",
-      "tests": ["test_validate_build_contracts"],
+      "id": "R2",
+      "ears": "The system shall provide the Compiler 2 product, installation path, and interactive environment defined by the product requirements.",
+      "source_section": "REQUIREMENTS.md#2",
+      "design_section": "DESIGN2.md",
+      "implementation": "src/geoasm/loader_core.asm",
+      "tests": ["test_loader", "test_loader_core"],
       "status": "planned"
     },
     {
-      "id": "R1.0-COMPATIBILITY-LIMITS",
-      "ears": "The system shall enforce stock Commodore BASIC V2 compatibility limits for line numbers, variables, strings, files, and devices.",
-      "source_section": "REQUIREMENTS.md#section-compatibility",
+      "id": "R2.1",
+      "ears": "When the Phase 1 product is installed, the system shall enter the resident editor through the production loader path.",
+      "source_section": "REQUIREMENTS.md#2.1",
+      "design_section": "docs/EDITOR.md",
+      "implementation": "src/resident/resident_main.asm",
+      "tests": ["test_resident_main", "test_loader_smoke"],
+      "status": "planned"
+    },
+    {
+      "id": "R3",
+      "ears": "The system shall implement the documented BASIC language profiles with stock-compatible semantics where compatibility is required.",
+      "source_section": "REQUIREMENTS.md#3",
+      "design_section": "DESIGN2.md",
+      "implementation": "src/geoasm/compiler_pipeline.asm",
+      "tests": ["test_e2e_basicv2_functions", "test_e2e_basicv35_functions"],
+      "status": "planned"
+    },
+    {
+      "id": "R3.1",
+      "ears": "When BASIC V2 syntax is executed, the system shall match the documented stock BASIC V2 behavior and compatibility limits.",
+      "source_section": "REQUIREMENTS.md#3.1",
       "design_section": "docs/BASIC_COMPATIBILITY_LIMITS.md",
-      "implementation": "tests/e2e/cases/basicv2_limits.yaml",
-      "tests": ["test_e2e_coverage_limits"],
+      "implementation": "src/geoasm/direct_dispatch.asm",
+      "tests": ["test_e2e_basicv2_functions", "test_e2e_basicv2_statements", "test_basicv2_limit_manifest"],
+      "reference_fixture_provenance": "tests/fixtures/reference/c64_basicv2",
+      "status": "planned"
+    },
+    {
+      "id": "R3.2",
+      "ears": "Where a BASIC V3.5 extension is implemented, the system shall match the documented Plus/4 BASIC V3.5 behavior.",
+      "source_section": "REQUIREMENTS.md#3.2",
+      "design_section": "docs/CANONICAL_TESTS.md",
+      "implementation": "src/geoasm/direct_dispatch.asm",
+      "tests": ["test_e2e_basicv35_functions", "test_e2e_basicv35_statements"],
+      "reference_fixture_provenance": "tests/fixtures/reference/plus4_basicv35",
+      "status": "planned"
+    },
+    {
+      "id": "R3.3",
+      "ears": "When a stock semantic result is asserted, the system shall derive it from an immutable versioned oracle fixture.",
+      "source_section": "REQUIREMENTS.md#3.3",
+      "design_section": "docs/CANONICAL_TESTS.md",
+      "implementation": "tests/fixtures/reference",
+      "tests": ["test_reference_fixtures"],
+      "reference_fixture_provenance": "tests/fixtures/reference",
+      "status": "passing"
+    },
+    {
+      "id": "R4",
+      "ears": "When input is entered in direct or program mode, the system shall dispatch it according to the documented mode contract.",
+      "source_section": "REQUIREMENTS.md#4",
+      "design_section": "docs/COMPILER_ARCHITECTURE.md",
+      "implementation": "src/geoasm/direct_dispatch.asm",
+      "tests": ["test_direct_dispatch", "test_program_lifecycle"],
+      "status": "planned"
+    },
+    {
+      "id": "R5",
+      "ears": "When a tokenized program is loaded, stored, or saved, the system shall preserve the documented Commodore program format.",
+      "source_section": "REQUIREMENTS.md#5",
+      "design_section": "DESIGN2.md",
+      "implementation": "src/geoasm/program_codec.asm",
+      "tests": ["test_program_codec", "test_program_lifecycle"],
+      "status": "planned"
+    },
+    {
+      "id": "R6",
+      "ears": "When a program is compiled and run, the system shall execute the documented compiler and runtime production pipeline.",
+      "source_section": "REQUIREMENTS.md#6",
+      "design_section": "docs/COMPILER_ARCHITECTURE.md",
+      "implementation": "src/geoasm/compiler_pipeline.asm",
+      "tests": ["test_compiler_pipeline"],
+      "status": "planned"
+    },
+    {
+      "id": "R6.1",
+      "ears": "When a stored program changes, the system shall incrementally rebuild the affected compiled state according to the generation contract.",
+      "source_section": "REQUIREMENTS.md#6.1",
+      "design_section": "docs/COMPILER_ARCHITECTURE.md",
+      "implementation": "src/geoasm/incremental.asm",
+      "tests": ["test_incremental", "test_incremental_compile"],
+      "status": "planned"
+    },
+    {
+      "id": "R6.2",
+      "ears": "When COMPILE exports a program, the system shall produce the documented standalone source-free artifact or report a defined error.",
+      "source_section": "REQUIREMENTS.md#6.2",
+      "design_section": "docs/COMPILE_EXPORT.md",
+      "implementation": "src/geoasm/compile_export.asm",
+      "tests": ["test_compile_export"],
+      "status": "planned"
+    },
+    {
+      "id": "R7",
+      "ears": "The system shall manage compiler and runtime memory through the documented arenas, handles, and lifetime rules.",
+      "source_section": "REQUIREMENTS.md#7",
+      "design_section": "DESIGN2.md",
+      "implementation": "src/arena/arena_core.asm",
+      "tests": ["test_arena_core"],
+      "status": "planned"
+    },
+    {
+      "id": "R7.1",
+      "ears": "When the production image is linked, the system shall conform to the nominal CPU memory map.",
+      "source_section": "REQUIREMENTS.md#7.1",
+      "design_section": "docs/MEMORY_BUDGETS.md",
+      "implementation": "src/resident/resident_main.asm",
+      "tests": ["test_system_memory_map"],
+      "status": "planned"
+    },
+    {
+      "id": "R7.2",
+      "ears": "When graphics modes are used, the system shall preserve the documented graphics memory ownership and layout.",
+      "source_section": "REQUIREMENTS.md#7.2",
+      "design_section": "docs/GRAPHICS_MEMORY.md",
+      "implementation": "src/geoasm/graphics.asm",
+      "tests": ["test_graphics"],
+      "status": "planned"
+    },
+    {
+      "id": "R7.3",
+      "ears": "When an artifact is built, the system shall reject any hard memory budget overflow.",
+      "source_section": "REQUIREMENTS.md#7.3",
+      "design_section": "docs/MEMORY_BUDGETS.md",
+      "implementation": "tools/validate_build.py",
+      "tests": ["test_size_budget"],
+      "status": "planned"
+    },
+    {
+      "id": "R8",
+      "ears": "Where geoRAM or REU expansion memory is available, the system shall use the documented device profile without changing language semantics.",
+      "source_section": "REQUIREMENTS.md#8",
+      "design_section": "REU_DESIGN.md",
+      "implementation": "src/arena/georam_detect.asm",
+      "tests": ["test_georam_detect", "test_binary_artifacts"],
+      "status": "planned"
+    },
+    {
+      "id": "R8.1",
+      "ears": "When expansion hardware is detected, the system shall apply the common dual-device selection, ownership, and fallback rules.",
+      "source_section": "REQUIREMENTS.md#8.1",
+      "design_section": "REU_DESIGN.md",
+      "implementation": "src/arena/georam_detect.asm",
+      "tests": ["test_georam_detect", "test_georam_gate"],
+      "status": "planned"
+    },
+    {
+      "id": "R8.1.1",
+      "ears": "When expansion detection completes, the system shall publish one canonical expansion profile record.",
+      "source_section": "REQUIREMENTS.md#8.1.1",
+      "design_section": "REU_DESIGN.md",
+      "implementation": "src/arena/georam_detect.asm",
+      "tests": ["test_georam_detect"],
+      "status": "planned"
+    },
+    {
+      "id": "R8.1.2",
+      "ears": "When a DMA operation is requested, the system shall classify its CPU range before selecting a device transfer path.",
+      "source_section": "REQUIREMENTS.md#8.1.2",
+      "design_section": "REU_DESIGN.md",
+      "implementation": "src/arena/overlay_dispatch.asm",
+      "tests": ["test_overlay"],
+      "status": "planned"
+    },
+    {
+      "id": "R8.2",
+      "ears": "When memory is copied through an expansion backend, the system shall obey the shared memcopy policy.",
+      "source_section": "REQUIREMENTS.md#8.2",
+      "design_section": "REU_DESIGN.md",
+      "implementation": "src/arena/arena_core.asm",
+      "tests": ["test_arena_core", "test_georam_cycle"],
+      "status": "planned"
+    },
+    {
+      "id": "R8.2.1",
+      "ears": "When expansion memory is filled, the system shall obey the shared memfill policy.",
+      "source_section": "REQUIREMENTS.md#8.2.1",
+      "design_section": "REU_DESIGN.md",
+      "implementation": "src/arena/arena_core.asm",
+      "tests": ["test_arena_core"],
+      "status": "planned"
+    },
+    {
+      "id": "R8.3",
+      "ears": "Where geoRAM is selected, the system shall access it through the guarded geoRAM backend contract.",
+      "source_section": "REQUIREMENTS.md#8.3",
+      "design_section": "docs/GEORAM_BANKING.md",
+      "implementation": "src/resident/georam_gate.asm",
+      "tests": ["test_georam_gate", "test_georam_cycle"],
+      "status": "planned"
+    },
+    {
+      "id": "R8.4",
+      "ears": "Where REU is selected, the system shall execute page-buffer overlays through the documented REU backend.",
+      "source_section": "REQUIREMENTS.md#8.4",
+      "design_section": "REU_DESIGN.md",
+      "implementation": "src/arena/overlay_dispatch.asm",
+      "tests": ["test_overlay", "test_binary_artifacts"],
+      "status": "planned"
+    },
+    {
+      "id": "R8.5",
+      "ears": "If expansion assistance degrades or changes, the system shall re-detect safely and retain the defined minimal editor behavior.",
+      "source_section": "REQUIREMENTS.md#8.5",
+      "design_section": "REU_DESIGN.md",
+      "implementation": "src/arena/georam_detect.asm",
+      "tests": ["test_georam_detect", "test_resident_main"],
+      "status": "planned"
+    },
+    {
+      "id": "R9",
+      "ears": "When the editor and runtime handle interrupts, the system shall preserve machine state and meet the documented responsiveness contract.",
+      "source_section": "REQUIREMENTS.md#9",
+      "design_section": "docs/EDITOR.md",
+      "implementation": "src/resident/irq.asm",
+      "tests": ["test_irq", "test_screen", "test_editor_svc"],
+      "status": "planned"
+    },
+    {
+      "id": "R10",
+      "ears": "When the compiler invokes KERNAL services, the system shall preserve the documented ABI, device state, and banking rules.",
+      "source_section": "REQUIREMENTS.md#10",
+      "design_section": "docs/KERNAL_ABI.md",
+      "implementation": "src/resident/kernal_bridge.asm",
+      "tests": ["test_kernal_bridge"],
+      "status": "planned"
+    },
+    {
+      "id": "R11",
+      "ears": "When optimization is enabled, the system shall preserve observable program semantics and obey the documented optimization limits.",
+      "source_section": "REQUIREMENTS.md#11",
+      "design_section": "docs/LOOP_OPTIMIZATION.md",
+      "implementation": "src/geoasm/optimizer.asm",
+      "tests": ["test_optimizer", "test_control"],
+      "status": "planned"
+    },
+    {
+      "id": "R12",
+      "ears": "If a recoverable or fatal error occurs, the system shall expose deterministic diagnostics and preserve the documented recovery behavior.",
+      "source_section": "REQUIREMENTS.md#12",
+      "design_section": "DESIGN2.md",
+      "implementation": "src/geoasm/diagnostics.asm",
+      "tests": ["test_diagnostics", "test_fatal"],
+      "status": "planned"
+    },
+    {
+      "id": "R12.1",
+      "ears": "When the project is built, the system shall use the pinned toolchain and emit validated reproducible contracts and artifacts.",
+      "source_section": "REQUIREMENTS.md#12.1",
+      "design_section": "docs/BUILD.md",
+      "implementation": "build.ps1",
+      "tests": ["test_build_validation", "test_validate_build"],
+      "status": "passing"
+    },
+    {
+      "id": "R13",
+      "ears": "When behavior is verified, the system shall use the documented unit, integration, functional, system, E2E, and hardware test hierarchy.",
+      "source_section": "REQUIREMENTS.md#13",
+      "design_section": "docs/TESTING.md",
+      "implementation": "tests",
+      "tests": ["test_smoke_selection", "test_test_harness"],
+      "status": "passing"
+    },
+    {
+      "id": "R13.1",
+      "ears": "When a critical language behavior is implemented, the system shall cover it in the required BASIC profile and execution modes.",
+      "source_section": "REQUIREMENTS.md#13.1",
+      "design_section": "docs/TESTING.md",
+      "implementation": "tests/e2e",
+      "tests": ["test_e2e_coverage", "test_e2e_basicv2_functions", "test_e2e_basicv2_statements"],
+      "status": "planned"
+    },
+    {
+      "id": "R13.2",
+      "ears": "When stock semantics are asserted, the system shall retain versioned reference inputs, outputs, ROM checksums, and normalization metadata.",
+      "source_section": "REQUIREMENTS.md#13.2",
+      "design_section": "docs/CANONICAL_TESTS.md",
+      "implementation": "tests/fixtures/reference",
+      "tests": ["test_reference_fixtures"],
+      "reference_fixture_provenance": "tests/fixtures/reference",
+      "status": "passing"
+    },
+    {
+      "id": "R14",
+      "ears": "When requirements or their verification change, the system shall regenerate and validate complete bidirectional traceability artifacts.",
+      "source_section": "REQUIREMENTS.md#14",
+      "design_section": "docs/TRACEABILITY.md",
+      "implementation": "manifests/traceability.json",
+      "tests": ["test_traceability", "test_test_harness"],
+      "status": "passing"
+    },
+    {
+      "id": "RREU-1",
+      "ears": "Where the REU product profile is built, the system shall preserve the documented Compiler 2 compatibility contract.",
+      "source_section": "REU_REQUIREMENTS.md#RREU-1",
+      "design_section": "REU_DESIGN.md",
+      "implementation": "build.ps1",
+      "tests": ["test_binary_artifacts"],
+      "status": "planned"
+    },
+    {
+      "id": "RREU-2",
+      "ears": "When REU hardware is detected, the system shall report and use only supported capacity and device capabilities.",
+      "source_section": "REU_REQUIREMENTS.md#RREU-2",
+      "design_section": "REU_DESIGN.md",
+      "implementation": "src/arena/georam_detect.asm",
+      "tests": ["test_georam_detect"],
+      "status": "planned"
+    },
+    {
+      "id": "RREU-3",
+      "ears": "When the REU performs DMA, the system shall program the REC and transfer ranges according to the documented contract.",
+      "source_section": "REU_REQUIREMENTS.md#RREU-3",
+      "design_section": "REU_DESIGN.md",
+      "implementation": "src/arena/arena_core.asm",
+      "tests": ["test_arena_core"],
+      "status": "planned"
+    },
+    {
+      "id": "RREU-4",
+      "ears": "When installing REU support, the system shall detect the device without destructively modifying user-visible memory.",
+      "source_section": "REU_REQUIREMENTS.md#RREU-4",
+      "design_section": "REU_DESIGN.md",
+      "implementation": "src/arena/georam_detect.asm",
+      "tests": ["test_georam_detect"],
+      "status": "planned"
+    },
+    {
+      "id": "RREU-5",
+      "ears": "When an REU overlay is invoked, the system shall execute it from normal RAM through the documented overlay boundary.",
+      "source_section": "REU_REQUIREMENTS.md#RREU-5",
+      "design_section": "REU_DESIGN.md",
+      "implementation": "src/arena/overlay_dispatch.asm",
+      "tests": ["test_overlay"],
+      "status": "planned"
+    },
+    {
+      "id": "RREU-6",
+      "ears": "When data moves between CPU and REU memory, the system shall preserve arena handle and transfer invariants.",
+      "source_section": "REU_REQUIREMENTS.md#RREU-6",
+      "design_section": "REU_DESIGN.md",
+      "implementation": "src/arena/arena_core.asm",
+      "tests": ["test_arena_core"],
+      "status": "planned"
+    },
+    {
+      "id": "RREU-7",
+      "ears": "When strings or cached data reside in REU memory, the system shall preserve their documented lifetime and access semantics.",
+      "source_section": "REU_REQUIREMENTS.md#RREU-7",
+      "design_section": "REU_DESIGN.md",
+      "implementation": "src/runtime/strings.asm",
+      "tests": ["test_strings"],
+      "status": "planned"
+    },
+    {
+      "id": "RREU-8",
+      "ears": "When REU operations interact with CPU mapping or interrupts, the system shall preserve responsiveness and machine state.",
+      "source_section": "REU_REQUIREMENTS.md#RREU-8",
+      "design_section": "REU_DESIGN.md",
+      "implementation": "src/resident/irq.asm",
+      "tests": ["test_irq"],
+      "status": "planned"
+    },
+    {
+      "id": "RREU-9",
+      "ears": "When the REU edition is packaged, the system shall emit a loader and images that match the generated layout contracts.",
+      "source_section": "REU_REQUIREMENTS.md#RREU-9",
+      "design_section": "REU_DESIGN.md",
+      "implementation": "build.ps1",
+      "tests": ["test_binary_artifacts"],
+      "status": "planned"
+    },
+    {
+      "id": "RREU-10",
+      "ears": "When REU contracts are generated, the system shall validate their addresses, sizes, versions, and checksums against the built artifacts.",
+      "source_section": "REU_REQUIREMENTS.md#RREU-10",
+      "design_section": "docs/BUILD.md",
+      "implementation": "tools/generate_contracts.py",
+      "tests": ["test_generate_contracts"],
+      "status": "planned"
+    },
+    {
+      "id": "RREU-11",
+      "ears": "If REU detection or transfer fails, the system shall report deterministic diagnostics and recover according to the documented policy.",
+      "source_section": "REU_REQUIREMENTS.md#RREU-11",
+      "design_section": "REU_DESIGN.md",
+      "implementation": "src/resident/fatal.asm",
+      "tests": ["test_fatal"],
+      "status": "planned"
+    },
+    {
+      "id": "RREU-12",
+      "ears": "When REU support is accepted, the system shall pass the required unit, integration, system, and hardware verification layers.",
+      "source_section": "REU_REQUIREMENTS.md#RREU-12",
+      "design_section": "docs/TESTING.md",
+      "implementation": "tests/hardware",
+      "tests": ["test_binary_artifacts", "test_irq"],
+      "status": "planned"
+    },
+    {
+      "id": "RREU-13",
+      "ears": "When the REU edition reaches its acceptance gate, the system shall satisfy every recorded requirement and verification obligation.",
+      "source_section": "REU_REQUIREMENTS.md#RREU-13",
+      "design_section": "docs/TRACEABILITY.md",
+      "implementation": "manifests/traceability.json",
+      "tests": ["test_traceability"],
       "status": "planned"
     }
   ]

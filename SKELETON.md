@@ -13,27 +13,28 @@ not duplicate generated values as if they were current output.
 
 ## 0. Validation Status
 
-### 0.1 Design-audit demotions (2026-07-09)
+### 0.1 Design-audit demotions (2026-07-09) and re-implementation (2026-07-15)
 
 After the dual-device / QUIT / SAVE-token / COMPILE-layout design lock, production
 code was audited against `REQUIREMENTS.md` and `DESIGN2.md`. Modules that
-claimed completeness under an older model were **reverted to SKELETON** (honest
-`ERR_UNDEFINED_FUNCTION` / documented partial status) so the next
-implementation pass cannot treat them as done.
+claimed completeness under an older model were **reverted to SKELETON**, then
+re-implemented on 2026-07-15 for Phases 2–6 (non-VICE). Later-phase items remain
+open.
 
-| Design delta | Production state after demotion |
+| Design delta | Production state (2026-07-15) |
 |---|---|
-| Dual geoRAM+REU store/XIP/assist | **Missing** — no REU modules; gate is geoRAM-window only (PARTIAL) |
-| QUIT soft-reset + fingerprint skip-reload | **SKELETON** (`direct_execute_command`, `loader_entry`) |
-| NMI RESTORE distrust | **SKELETON** (`nmi_entry`, `compiler_vectors`) |
-| SAVE by tokens / VERIFY = SAVE bytes | **SKELETON** (`rio_save`/`rio_verify`, extended codec, format select) |
-| COMPILE soft 80/100 + dual `$CE00` layout | **SKELETON** (`export_compile_command`, `export_check_budgets`) |
-| 512 KiB hard build fail | **Partial** — `validate_georam_image_budget` hard-fails from size report |
-| FRE profile-aware / narrow POKE | **PARTIAL/SKELETON** (`const_fre_bytes`; `system_poke` narrowed, `$CE00` still missing) |
-| Minimal editor (error+QUIT) | **Missing** (`resident_main` PARTIAL) |
-| Compressor / CGS1 decompress success no-ops | **SKELETON** (`compressor.asm`, `loader_decompression`) |
+| Dual geoRAM+REU store/XIP/assist | **Done** — geoRAM + REU non-destructive detect; dual probe prefers geoRAM; `reu_xip_active` flag (default 0) |
+| QUIT soft-reset | **Done** — `quit_to_stock` via `direct_execute_command` / degraded editor |
+| NMI RESTORE distrust | **Done** — `nmi_entry`, `compiler_vectors` install + prior save/restore |
+| SAVE by tokens / VERIFY = SAVE bytes | **Done** — token-class `program_select_save_format`; language `rio_save`/`rio_verify` |
+| COMPILE soft 80/100 + dual `$CE00` layout | **Done** — `export_compile_command` / `export_check_budgets` |
+| 512 KiB hard build fail | **Done** — `validate_georam_image_budget` hard-fails from size report |
+| FRE profile-aware / narrow POKE | **Done** — `fre_*` + `system_poke` with conditional `$CE00` |
+| Minimal editor (error+QUIT) | **Done** — `resident_enter_degraded` |
+| Loader dual install / fingerprint skip-reload | **Done** — `loader_entry` dual path; unit + integration coverage |
+| Compressor / CGS1 decompress | **Done** — `compressor.asm` + stream reader; system/unit coverage |
+| VICE E2E/hardware acceptance | **Deferred** — Phase 11 `[!]` until live VICE suite is in scope |
 
-Skeleton markers in source use `SKELETON (design audit 2026-07-09)` headers.
 Do not mark owning `TASKS.md` items `[x]` until re-implemented through the
 production path and acceptance tests.
 

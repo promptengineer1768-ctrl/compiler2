@@ -2,15 +2,37 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILD = ROOT / "build"
-UNPACKER = ROOT.parent / "compressor" / "build" / "lzss_unpacker.exe"
+COMPRESSOR_ROOT = ROOT.parent / "compressor"
+COMPRESSOR = COMPRESSOR_ROOT / "build" / "lzss_compressor.exe"
+UNPACKER = COMPRESSOR_ROOT / "build" / "lzss_unpacker.exe"
+
+
+def _regenerate_compressed_artifacts() -> None:
+    """Build fresh compressor artifacts from the current linked images."""
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools" / "build_compressor_artifacts.py"),
+            "--root",
+            str(ROOT),
+            "--build-dir",
+            str(BUILD.relative_to(ROOT)),
+            "--compressor-root",
+            str(COMPRESSOR_ROOT),
+        ],
+        check=True,
+        cwd=ROOT,
+    )
 
 
 @pytest.mark.system
@@ -69,12 +91,32 @@ def test_stream_reader_parses_directory_before_payload_and_avoids_kernal_zp() ->
 
 
 @pytest.mark.system
+@pytest.mark.static
+def test_stream_reader_uses_directory_size_without_a_payload_prefix() -> None:
+    """The reader starts LZSS at the CGS1 payload, not a phantom chunk header."""
+    source = (ROOT / "src" / "loader" / "georam_stream_reader.asm").read_text()
+    directory = source[
+        source.index("@directory_loop:") : source.index("@payload_start:")
+    ]
+    decompressor = source[source.index("_gsrc_decompress_chunk:") :]
+    prologue = decompressor.split("@main_loop:", maxsplit=1)[0]
+    assert "gsrc_chunk_unpacked_lo" in directory
+    assert "gsrc_chunk_unpacked_hi" in directory
+    assert "lda gsrc_chunk_unpacked_lo,x" in prologue
+    assert "lda gsrc_chunk_unpacked_hi,x" in prologue
+    assert "jsr _gsrc_read_byte" not in prologue
+
+
+@pytest.mark.system
 @pytest.mark.local
 def test_compressed_georam_sidecar_round_trip(tmp_path: Path) -> None:
-    """The installed unpacker recovers the exact padded geoRAM image."""
-    if not UNPACKER.exists():
-        pytest.skip("compressor unpacker is not installed")
+    """A freshly generated sidecar decodes to the exact geoRAM payload."""
+    if not COMPRESSOR.exists() or not UNPACKER.exists():
+        pytest.skip("compressor tools are not installed")
+    _regenerate_compressed_artifacts()
     sidecar = BUILD / "GEORAM_compressed.prg"
+    metadata = json.loads((BUILD / "GEORAM_compressed.json").read_text())
+    assert Path(metadata["sidecars"][0]["path"]).resolve() == sidecar.resolve()
     headerless = tmp_path / "GEORAM_headerless.prg"
     headerless.write_bytes(sidecar.read_bytes()[2:])
     subprocess.run(
@@ -90,7 +132,10 @@ def test_compressed_georam_sidecar_round_trip(tmp_path: Path) -> None:
     )
     outputs = list(tmp_path.glob("*.bin"))
     assert len(outputs) == 1
-    assert outputs[0].read_bytes() == (BUILD / "georam.bin").read_bytes()[2:]
+    actual = outputs[0].read_bytes()
+    expected = (BUILD / "georam.bin").read_bytes()[2:]
+    assert hashlib.sha256(actual).digest() == hashlib.sha256(expected).digest()
+    assert actual == expected
 
 
 @pytest.mark.system

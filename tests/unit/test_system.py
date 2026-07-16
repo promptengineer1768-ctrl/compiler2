@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.kernal_stubs import install_kernal_stubs
+
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS_ROOT = ROOT.parent / "tools"
 PROJECT_TOOLS_ROOT = ROOT / "tools"
@@ -45,6 +47,12 @@ def _load_binary(emu: C64Emu6502) -> None:
     payload = (_artifact_root() / "compiler.bin").read_bytes()
     load_addr = payload[0] | (payload[1] << 8)
     emu.write_mem_range(load_addr, payload[2:])
+    hibasic = _artifact_root() / "hibasic.bin"
+    if hibasic.exists():
+        emu.write_mem_range(0xE000, hibasic.read_bytes())
+        # $01=$35: BASIC/KERNAL out, HIBASIC RAM at $E000+ visible.
+        emu.write_mem(0x0001, 0x35)
+    install_kernal_stubs(emu)
 
 
 def _load_symbol_address(symbol_name: str) -> int:
@@ -138,7 +146,8 @@ class TestSystem:
         assert emu.read_mem(0x0400) == 0xA5
         assert _carry_is_clear(emu)
 
-        protected_address = _load_symbol_address("system_poke")
+        # High-guard vector tail is protected; ordinary image RAM is not.
+        protected_address = 0xFFF9
         protected_original = emu.read_mem(protected_address)
         emu.set_a(0x99)
         emu.set_x(protected_address & 0xFF)
@@ -146,6 +155,15 @@ class TestSystem:
         emu.execute(poke_addr, 10000)
         assert emu.read_mem(protected_address) == protected_original
         assert _carry_is_set(emu)
+
+        # Standalone code range remains user-writable (narrow control-plane).
+        image_addr = 0x0801
+        emu.set_a(0x5A)
+        emu.set_x(image_addr & 0xFF)
+        emu.set_y(image_addr >> 8)
+        emu.execute(poke_addr, 10000)
+        assert emu.read_mem(image_addr) == 0x5A
+        assert _carry_is_clear(emu)
 
         emu.write_mem(0x0340, 0)
         emu.write_mem_range(0x0330, b"\xee\x40\x03\x60")
@@ -259,8 +277,10 @@ class TestSystem:
             (0x0002, True),
             (0x001D, True),
             (0x001E, False),
-            (0x0801, True),
-            (0xCFFF, True),
+            (0x0801, False),
+            (0xC800, False),
+            (0xCFFF, False),
+            (0xCE00, False),
             (0xD000, False),
             (0xFFF8, False),
             (0xFFF9, True),
@@ -272,8 +292,10 @@ class TestSystem:
             "compiler-zp-first",
             "compiler-zp-last",
             "after-compiler-zp",
-            "image-first",
-            "image-last",
+            "image-first-writable",
+            "hot-slot-writable",
+            "image-last-writable",
+            "ce00-without-xip",
             "io-first",
             "below-high-guard",
             "high-guard-first",
@@ -283,7 +305,7 @@ class TestSystem:
     def test_poke_uses_generated_protected_boundaries(
         self, address: int, protected: bool
     ) -> None:
-        """POKE rejects generated ZP, compiler, and high-tail boundaries."""
+        """POKE uses narrow control-plane: ZP + high guard; not blanket image."""
         emu = C64Emu6502(lib_path=_dll_path())
         _load_binary(emu)
         original = emu.read_mem(address)
@@ -294,3 +316,56 @@ class TestSystem:
         assert _carry_is_set(emu) is protected
         if protected:
             assert emu.read_mem(address) == original
+        else:
+            assert emu.read_mem(address) == (original ^ 0xFF)
+
+    def test_poke_protects_ce00_when_reu_xip_active(self) -> None:
+        """$CE00 is protected only while reu_xip_active is set."""
+        emu = C64Emu6502(lib_path=_dll_path())
+        _load_binary(emu)
+        xip = _load_map_address("reu_xip_active")
+        poke = _load_symbol_address("system_poke")
+        target = 0xCE40
+        original = emu.read_mem(target)
+
+        emu.write_mem(xip, 1)
+        emu.set_a(original ^ 0xFF)
+        emu.set_x(target & 0xFF)
+        emu.set_y(target >> 8)
+        emu.execute(poke, 10000)
+        assert _carry_is_set(emu)
+        assert emu.read_mem(target) == original
+
+        emu.write_mem(xip, 0)
+        emu.set_a(original ^ 0xFF)
+        emu.set_x(target & 0xFF)
+        emu.set_y(target >> 8)
+        emu.execute(poke, 10000)
+        assert _carry_is_clear(emu)
+        assert emu.read_mem(target) == (original ^ 0xFF)
+
+    def test_fre_profile_expansion_and_export(self) -> None:
+        """fre_query reports expansion page free vs export free bytes."""
+        emu = C64Emu6502(lib_path=_dll_path())
+        _load_binary(emu)
+        fac = _load_zp_address("zp_fac1")
+        fre_query = _load_symbol_address("fre_query")
+        fre_set_profile = _load_symbol_address("fre_set_profile")
+        fre_set_export = _load_symbol_address("fre_set_export_bytes")
+
+        emu.execute(_load_symbol_address("fre_init"), 10000)
+        emu.execute(_load_symbol_address("page_alloc_init"), 100_000)
+        emu.execute(fre_query, 100_000)
+        assert _carry_is_clear(emu)
+        # 2048 free pages * 256 = 524288 → float exponent/mantissa non-zero.
+        assert emu.read_mem(fac) != 0
+
+        emu.set_a(0)
+        emu.execute(fre_set_profile, 10000)
+        emu.set_a(0x10)
+        emu.set_x(0x27)
+        emu.set_y(0x00)  # 10000 bytes
+        emu.execute(fre_set_export, 10000)
+        emu.execute(fre_query, 100_000)
+        assert _carry_is_clear(emu)
+        assert emu.read_mem_range(fac, fac + 4) == from_float(10000.0).to_bytes()

@@ -85,7 +85,8 @@ var_copy_count:           .res 1
 var_string_image:         .res 12
 var_string_request:       .res 6
 
-.segment "CODE"
+; HIBASIC ($E000+): frees late CODE/RAM budget; visible under $01=$35.
+.segment "HIBASIC"
 
 ; Load and validate a VD descriptor, leaving descriptor metadata in BSS.
 ; Inputs: X/Y=VD pointer. Outputs: C=0 valid, C=1/A=error.
@@ -389,6 +390,9 @@ var_load_float:
     iny
     cpy #$05
     bne @copy
+    ; FAC now contains a packed float, so its adaptive math type must agree.
+    lda #$00
+    sta math_fac_type
     clc
     rts
 @error:

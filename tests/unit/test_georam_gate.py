@@ -176,7 +176,7 @@ class TestHibasicGraphicsSwap:
         emu.write_mem_range(0xE000, hibasic)
 
         emu.execute(_load_symbol_address("hibasic_graphics_reserve"), 200000)
-        emu.write_mem_range(0xE000, b"\xA5" * len(hibasic))
+        emu.write_mem_range(0xE000, b"\xa5" * len(hibasic))
         emu.execute(_load_symbol_address("hibasic_graphics_restore"), 200000)
 
         restored = bytes(emu.read_mem(0xE000 + i) for i in range(len(hibasic)))

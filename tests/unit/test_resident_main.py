@@ -150,10 +150,10 @@ class TestResidentMain:
         """resident_main should loop back to itself instead of returning."""
         resident_main = _load_symbol_address("resident_main")
         resident_poll_input = _load_symbol_address("resident_poll_input")
-        body = _linked_bytes(resident_main, 16)
+        body = _linked_bytes(resident_main, 32)
 
-        assert body[:3] == bytes(
-            [0x20, resident_poll_input & 0xFF, resident_poll_input >> 8]
+        assert (
+            bytes([0x20, resident_poll_input & 0xFF, resident_poll_input >> 8]) in body
         )
         assert bytes([0x4C, resident_main & 0xFF, resident_main >> 8]) in body
         assert 0x60 not in body
@@ -162,11 +162,52 @@ class TestResidentMain:
         """resident_submit_line should dispatch through the generated geoRAM gate."""
         resident_submit_line = _load_symbol_address("resident_submit_line")
         georam_call_group_n = _load_symbol_address("georam_call_group_n")
-        body = _linked_bytes(resident_submit_line, 32)
+        body = _linked_bytes(resident_submit_line, 48)
 
         assert (
             bytes([0x20, georam_call_group_n & 0xFF, georam_call_group_n >> 8]) in body
         )
+
+    def test_enter_degraded_sets_flag_and_shows_error(self) -> None:
+        """Degraded entry marks the mode and paints the expansion error."""
+        dll = _dll_path()
+        emu = C64Emu6502(lib_path=dll)
+        _load_binary(emu)
+        # Execute only the show-error helper (non-looping).
+        emu.execute(_load_symbol_address("resident_show_expansion_error"), 10_000)
+        screen = bytes(emu.read_mem(0x0400 + i) for i in range(28))
+        assert screen.startswith(b"?EXPANSION MEMORY REQUIRED")
+        emu.write_mem(_load_symbol_address("resident_degraded"), 0)
+        # Enter degraded briefly: first instruction sets the flag then shows error.
+        body = _linked_bytes(_load_symbol_address("resident_enter_degraded"), 8)
+        # lda #1 / sta resident_degraded
+        assert body[0] == 0xA9 and body[1] == 0x01
+
+    def test_quit_explicit_clr_keeps_program_resets_vars(self) -> None:
+        """quit_explicit_clr matches stock clearc: keep program, reset var map."""
+        dll = _dll_path()
+        emu = C64Emu6502(lib_path=dll)
+        _load_binary(emu)
+        emu.write_mem(0x002B, 0x01)
+        emu.write_mem(0x002C, 0x08)
+        emu.write_mem(0x002D, 0x20)
+        emu.write_mem(0x002E, 0x08)
+        emu.write_mem(0x002F, 0x80)
+        emu.write_mem(0x0030, 0x09)
+        emu.write_mem(0x0031, 0x90)
+        emu.write_mem(0x0032, 0x09)
+        emu.write_mem(0x0037, 0x00)
+        emu.write_mem(0x0038, 0xA0)
+        emu.execute(_load_symbol_address("quit_explicit_clr"), 10_000)
+        assert emu.read_mem(0x002B) == 0x01
+        assert emu.read_mem(0x002C) == 0x08
+        assert emu.read_mem(0x002F) == 0x20
+        assert emu.read_mem(0x0030) == 0x08
+        assert emu.read_mem(0x0031) == 0x20
+        assert emu.read_mem(0x0032) == 0x08
+        assert emu.read_mem(0x0033) == 0x00
+        assert emu.read_mem(0x0034) == 0xA0
+        assert emu.read_mem(0x0016) == 0x19
 
     def test_boundary_assertion_checks_port_decimal_and_mirror(self) -> None:
         """resident_assert_boundary should fail when the caller state drifts."""

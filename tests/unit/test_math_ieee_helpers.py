@@ -20,6 +20,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -103,7 +104,7 @@ def _get_fac(emu: C64Emu6502, fac: str = "fac1") -> bytes:
 
 def _call(emu: C64Emu6502, name: str) -> int:
     emu.execute(_load_symbol_address(name), 20000)
-    return emu.get_state().a
+    return cast(int, emu.get_state().a)
 
 
 @pytest.mark.unit

@@ -3,13 +3,8 @@
 
 .include "common/zp.inc"
 
-SETNAM = $FFBD
-SETLFS = $FFBA
-OPEN   = $FFC0
-CLOSE  = $FFC3
-CHKIN  = $FFC6
-CLRCHN = $FFCC
-CHRIN  = $FFCF
+.import kernal_setnam, kernal_setlfs, kernal_open, kernal_close
+.import kernal_chkin, kernal_clrchn, kernal_chrin
 
 gsrc_remain_lo = gsrc_state + 0
 gsrc_remain_hi = gsrc_state + 1
@@ -41,6 +36,10 @@ gsrc_chunk_pages:
     .res 8
 gsrc_chunk_page_high:
     .res 8
+gsrc_chunk_unpacked_lo:
+    .res 8
+gsrc_chunk_unpacked_hi:
+    .res 8
 
 ; georam_stream_load - Stream a fake-header PRG CGS1 sidecar into geoRAM.
 ; Inputs: A=filename length, X/Y=filename pointer; device in exported state.
@@ -50,17 +49,17 @@ gsrc_chunk_page_high:
 ; Zero page: reads/writes all 15 bytes of generated zp_georam_stream.
 .export georam_stream_load
 georam_stream_load:
-    jsr SETNAM
+    jsr kernal_setnam
     lda #2
     ldx georam_stream_device
     ldy #2
-    jsr SETLFS
-    jsr OPEN
+    jsr kernal_setlfs
+    jsr kernal_open
     bcc :+
     jmp @open_failed
 :
     ldx #2
-    jsr CHKIN
+    jsr kernal_chkin
     bcc :+
     jmp @close_failed
 :
@@ -101,10 +100,14 @@ georam_stream_load:
     jsr _gsrc_skip_u32
 
     lda gsrc_chunks_hi
-    bne @close_failed
+    beq :+
+    jmp @close_failed
+:
     lda gsrc_chunks_lo
     cmp #9
-    bcs @close_failed
+    bcc :+
+    jmp @close_failed
+:
     lda #0
     sta gsrc_directory_index
 
@@ -123,7 +126,13 @@ georam_stream_load:
     ldx gsrc_directory_index
     sta gsrc_chunk_page_high,x
     jsr _gsrc_skip_u32
-    jsr _gsrc_skip_u32
+    jsr _gsrc_read_byte
+    ldx gsrc_directory_index
+    sta gsrc_chunk_unpacked_lo,x
+    jsr _gsrc_read_byte
+    ldx gsrc_directory_index
+    sta gsrc_chunk_unpacked_hi,x
+    jsr _gsrc_skip_u16
     jsr _gsrc_skip_u32
     jsr _gsrc_skip_u32
     jsr _gsrc_skip_u32
@@ -148,21 +157,21 @@ georam_stream_load:
     jmp @payload_loop
 
 @done:
-    jsr CLRCHN
+    jsr kernal_clrchn
     lda #2
-    jsr CLOSE
+    jsr kernal_close
     clc
     rts
 @close_failed:
-    jsr CLRCHN
+    jsr kernal_clrchn
     lda #2
-    jsr CLOSE
+    jsr kernal_close
 @open_failed:
     sec
     rts
 
 _gsrc_read_byte:
-    jsr CHRIN
+    jsr kernal_chrin
     rts
 
 _gsrc_skip_u16:
@@ -176,12 +185,11 @@ _gsrc_skip_u32:
     jmp _gsrc_read_byte
 
 _gsrc_decompress_chunk:
-    jsr _gsrc_read_byte
+    ldx gsrc_directory_index
+    lda gsrc_chunk_unpacked_lo,x
     sta gsrc_remain_lo
-    jsr _gsrc_read_byte
+    lda gsrc_chunk_unpacked_hi,x
     sta gsrc_remain_hi
-    jsr _gsrc_read_byte
-    jsr _gsrc_read_byte
     lda #0
     sta gsrc_dest_lo
     sta gsrc_dest_hi

@@ -138,6 +138,28 @@ token_identifier:
     jmp @loop
 @done:
     jsr _token_store_len
+    ; TAB( and SPC( are the two stock spellings whose opening parenthesis is
+    ; part of the keyword token.  Keep it attached only for those prefixes;
+    ; ordinary calls such as SIN( must expose '(' as a separate symbol.
+    jsr _token_load_current
+    cmp #'('
+    bne @classify
+    lda token_last_len
+    cmp #3
+    bne @classify
+    jsr _token_load_start
+    cmp #'T'
+    beq @attach_paren
+    cmp #'S'
+    bne @classify
+    ldy #1
+    jsr _token_load_start_offset
+    cmp #'P'
+    bne @classify
+@attach_paren:
+    inc token_cursor
+    inc token_last_len
+@classify:
     jsr _token_classify_keyword
     bcs @error
     lda token_keyword_id
@@ -385,9 +407,8 @@ _token_is_ident_char:
     beq @yes_direct
     cmp #'.'
     beq @yes_direct
-    ; Stock keyword spellings TAB( and SPC( include the open parenthesis.
-    cmp #'('
-    beq @yes_direct
+    ; Parentheses terminate ordinary identifiers; TAB( and SPC( are parsed as
+    ; a keyword followed by a symbol, preserving the same grammar boundary.
     clc
     rts
 @yes:

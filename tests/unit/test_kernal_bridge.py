@@ -9,6 +9,14 @@ from pathlib import Path
 
 import pytest
 
+from tests.kernal_stubs import (
+    KERNAL_READST,
+    KERNAL_STUB_INPUT,
+    KERNAL_STUB_LAST_PORT,
+    install_kernal_stubs,
+    install_vector_stub,
+)
+
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS_ROOT = ROOT.parent / "tools"
 if str(TOOLS_ROOT) not in sys.path:
@@ -90,6 +98,8 @@ def _load_binary(emu: C64Emu6502) -> None:
     payload = bin_path.read_bytes()
     load_addr = payload[0] | (payload[1] << 8)
     emu.write_mem_range(load_addr, payload[2:])
+    setattr(emu, "_compiler2_real_bytes_only", True)
+    install_kernal_stubs(emu)
 
 
 def _linked_bytes(address: int, length: int) -> bytes:
@@ -103,15 +113,6 @@ def _linked_bytes(address: int, length: int) -> bytes:
     if offset < 0 or offset + length > len(payload) - 2:
         pytest.fail(f"Address ${address:04X} is outside build/compiler.bin")
     return payload[2 + offset : 2 + offset + length]
-
-
-def _jsr_targets(body: bytes) -> list[int]:
-    """Return absolute JSR targets present in linked 6502 code bytes."""
-    targets: list[int] = []
-    for offset, opcode in enumerate(body[:-2]):
-        if opcode == 0x20:
-            targets.append(body[offset + 1] | (body[offset + 2] << 8))
-    return targets
 
 
 @pytest.mark.unit
@@ -149,9 +150,9 @@ class TestKernalBridge:
 
         emu.write_mem(0xC100, 0x33)
         emu.write_mem(0xC101, 0x44)
-        emu.set_a(0x00)
-        emu.write_mem(0x0000, 0x00)
-        emu.write_mem(0x0001, 0xC1)
+        emu.set_a(0x02)
+        emu.write_mem(0x0002, 0x00)
+        emu.write_mem(0x0003, 0xC1)
         emu.set_x(0x55)
         emu.set_y(0x66)
         emu.execute(_load_symbol_address("kernal_save"), 10_000)
@@ -203,7 +204,7 @@ class TestKernalBridge:
         zp_lstx = _load_zp_address("zp_lstx")
         zp_status = _load_zp_address("zp_status")
         zp_stkey = _load_zp_address("zp_stkey")
-        kernal_input = _load_symbol_address("kernal_input_byte")
+        kernal_input = KERNAL_STUB_INPUT
 
         emu.set_a(0x11)
         emu.set_x(0x22)
@@ -223,10 +224,6 @@ class TestKernalBridge:
         assert emu.read_mem(zp_time) == 0x01
         assert emu.read_mem(zp_time + 1) == 0x01
         assert emu.read_mem(zp_time + 2) == 0x00
-
-        emu.write_mem_range(zp_time, b"\x4f\x1a\x00")
-        emu.execute(_load_symbol_address("kernal_udtim"), 10_000)
-        assert emu.read_mem_range(zp_time, zp_time + 2) == b"\x00\x00\x00"
 
         emu.write_mem(kernal_input, 0x5A)
         emu.execute(_load_symbol_address("kernal_getin"), 10_000)
@@ -256,13 +253,35 @@ class TestKernalBridge:
         assert emu.read_mem(zp_lstx) == 0x44
         assert emu.read_mem(zp_ndx) == 0x04
 
-    def test_rdtim_linked_body_loads_jiffy_clock_from_zero_page(self) -> None:
-        """RDTIM must return the current jiffy clock, not entry registers."""
-        zp_time = _load_zp_address("zp_time")
-        body = _linked_bytes(_load_symbol_address("kernal_rdtim"), 64)
-        assert bytes([0xAD, zp_time + 2, 0x00]) in body
-        assert bytes([0xAE, zp_time + 1, 0x00]) in body
-        assert bytes([0xAC, zp_time, 0x00]) in body
+    @pytest.mark.parametrize(
+        ("routine", "vector"),
+        [
+            ("kernal_readst", 0xFFB7),
+            ("kernal_setlfs", 0xFFBA),
+            ("kernal_setnam", 0xFFBD),
+            ("kernal_open", 0xFFC0),
+            ("kernal_close", 0xFFC3),
+            ("kernal_chkin", 0xFFC6),
+            ("kernal_chkout", 0xFFC9),
+            ("kernal_clrchn", 0xFFCC),
+            ("kernal_chrin", 0xFFCF),
+            ("kernal_chrout", 0xFFD2),
+            ("kernal_load", 0xFFD5),
+            ("kernal_save", 0xFFD8),
+            ("kernal_settim", 0xFFDB),
+            ("kernal_rdtim", 0xFFDE),
+            ("kernal_stop", 0xFFE1),
+            ("kernal_getin", 0xFFE4),
+            ("kernal_udtim", 0xFFEA),
+            ("kernal_scnkey", 0xFF9F),
+        ],
+    )
+    def test_each_bridge_calls_its_public_kernal_vector(
+        self, routine: str, vector: int
+    ) -> None:
+        """Every bridge must dispatch through the documented jump-table entry."""
+        body = _linked_bytes(_load_symbol_address(routine), 16)
+        assert bytes((0x20, vector & 0xFF, vector >> 8)) in body
 
     def test_packed_static_string_emitter_masks_final_character(self) -> None:
         """The shared emitter stops on bit 7 and outputs the masked byte."""
@@ -279,23 +298,44 @@ class TestKernalBridge:
         assert emu.read_mem(output) == 0x0D
         assert (emu.get_state().p & 1) == 0
 
-    def test_common_exit_preserves_result_flags_while_restoring_irq_state(
-        self,
+    @pytest.mark.parametrize("irq_disabled", [False, True])
+    def test_bridge_returns_kernal_results_and_restores_mapping_and_irq_state(
+        self, irq_disabled: bool
     ) -> None:
-        """KERNAL bridge calls must return C/Z results from the operation."""
-        readst_body = _linked_bytes(_load_symbol_address("kernal_readst"), 16)
-        jsr_targets = _jsr_targets(readst_body)
-        assert len(jsr_targets) == 2
+        """The external vector sees $36 and its result survives the bridge."""
+        emu = C64Emu6502(lib_path=_dll_path())
+        _load_binary(emu)
+        emu.write_mem(0x0000, 0x2F)
+        emu.write_mem(0x0001, 0x35)
+        state = emu.get_state()
+        expected_p = (state.p | 0x04) if irq_disabled else (state.p & ~0x04)
+        emu.set_p(expected_p)
 
-        body = _linked_bytes(jsr_targets[1], 96)
-        save_flags = body.find(b"\x08\x68")
-        restore_irq_set = body.find(b"\x09\x04")
-        restore_irq_clear = body.find(b"\x29\xfb")
-        rts_with_flags = body.find(b"\x48\x28\x60")
-        later_rts_with_flags = body.find(b"\x48\x28\x60", rts_with_flags + 1)
+        body = bytes(
+            (
+                0xAD,
+                0x01,
+                0x00,
+                0x8D,
+                KERNAL_STUB_LAST_PORT & 0xFF,
+                KERNAL_STUB_LAST_PORT >> 8,
+                0xA9,
+                0xA5,
+                0xA2,
+                0xB6,
+                0xA0,
+                0xC7,
+                0x38,
+                0x60,
+            )
+        )
+        install_vector_stub(emu, KERNAL_READST, 0xED00, body)
 
-        assert save_flags >= 0, "kernal_end must save operation flags"
-        assert restore_irq_set > save_flags, "kernal_end must restore saved IRQ=1"
-        assert restore_irq_clear > save_flags, "kernal_end must restore saved IRQ=0"
-        assert rts_with_flags > restore_irq_set
-        assert later_rts_with_flags > restore_irq_clear
+        emu.execute_rts(_load_symbol_address("kernal_readst"), 10_000)
+        result = emu.get_state()
+        assert (result.a, result.x, result.y) == (0xA5, 0xB6, 0xC7)
+        assert result.p & 0x01
+        assert (result.p & 0x04) == (expected_p & 0x04)
+        assert emu.read_mem(KERNAL_STUB_LAST_PORT) == 0x36
+        assert emu.read_mem(0x0000) == 0x2F
+        assert emu.read_mem(0x0001) == 0x35

@@ -6,6 +6,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -119,7 +120,9 @@ def _carry_is_set(emu: C64Emu6502) -> bool:
 
 def _read_word(emu: C64Emu6502, address: int) -> int:
     """Read a little-endian word from emulated memory."""
-    return emu.read_mem(address) | (emu.read_mem(address + 1) << 8)
+    low = cast(int, emu.read_mem(address))
+    high = cast(int, emu.read_mem(address + 1))
+    return low | (high << 8)
 
 
 def _write_word(emu: C64Emu6502, address: int, value: int) -> None:

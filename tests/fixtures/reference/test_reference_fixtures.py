@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 FIXTURE_ROOT = ROOT / "tests" / "fixtures" / "reference"
+sys.path.insert(0, str(ROOT / "tools"))
+
+from generate_vice_fixtures import normalize_screen  # noqa: E402
 
 REQUIRED_FIELDS = {
     "schema_version",
@@ -46,6 +50,29 @@ EXPECTED_RESULTS = {
     "basicv35-program-WHILE": 'LOAD"*",8,1\nSEARCHING FOR *\nLOADING\n1\n2',
 }
 STOCK_FIXTURE_IDS = set(EXPECTED_RESULTS)
+STOCK_PROFILE_CONTRACTS = {
+    "c64_basicv2": {
+        "count": 95,
+        "modes": {"immediate": 41, "program": 54},
+        "vice_version": "3.10",
+        "rom_checksums": {
+            "basic-901226-01.bin": "89878cea0a268734696de11c4bae593eaaa506465d2029d619c0e0cbccdfa62d",
+            "chargen-901225-01.bin": "fd0d53b8480e86163ac98998976c72cc58d5dd8eb824ed7b829774e74213b420",
+            "kernal-901227-03.bin": "83c60d47047d7beab8e5b7bf6f67f80daa088b7a6a27de0d7e016f6484042721",
+        },
+    },
+    "plus4_basicv35": {
+        "count": 40,
+        "modes": {"immediate": 8, "program": 32},
+        "vice_version": "3.10",
+        "rom_checksums": {
+            "3plus1-317053-01.bin": "628eb4b01b8701e6fc5bd4b7e9e6573deae47e0b0f8b150b4022596501d5131d",
+            "3plus1-317054-01.bin": "2e83bfdfd93a2d9e8adfe4bb302869a30eac12015f6b41302c9d1ed3bb83de16",
+            "basic-318006-01.bin": "cbf0c4dec44e3e203beaf09690e5c7f859b0eca164e789884161c8cb0e596567",
+            "kernal-318004-05.bin": "1f07270c43fc84d1556978e5bb3a6b08aa7b1253f2e46d1a452c89c972ae506b",
+        },
+    },
+}
 
 
 def _fixture_paths() -> list[Path]:
@@ -131,6 +158,41 @@ def test_basicv2_reference_fixtures_are_real_vice_captures() -> None:
         if _load_fixture(path)["normalization_rules"] == "catalog-v1"
     ]
     assert placeholders == []
+
+
+@pytest.mark.parametrize("directory", sorted(STOCK_PROFILE_CONTRACTS))
+def test_stock_profile_fixture_corpus_is_complete(directory: str) -> None:
+    """Each stock profile retains its reviewed fixture count and mode coverage."""
+    contract = STOCK_PROFILE_CONTRACTS[directory]
+    documents = [
+        _load_fixture(path)
+        for path in sorted((FIXTURE_ROOT / directory).glob("*.json"))
+    ]
+    mode_counts = {
+        mode: sum(document["reference_mode"] == mode for document in documents)
+        for mode in ("immediate", "program")
+    }
+    assert len(documents) == contract["count"]
+    assert mode_counts == contract["modes"]
+    assert {document["vice_version"] for document in documents} == {
+        contract["vice_version"]
+    }
+    assert {document["normalization_rules"] for document in documents} == {"screen-v1"}
+    assert all(
+        document["rom_checksums"] == contract["rom_checksums"] for document in documents
+    )
+
+
+@pytest.mark.parametrize("directory", sorted(STOCK_PROFILE_CONTRACTS))
+def test_stock_profile_normalized_results_replay(directory: str) -> None:
+    """Stored stock results are exactly reproducible from raw VICE screens."""
+    for path in sorted((FIXTURE_ROOT / directory).glob("*.json")):
+        document = _load_fixture(path)
+        source_lines = tuple(str(document["source_text"]).splitlines())
+        assert (
+            normalize_screen(document["raw_screen"], source_lines)
+            == document["normalized_result"]
+        ), path.name
 
 
 @pytest.mark.parametrize("path", _fixture_paths(), ids=lambda path: path.stem)

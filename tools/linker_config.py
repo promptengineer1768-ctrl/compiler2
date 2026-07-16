@@ -181,22 +181,25 @@ def merge_generated_segments(policy: Dict[str, Any], num_georam_pages: int) -> s
         elif seg["name"] == "VECTORS":
             lines.append("    VECTORS: load = VECTORS, type = ro, optional = yes;")
 
+    # Editor/wedge/compressor may live in HIBASIC high-RAM ($E000+) to free
+    # $0801-$CFFF headroom. GRAPHICS must stay in low RAM: it remains
+    # executable while $E000-$FF3F is the bitmap (docs/GRAPHICS_MEMORY.md).
     lines.extend(
         [
             "    BSS: load = RAM, type = rw, define = yes;",
-            "    EDITOR_PINNED: load = RAM, type = rw;",
             "    GRAPHICS_STATE: load = RAM, type = rw;",
             "    COMPILER_INIT: load = RAM, type = ro;",
             "    COMPILER: load = RAM, type = ro;",
-            "    EDITOR: load = RAM, type = ro;",
-            "    WEDGE: load = RAM, type = ro;",
-            "    COMPRESSOR: load = RAM, type = ro;",
             "    GRAPHICS: load = RAM, type = ro;",
             "    RUNTIME: load = RAM, type = ro;",
             "    GEOASM: load = RAM, type = ro;",
-            "    HIBASIC: load = RAM_HIGH, type = ro, define = yes;",
             "    CODE: load = RAM, type = ro;",
             "    RODATA: load = RAM, type = ro;",
+            "    EDITOR_PINNED: load = RAM_HIGH, type = rw, define = yes;",
+            "    HIBASIC: load = RAM_HIGH, type = ro, define = yes;",
+            "    EDITOR: load = RAM_HIGH, type = ro;",
+            "    WEDGE: load = RAM_HIGH, type = ro;",
+            "    COMPRESSOR: load = RAM_HIGH, type = ro, define = yes;",
         ]
     )
 

@@ -8,6 +8,8 @@
 .include "common/constants.asm"
 
 .import ctrl_reset, kernal_chrout, kernal_print_packed, pipeline_compile_line
+.import keyword_name_lo, keyword_name_hi, keyword_length, keyword_token
+.import keyword_count_value
 
 ; KERNAL routines
 CHROUT      = $FFD2
@@ -20,6 +22,9 @@ SCREEN_COLS = 40
 SCREEN_ROWS = 25
 SCREEN_BASE = $0400
 COLOR_BASE  = $D800
+
+; LIST text buffer capacity (line number + space + body + NUL).
+EDITOR_LIST_MAX = 80
 
 ; =============================================================================
 ; Zero Page Scratch (from zp_symbols.inc via zp.inc)
@@ -62,7 +67,8 @@ editor_line_links:      .res 25, 0
 ; Accepted line buffer
 editor_accepted_line:   .res 81, 0
 
-; Result buffer for output
+; Result buffer for output (detokenized LIST text handle target)
+.export editor_result_buffer
 editor_result_buffer:   .res 81, 0
 
 ; Row address lookup table (25 entries)
@@ -124,6 +130,16 @@ editor_row_hi:
 editor_conversion_quote:  .byte 0
 editor_conversion_data:   .byte 0
 editor_cell_index:        .byte 0
+
+; LIST / detokenize workspace
+editor_list_out:          .res 1
+editor_list_line:         .res 2
+editor_list_start:        .res 2
+editor_list_end:          .res 2
+editor_list_src:          .res 2
+editor_list_quote:        .res 1
+editor_list_div:          .res 2
+editor_list_digit:        .res 1
 
 .segment "EDITOR"
 
@@ -318,27 +334,184 @@ editor_delete_line:
 ; =============================================================================
 ; LIST Conversion
 ; =============================================================================
+;
+; Canonical line handle (X/Y) points at a normal-RAM tokenized line:
+;   line_number:u16, token_body..., $00
+; Detokenized PETSCII text is written to editor_result_buffer (NUL-terminated)
+; and returned as X/Y = text handle.
+;
+; Range record (X/Y) for editor_list_range:
+;   start:u16, end:u16, source:u16
+; source points at a stock-linked program image (next:u16, line:u16, body, 0)
+; or is $0000 to list a single line previously staged at editor_list_src via
+; the line handle itself (source may also point at one tokenized line when
+; next-link is zero after the body terminator is treated as end-of-program).
 
 ; editor_detokenize_line - LIST conversion
-; Input:  X/Y = canonical line handle
-; Output: X/Y = text handle, C = error
+; Input:  X/Y = canonical line handle (line:u16 + tokens + 0)
+; Output: X/Y = text handle (editor_result_buffer), C = error
 ; Clobbers: A, X, Y
 .export editor_detokenize_line
 editor_detokenize_line:
-    ; SKELETON: LIST detokenize not implemented to stock form.
-    lda #ERR_UNDEFINED_FUNCTION
+    stx zp_ptr1
+    sty zp_ptr1+1
+    ldy #0
+    lda (zp_ptr1),y
+    sta editor_list_line
+    iny
+    lda (zp_ptr1),y
+    sta editor_list_line+1
+    ; Body starts at offset 2.
+    clc
+    lda zp_ptr1
+    adc #2
+    sta zp_ptr2
+    lda zp_ptr1+1
+    adc #0
+    sta zp_ptr2+1
+    jsr editor_format_line_number
+    ; Space after line number when body is nonempty or always stock-style space.
+    lda #' '
+    jsr editor_list_emit
+    bcs @error
+    lda #0
+    sta editor_list_quote
+    ldy #0
+@body:
+    lda (zp_ptr2),y
+    beq @done
+    sty editor_cell_index
+    cmp #$22
+    bne @not_quote
+    lda editor_list_quote
+    eor #1
+    sta editor_list_quote
+    lda #$22
+    jsr editor_list_emit
+    bcs @error
+    jmp @next
+@not_quote:
+    ldx editor_list_quote
+    bne @literal
+    cmp #$80
+    bcc @literal
+    jsr editor_emit_keyword
+    bcs @error
+    jmp @next
+@literal:
+    jsr editor_list_emit
+    bcs @error
+@next:
+    ldy editor_cell_index
+    iny
+    bne @body
+@done:
+    ldx editor_list_out
+    lda #0
+    sta editor_result_buffer,x
+    ldx #<editor_result_buffer
+    ldy #>editor_result_buffer
+    clc
+    rts
+@error:
+    lda #ERR_STRING_TOO_LONG
     sec
     rts
 
-; editor_list_range - Range listing
-; Input:  X/Y = validated range record
+; editor_list_range - Stream detokenized lines in [start, end] through CHROUT.
+; Input:  X/Y = range record start:u16, end:u16, source:u16
 ; Output: C = error
 ; Clobbers: A, X, Y
 .export editor_list_range
 editor_list_range:
-    ; SKELETON: previous body was a success no-op.
-    lda #ERR_UNDEFINED_FUNCTION
-    sec
+    stx zp_ptr1
+    sty zp_ptr1+1
+    ldy #0
+    lda (zp_ptr1),y
+    sta editor_list_start
+    iny
+    lda (zp_ptr1),y
+    sta editor_list_start+1
+    iny
+    lda (zp_ptr1),y
+    sta editor_list_end
+    iny
+    lda (zp_ptr1),y
+    sta editor_list_end+1
+    iny
+    lda (zp_ptr1),y
+    sta editor_list_src
+    iny
+    lda (zp_ptr1),y
+    sta editor_list_src+1
+
+    lda editor_list_src
+    ora editor_list_src+1
+    beq @empty_ok
+
+    lda editor_list_src
+    sta zp_ptr1
+    lda editor_list_src+1
+    sta zp_ptr1+1
+@line_loop:
+    ; Stock linked: next:u16 at zp_ptr1. Zero next ends the program.
+    ldy #0
+    lda (zp_ptr1),y
+    sta zp_tmp1
+    iny
+    lda (zp_ptr1),y
+    sta zp_tmp1+1
+    ora zp_tmp1
+    beq @empty_ok
+
+    ; Line number at +2.
+    iny
+    lda (zp_ptr1),y
+    sta editor_list_line
+    iny
+    lda (zp_ptr1),y
+    sta editor_list_line+1
+
+    ; Range filter: line < start → skip; line > end → done.
+    lda editor_list_line+1
+    cmp editor_list_start+1
+    bcc @skip
+    bne @ge_start
+    lda editor_list_line
+    cmp editor_list_start
+    bcc @skip
+@ge_start:
+    lda editor_list_end+1
+    cmp editor_list_line+1
+    bcc @empty_ok
+    bne @in_range
+    lda editor_list_end
+    cmp editor_list_line
+    bcc @empty_ok
+@in_range:
+    ; Detokenize from line_number field (offset +2 of linked record).
+    clc
+    lda zp_ptr1
+    adc #2
+    tax
+    lda zp_ptr1+1
+    adc #0
+    tay
+    jsr editor_detokenize_line
+    bcs @error
+    jsr editor_list_print_result
+    bcs @error
+@skip:
+    ; Advance to next linked line (absolute next pointer).
+    lda zp_tmp1
+    sta zp_ptr1
+    lda zp_tmp1+1
+    sta zp_ptr1+1
+    jmp @line_loop
+@empty_ok:
+    clc
+    rts
+@error:
     rts
 
 ; =============================================================================
@@ -369,3 +542,143 @@ editor_print_string_ax:
 
 ready_msg:
     .byte "READY.", $8D
+
+; =============================================================================
+; LIST helpers (after public exports so size ceilings stay page-local)
+; =============================================================================
+
+; Format editor_list_line as decimal into editor_result_buffer.
+editor_format_line_number:
+    lda #0
+    sta editor_list_out
+    lda editor_list_line
+    sta editor_list_div
+    lda editor_list_line+1
+    sta editor_list_div+1
+    ; Emit up to 5 digits, suppressing leading zeros.
+    lda #0
+    sta editor_list_digit
+    lda #<10000
+    ldx #>10000
+    jsr editor_list_div_digit
+    lda #<1000
+    ldx #>1000
+    jsr editor_list_div_digit
+    lda #<100
+    ldx #>100
+    jsr editor_list_div_digit
+    lda #<10
+    ldx #>10
+    jsr editor_list_div_digit
+    lda editor_list_div
+    ora #'0'
+    jmp editor_list_emit
+
+; Divide editor_list_div by AX (16-bit), emit one digit if nonzero seen.
+editor_list_div_digit:
+    sta zp_tmp2
+    stx zp_tmp2+1
+    lda #0
+    sta editor_conversion_data
+@sub:
+    lda editor_list_div
+    cmp zp_tmp2
+    lda editor_list_div+1
+    sbc zp_tmp2+1
+    bcc @emit
+    lda editor_list_div
+    sec
+    sbc zp_tmp2
+    sta editor_list_div
+    lda editor_list_div+1
+    sbc zp_tmp2+1
+    sta editor_list_div+1
+    inc editor_conversion_data
+    jmp @sub
+@emit:
+    lda editor_conversion_data
+    bne @force
+    lda editor_list_digit
+    beq @skip
+@force:
+    lda #1
+    sta editor_list_digit
+    lda editor_conversion_data
+    ora #'0'
+    jmp editor_list_emit
+@skip:
+    clc
+    rts
+
+; Emit A into editor_result_buffer. C set if buffer full.
+editor_list_emit:
+    ldx editor_list_out
+    cpx #EDITOR_LIST_MAX
+    bcs @full
+    sta editor_result_buffer,x
+    inx
+    stx editor_list_out
+    clc
+    rts
+@full:
+    sec
+    rts
+
+; Look up token A ($80+) in keyword_token and emit its name.
+; Preserves editor_cell_index (body scan offset in detokenize).
+editor_emit_keyword:
+    sta editor_conversion_data
+    ldx #0
+@find:
+    cpx keyword_count_value
+    beq @raw
+    lda keyword_token,x
+    cmp editor_conversion_data
+    beq @found
+    inx
+    bne @find
+@raw:
+    ; Unknown token: emit the raw token byte.
+    lda editor_conversion_data
+    jmp editor_list_emit
+@found:
+    lda keyword_name_lo,x
+    sta zp_tmptr
+    lda keyword_name_hi,x
+    sta zp_tmptr+1
+    lda keyword_length,x
+    sta editor_list_digit
+    ldy #0
+@copy:
+    cpy editor_list_digit
+    beq @done
+    lda (zp_tmptr),y
+    sty editor_conversion_quote
+    jsr editor_list_emit
+    bcs @err
+    ldy editor_conversion_quote
+    iny
+    bne @copy
+@done:
+    clc
+    rts
+@err:
+    sec
+    rts
+
+; Print editor_result_buffer via kernal_chrout and a CR.
+editor_list_print_result:
+    ldx #0
+@loop:
+    lda editor_result_buffer,x
+    beq @cr
+    stx editor_cell_index
+    jsr kernal_chrout
+    ldx editor_cell_index
+    inx
+    bne @loop
+@cr:
+    lda #$0D
+    jsr kernal_chrout
+    clc
+    rts

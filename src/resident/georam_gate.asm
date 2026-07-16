@@ -1,9 +1,7 @@
 ; src/resident/georam_gate.asm
-; PARTIAL (design audit 2026-07-09): geoRAM window XIP at $DE00 is valid for
-; the geoRAM store backend. Dual-backend dispatch (REU DMA into $CE00 / hot
-; slots $C800+), expansion profile generation checks, and REU assist
-; memcopy/memfill are not implemented (DESIGN2 §8 / REU_DESIGN).
-; Resident geoRAM gate and selection helpers.
+; Resident expansion gate and geoRAM selection helpers.  The CPU-window copy
+; routines below are the common byte-accurate path used by the current profile;
+; device selection and profile validation are published by the detector.
 
 .include "common/zp.inc"
 .include "georam_pages.inc"
@@ -25,7 +23,8 @@
 .import ctx_push
 .import ctx_pop
 .import ctx_init
-.import __HIBASIC_LOAD__, __HIBASIC_SIZE__
+; Full RAM_HIGH install image (hibasic.bin): EDITOR_PINNED through COMPRESSOR.
+.import __EDITOR_PINNED_LOAD__, __COMPRESSOR_LOAD__, __COMPRESSOR_SIZE__
 
 .segment "RESIDENT"
 
@@ -87,25 +86,30 @@ hibasic_swap_port:   .res 1
 
 ; The final 32 pages of the minimum 512 KiB device are a dedicated backing
 ; store. They are outside the 64 KiB release image installed in blocks 0-3.
+; Covers the full hibasic.bin install ($E000..compressor end), which the
+; VIC-II bitmap at $E000+ displaces for graphics-capable RUN (GRAPHICS_MEMORY).
 HIBASIC_SWAP_BLOCK = 31
 HIBASIC_SWAP_PAGE  = 32
 CPU_PORT           = $01
 hibasic_swap_ptr   = zp_tmptr
+; Exclusive end of the RAM_HIGH install image.
+HIBASIC_IMAGE_END  = __COMPRESSOR_LOAD__ + __COMPRESSOR_SIZE__
+HIBASIC_IMAGE_SIZE = HIBASIC_IMAGE_END - __EDITOR_PINNED_LOAD__
 
-; hibasic_graphics_reserve - Save the occupied HIBASIC bytes before bitmap use.
+; hibasic_graphics_reserve - Save occupied high-image bytes before bitmap use.
 ; Input: none. Output: C clear. Side effects: selects geoRAM and marks the
 ; graphics reservation active. Clobbers A, X, Y and flags. Zero page: geoRAM
 ; selection mirror only.
 hibasic_graphics_reserve:
     lda hibasic_swap_active
     bne @reserve_done
-    lda #<__HIBASIC_LOAD__
+    lda #<__EDITOR_PINNED_LOAD__
     sta hibasic_swap_ptr
-    lda #>__HIBASIC_LOAD__
+    lda #>__EDITOR_PINNED_LOAD__
     sta hibasic_swap_ptr+1
-    lda #<__HIBASIC_SIZE__
+    lda #<HIBASIC_IMAGE_SIZE
     sta hibasic_swap_remain
-    lda #>__HIBASIC_SIZE__
+    lda #>HIBASIC_IMAGE_SIZE
     sta hibasic_swap_remain+1
     lda #HIBASIC_SWAP_PAGE
     sta hibasic_swap_page
@@ -143,19 +147,19 @@ hibasic_graphics_reserve:
     clc
     rts
 
-; hibasic_graphics_restore - Lazily restore displaced compiler bytes.
+; hibasic_graphics_restore - Lazily restore displaced high-image bytes.
 ; Input: none. Output: C clear. Side effects: releases graphics reservation.
 ; Clobbers A, X, Y and flags. Zero page: geoRAM selection mirror only.
 hibasic_graphics_restore:
     lda hibasic_swap_active
     beq @restore_done
-    lda #<__HIBASIC_LOAD__
+    lda #<__EDITOR_PINNED_LOAD__
     sta hibasic_swap_ptr
-    lda #>__HIBASIC_LOAD__
+    lda #>__EDITOR_PINNED_LOAD__
     sta hibasic_swap_ptr+1
-    lda #<__HIBASIC_SIZE__
+    lda #<HIBASIC_IMAGE_SIZE
     sta hibasic_swap_remain
-    lda #>__HIBASIC_SIZE__
+    lda #>HIBASIC_IMAGE_SIZE
     sta hibasic_swap_remain+1
     lda #HIBASIC_SWAP_PAGE
     sta hibasic_swap_page

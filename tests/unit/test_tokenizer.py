@@ -127,10 +127,14 @@ def _state_address(symbol: str) -> int:
 def _token_byte(command: dict[str, object]) -> int:
     """Return the primary token byte from token_val or token_bytes."""
     if "token_val" in command:
-        return int(command["token_val"])  # type: ignore[arg-type]
+        token_value = command["token_val"]
+        if isinstance(token_value, int):
+            return token_value
     token_bytes = command.get("token_bytes")
     if isinstance(token_bytes, list) and token_bytes:
-        return int(token_bytes[0])
+        token_value = token_bytes[0]
+        if isinstance(token_value, int):
+            return token_value
     raise KeyError(f"command {command.get('keyword')!r} lacks token_val/token_bytes")
 
 

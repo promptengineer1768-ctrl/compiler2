@@ -23,11 +23,21 @@ MAX_CYCLES = 200_000
 KIND_INT = 1
 KIND_FLOAT = 2
 KIND_STRING = 3
+MATH_TYPE_FLOAT = 0
+MATH_TYPE_INT1 = 1
 STORAGE_DIRECT = 0
 STORAGE_ARENA = 1
 SCALAR_ARENA = 3
 STRING_ARENA = 5
 ARENA_GENERATION = 1
+TEST_DESCRIPTOR = 0x0400
+TEST_REQUEST = 0x0410
+TEST_CELL = 0x0420
+TEST_STRING_CELL = 0x0430
+TEST_SOURCE_SD = 0x0450
+TEST_EMPTY_SD = 0x0460
+TEST_STALE_SD = 0x0470
+TEST_ALLOC_REQUEST = 0x04F0
 
 
 def _artifact_root() -> Path:
@@ -52,7 +62,13 @@ def _load_binary(emu: C64Emu6502) -> None:
     payload = (_artifact_root() / "compiler.bin").read_bytes()
     load_addr = payload[0] | (payload[1] << 8)
     emu.write_mem_range(load_addr, payload[2:])
+    hibasic = _artifact_root() / "hibasic.bin"
+    if hibasic.exists():
+        emu.write_mem_range(0xE000, hibasic.read_bytes())
+        emu.write_mem(0x0001, 0x35)
     emu.set_georam_enabled(True)
+    if hasattr(emu, "set_sp"):
+        emu.set_sp(0xFF)
 
 
 def _load_symbol_address(symbol_name: str) -> int:
@@ -157,7 +173,7 @@ def _write_string_store(
 
 def _allocate_string(emu: C64Emu6502, descriptor: int, length: int) -> None:
     """Allocate one canonical SD through the production string runtime."""
-    request = 0xCCC0
+    request = TEST_ALLOC_REQUEST
     emu.write_mem_range(
         request, b"SA" + descriptor.to_bytes(2, "little") + bytes([length])
     )
@@ -183,8 +199,8 @@ class TestVariables:
     def test_set_type_updates_valid_descriptor_and_rejects_unknown_kind(self) -> None:
         """var_set_type validates the VD before changing its canonical kind."""
         emu = _new_emulator()
-        descriptor = 0xCC00
-        _write_descriptor(emu, descriptor, kind=KIND_INT, cell=0x3800)
+        descriptor = TEST_DESCRIPTOR
+        _write_descriptor(emu, descriptor, kind=KIND_INT, cell=TEST_CELL)
         assert not _call(
             emu,
             "var_set_type",
@@ -201,9 +217,9 @@ class TestVariables:
     def test_direct_int_descriptor_load_store_and_type_rejection(self) -> None:
         """Integer helpers use typed VD/VI records, not raw pointer records."""
         emu = _new_emulator()
-        descriptor = 0xCC00
-        request = 0xCC10
-        cell = 0x3800
+        descriptor = TEST_DESCRIPTOR
+        request = TEST_REQUEST
+        cell = TEST_CELL
         _write_descriptor(emu, descriptor, kind=KIND_INT, cell=cell)
         emu.write_mem_range(cell, b"\x34\x12")
 
@@ -225,8 +241,8 @@ class TestVariables:
     def test_arena_backed_float_descriptor_validates_generation(self) -> None:
         """Arena-backed descriptors validate the scalar arena handle before use."""
         emu = _new_emulator()
-        descriptor = 0xCC00
-        request = 0xCC10
+        descriptor = TEST_DESCRIPTOR
+        request = TEST_REQUEST
         _write_descriptor(
             emu,
             descriptor,
@@ -266,15 +282,33 @@ class TestVariables:
         emu.write_mem(descriptor + 7, 0x7F)
         assert _call(emu, "var_load_float", x=descriptor & 0xFF, y=descriptor >> 8)
 
+    def test_float_load_reclassifies_fac_for_downstream_math(self) -> None:
+        """Loading a packed float restores the FAC representation tag."""
+        emu = _new_emulator()
+        descriptor = TEST_DESCRIPTOR
+        cell = TEST_CELL
+        _write_descriptor(emu, descriptor, kind=KIND_FLOAT, cell=cell)
+        emu.write_mem_range(cell, b"\x82\x00\x00\x00\x00")
+
+        math_fac_type = _load_symbol_address("math_fac_type")
+        emu.write_mem(math_fac_type, MATH_TYPE_INT1)
+
+        assert not _call(emu, "var_load_float", x=descriptor & 0xFF, y=descriptor >> 8)
+        assert emu.read_mem(math_fac_type) == MATH_TYPE_FLOAT
+
+        assert not _call(emu, "math_float_to_int")
+        state = emu.get_state()
+        assert (int(state.x), int(state.y)) == (2, 0)
+
     def test_string_descriptor_load_store_and_zero_length(self) -> None:
         """String variables own canonical SD copies and release replaced values."""
         emu = _new_emulator()
-        descriptor = 0xCC00
-        request = 0xCC10
-        cell = 0x3900
-        source = 0x3A00
-        empty = 0x3B00
-        stale = 0x3C00
+        descriptor = TEST_DESCRIPTOR
+        request = TEST_REQUEST
+        cell = TEST_STRING_CELL
+        source = TEST_SOURCE_SD
+        empty = TEST_EMPTY_SD
+        stale = TEST_STALE_SD
         _write_descriptor(emu, descriptor, kind=KIND_STRING, cell=cell)
         _allocate_string(emu, source, 3)
         _allocate_string(emu, empty, 0)
@@ -302,8 +336,8 @@ class TestVariables:
     def test_descriptor_shape_and_stale_handles_are_rejected(self) -> None:
         """Malformed descriptors fail instead of resolving accidental raw pointers."""
         emu = _new_emulator()
-        descriptor = 0xCC00
-        _write_descriptor(emu, descriptor, kind=KIND_INT, cell=0x3800)
+        descriptor = TEST_DESCRIPTOR
+        _write_descriptor(emu, descriptor, kind=KIND_INT, cell=TEST_CELL)
 
         emu.write_mem(descriptor, ord("X"))
         assert _call(emu, "var_resolve", x=descriptor & 0xFF, y=descriptor >> 8)
@@ -333,7 +367,7 @@ class TestVariables:
     ) -> None:
         """Typed arena cells may not spill out of the $DE00 geoRAM window."""
         emu = _new_emulator()
-        descriptor = 0xCC00
+        descriptor = TEST_DESCRIPTOR
         _write_descriptor(
             emu,
             descriptor,

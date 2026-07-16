@@ -86,6 +86,7 @@ def _load_zp_address(name: str) -> int:
 
 
 def _load_binary(emu: C64Emu6502, *, georam_enabled: bool) -> None:
+    """Load the linked image and opt out of semantic emulator substitutions."""
     bin_path = ROOT / "build" / "compiler.bin"
     if not bin_path.exists():
         pytest.fail("build/compiler.bin not found. Run build.ps1 first.")
@@ -93,6 +94,7 @@ def _load_binary(emu: C64Emu6502, *, georam_enabled: bool) -> None:
     load_addr = payload[0] | (payload[1] << 8)
     emu.write_mem_range(load_addr, payload[2:])
     emu.set_georam_enabled(georam_enabled)
+    setattr(emu, "_compiler2_real_bytes_only", True)
 
 
 @pytest.mark.unit
@@ -114,7 +116,7 @@ class TestGeoramDetect:
         """detect_publish_profile publishes the measured capacity atomically."""
         emu = C64Emu6502(lib_path=_dll_path())
         _load_binary(emu, georam_enabled=True)
-        emu.execute_rts(_load_symbol_address("detect_probe_aliasing"), 10_000)
+        emu.execute_rts(_load_symbol_address("detect_probe_aliasing"), 1_000_000)
         emu.execute_rts(_load_symbol_address("detect_publish_profile"), 10_000)
         state = emu.get_state()
         assert (state.x, state.y) == (0x00, 0x08)
@@ -136,7 +138,7 @@ class TestGeoramDetect:
         emu.write_mem(0xDFFF, 0x12)
         emu.write_mem(0xDFFE, 0x34)
 
-        emu.execute(_load_symbol_address("detect_georam"), 10_000)
+        emu.execute_rts(_load_symbol_address("detect_georam"), 1_000_000)
         state = emu.get_state()
         assert state.p & 0x01
         assert emu.read_mem(zp_gr_block) == 0x12
@@ -153,7 +155,7 @@ class TestGeoramDetect:
 
         emu.write_mem(0x0001, 0x35)
 
-        emu.execute(_load_symbol_address("detect_georam"), 10_000)
+        emu.execute_rts(_load_symbol_address("detect_georam"), 1_000_000)
         state = emu.get_state()
         assert (state.p & 0x01) == 0
         assert state.x == 0x00
@@ -179,7 +181,7 @@ class TestGeoramDetect:
         emu.write_mem(0xDFFF, 0x03)
         emu.write_mem(0xDFFE, 0x04)
 
-        emu.execute(_load_symbol_address("detect_georam"), 10_000)
+        emu.execute_rts(_load_symbol_address("detect_georam"), 1_000_000)
         assert emu.get_state().p & 0x01
         assert emu.read_mem(zp_gr_block) == 0x03
         assert emu.read_mem(zp_gr_page) == 0x04
@@ -192,13 +194,13 @@ class TestGeoramDetect:
         emu = C64Emu6502(lib_path=dll)
         _load_binary(emu, georam_enabled=False)
 
-        emu.execute(_load_symbol_address("detect_probe_aliasing"), 10_000)
+        emu.execute_rts(_load_symbol_address("detect_probe_aliasing"), 1_000_000)
         assert emu.get_state().p & 0x01
         assert emu.read_mem(_load_symbol_address("detect_capacity_blocks")) == 0x00
 
         emu = C64Emu6502(lib_path=dll)
         _load_binary(emu, georam_enabled=True)
-        emu.execute(_load_symbol_address("detect_probe_aliasing"), 10_000)
+        emu.execute_rts(_load_symbol_address("detect_probe_aliasing"), 1_000_000)
         assert emu.read_mem(_load_symbol_address("detect_capacity_blocks")) == 0x20
         emu.execute(_load_symbol_address("detect_check_minimum"), 10_000)
         assert (emu.get_state().p & 0x01) == 0
@@ -245,3 +247,129 @@ class TestGeoramDetect:
         assert emu.read_mem(0x0001) == 0x35
         assert emu.read_mem(0xDFFF) == 0x01
         assert emu.read_mem(0xDFFE) == 0x02
+
+    @pytest.mark.parametrize(
+        ("capacity_kib", "expected_blocks"),
+        [(512, 0x20), (1024, 0x40)],
+        ids=["512k", "1m"],
+    )
+    def test_detect_measures_actual_supported_capacity(
+        self, capacity_kib: int, expected_blocks: int
+    ) -> None:
+        """Detection must publish the measured contiguous capacity, not a floor."""
+        emu = C64Emu6502(lib_path=_dll_path())
+        _load_binary(emu, georam_enabled=False)
+        emu.load_georam(b"\x00" * capacity_kib * 1024)
+        emu.set_georam_enabled(True)
+        emu.write_mem(0x0001, 0x35)
+
+        emu.execute_rts(_load_symbol_address("detect_georam"), 1_000_000)
+
+        state = emu.get_state()
+        assert (state.p & 0x01) == 0
+        assert (
+            emu.read_mem(_load_symbol_address("detect_capacity_blocks"))
+            == expected_blocks
+        )
+        assert (state.x | (state.y << 8)) == expected_blocks * 64
+
+    def test_detect_establishes_io_visibility_and_restores_hidden_mapping(self) -> None:
+        """Detection must probe real hardware even when I/O starts hidden."""
+        emu = C64Emu6502(lib_path=_dll_path())
+        _load_binary(emu, georam_enabled=True)
+        zp_gr_block = _load_zp_address("zp_gr_block")
+        zp_gr_page = _load_zp_address("zp_gr_page")
+
+        emu.write_mem(zp_gr_block, 0x12)
+        emu.write_mem(zp_gr_page, 0x34)
+        emu.write_mem(0x0001, 0x35)
+        emu.write_mem(0xDFFF, 0x12)
+        emu.write_mem(0xDFFE, 0x34)
+        emu.write_mem(0x0001, 0x30)
+
+        emu.execute_rts(_load_symbol_address("detect_georam"), 1_000_000)
+
+        assert (emu.get_state().p & 0x01) == 0
+        assert emu.read_mem(0x0001) == 0x30
+        assert emu.read_mem(zp_gr_block) == 0x12
+        assert emu.read_mem(zp_gr_page) == 0x34
+        emu.write_mem(0x0001, 0x35)
+        assert emu.read_mem(0xDFFF) == 0x12
+        assert emu.read_mem(0xDFFE) == 0x34
+
+    @pytest.mark.parametrize(
+        ("georam", "reu", "expected_store", "expected_assist"),
+        [
+            (True, False, 1, 0),
+            (False, True, 2, 0),
+            (True, True, 1, 1),
+        ],
+        ids=["georam-only", "reu-only", "both-prefer-georam"],
+    )
+    def test_dual_detector_selects_one_store_and_publishes_profile(
+        self,
+        georam: bool,
+        reu: bool,
+        expected_store: int,
+        expected_assist: int,
+    ) -> None:
+        """Cold detection selects one store and publishes all required policy."""
+        emu = C64Emu6502(lib_path=_dll_path())
+        _load_binary(emu, georam_enabled=georam)
+        emu.set_reu_enabled(False)
+        if reu:
+            # Real REC probe requires enabled REU memory (not $DF00 status fakes).
+            emu.load_reu(b"\x00" * (512 * 1024))
+            emu.set_reu_enabled(True)
+
+        emu.execute_rts(_load_symbol_address("detect_expansion"), 5_000_000)
+
+        state = emu.get_state()
+        assert (state.p & 0x01) == 0
+        assert state.a == expected_store
+        assert (
+            emu.read_mem(_load_symbol_address("detect_profile_store_kind"))
+            == expected_store
+        )
+        assert (
+            emu.read_mem(_load_symbol_address("detect_profile_reu_assist"))
+            == expected_assist
+        )
+        assert emu.read_mem(_load_symbol_address("detect_profile_xip_base_lo")) == 0x00
+        assert emu.read_mem(_load_symbol_address("detect_profile_xip_base_hi")) == 0xCE
+        assert emu.read_mem(_load_symbol_address("detect_profile_xip_slots")) == 1
+        assert emu.read_mem(_load_symbol_address("detect_profile_n_dma")) == 32
+        assert emu.read_mem(_load_symbol_address("detect_profile_n_fill")) == 32
+        assert emu.read_mem(_load_symbol_address("detect_profile_generation")) != 0
+
+    def test_dual_detector_rejects_neither_device(self) -> None:
+        """Installation fails before publishing a store when neither probe passes."""
+        emu = C64Emu6502(lib_path=_dll_path())
+        _load_binary(emu, georam_enabled=False)
+        emu.set_reu_enabled(False)
+
+        emu.execute_rts(_load_symbol_address("detect_expansion"), 5_000_000)
+
+        assert emu.get_state().p & 0x01
+        assert emu.read_mem(_load_symbol_address("detect_profile_store_kind")) == 0
+
+    def test_dual_profile_integrity_detects_policy_corruption(self) -> None:
+        """The immutable interval fingerprint covers policy, slots, and thresholds."""
+        emu = C64Emu6502(lib_path=_dll_path())
+        _load_binary(emu, georam_enabled=True)
+        emu.load_reu(b"\x00" * (512 * 1024))
+        emu.set_reu_enabled(True)
+        emu.execute_rts(_load_symbol_address("detect_expansion"), 5_000_000)
+        state = emu.get_state()
+        pages = int(state.x) | (int(state.y) << 8)
+        emu.set_x(pages & 0xFF)
+        emu.set_y(pages >> 8)
+        emu.execute_rts(_load_symbol_address("detect_validate_profile"), 10_000)
+        assert (emu.get_state().p & 0x01) == 0
+
+        threshold = _load_symbol_address("detect_profile_n_dma")
+        emu.write_mem(threshold, emu.read_mem(threshold) ^ 1)
+        emu.set_x(pages & 0xFF)
+        emu.set_y(pages >> 8)
+        emu.execute_rts(_load_symbol_address("detect_validate_profile"), 10_000)
+        assert emu.get_state().p & 0x01

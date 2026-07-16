@@ -45,6 +45,13 @@ Their generation and consistency requirements map to named system contract
 tests, but the documents themselves are not requirement or trace-record
 inputs; generated output must not become a circular authority.
 
+`manifests/traceability.json` must contain exactly one section-level record for
+every numbered requirement heading in `REQUIREMENTS.md` after the status
+section and every `RREU-*` heading in `REU_REQUIREMENTS.md`. More granular
+records may be introduced only by adding stable normative requirement IDs; ad
+hoc trace-only IDs are rejected. Planned product behavior remains `planned`
+even when its design and intended test nodes are already recorded.
+
 ## Example
 
 ```text
@@ -78,6 +85,10 @@ The build must fail when:
 - an implemented keyword lacks a critical language E2E case;
 - a stock-compatible critical language case lacks reference provenance;
 - the generated requirements matrix is stale relative to source trace inputs.
+
+Validation also rejects duplicate or unknown requirement IDs, missing source,
+design, implementation, or fixture-provenance paths, invalid EARS statements,
+unresolved test nodes, and stale forward or inverse generated mappings.
 
 Static source-pattern tests do not by themselves complete a requirement. At
 least one test node must prove the behavior at the appropriate fidelity layer.

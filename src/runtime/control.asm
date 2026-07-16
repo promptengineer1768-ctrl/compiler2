@@ -32,6 +32,7 @@ zp_dst = zp_tmp3
 .segment "BSS"
 ctrl_stack:
     .res CTRL_STACK_BYTES
+.export ctrl_sp
 ctrl_sp:
     .res 1
 ctrl_last_target:
@@ -39,7 +40,9 @@ ctrl_last_target:
 ctrl_descriptor:
     .res 2
 
-.segment "CODE"
+; HIBASIC ($E000+): frees late CODE/RAM budget for dual-device detect/loader.
+; Visible under $01=$35 (BASIC/KERNAL ROM out, RAM at $E000+).
+.segment "HIBASIC"
 
 ; Push tag A and pointer X/Y as one bounded frame.
 _push_frame:
@@ -667,6 +670,10 @@ ctrl_end:
 @standalone:
     jmp inspect_shell
 
+; ctrl_reset lives in always-mapped CODE (not HIBASIC) so direct-mode CLR and
+; error unwind can reach it without the $E000 image banked in.
+.segment "CODE"
+
 ; ctrl_reset - Clear control and continuation state without a shell transition.
 ; Input: none. Output: C=0. Clobbers: A and flags.
 ; Side: invalidates the published continuation and all tagged frames.
@@ -679,6 +686,8 @@ ctrl_reset:
     sta ctrl_sp
     clc
     rts
+
+.segment "HIBASIC"
 
 ; ctrl_cont - Validate the published descriptor and restore all frames.
 .export ctrl_cont

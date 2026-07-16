@@ -44,7 +44,8 @@ FP_FLAGS:
 FP_ROUNDING:
     .res 1
 
-.segment "CODE"
+; HIBASIC ($E000+): frees late CODE/RAM budget; visible under $01=$35.
+.segment "HIBASIC"
 
 ; =============================================================================
 ; Mode Management
@@ -92,6 +93,10 @@ fp_get_flags:
     and FP_FLAGS
     rts
 
+; fp_clear_flags lives in always-mapped CODE so inspect_clr / direct CLR can
+; clear sticky IEEE flags without the HIBASIC image banked in.
+.segment "CODE"
+
 ; fp_clear_flags - Clear IEEE flags
 ; Input:  A = flag mask (which flags to clear)
 ; Output: none
@@ -103,6 +108,8 @@ fp_clear_flags:
     and FP_FLAGS
     sta FP_FLAGS
     rts
+
+.segment "HIBASIC"
 
 ; fp_test_flags - Test IEEE flags
 ; Input:  X/Y = test descriptor (pointer to flag mask)

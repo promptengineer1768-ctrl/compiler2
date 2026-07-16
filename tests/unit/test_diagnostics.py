@@ -10,6 +10,8 @@ from typing import Any
 
 import pytest
 
+from tests.kernal_stubs import install_kernal_stubs
+
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS_ROOT = ROOT.parent / "tools"
 if str(TOOLS_ROOT) not in sys.path:
@@ -67,6 +69,7 @@ def _emulator() -> Any:
     load_addr = payload[0] | (payload[1] << 8)
     emu.write_mem_range(load_addr, payload[2:])
     emu._compiler2_real_bytes_only = True
+    install_kernal_stubs(emu)
     return emu
 
 

@@ -17,11 +17,15 @@ ROOT = Path(__file__).resolve().parents[2]
 TOOLS_ROOT = ROOT.parent / "tools"
 if str(TOOLS_ROOT) not in sys.path:
     sys.path.insert(0, str(TOOLS_ROOT))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 try:
     from emu6502_c64_bindings import C64Emu6502
 except ImportError:
     pass
+
+from tests.kernal_stubs import install_kernal_stubs  # noqa: E402
 
 
 def _load_zp_address(name: str) -> int:
@@ -97,15 +101,27 @@ def _new_emu() -> C64Emu6502:
     payload = bin_path.read_bytes()
     load_addr = payload[0] | (payload[1] << 8)
     emu.write_mem_range(load_addr, payload[2:])
+    hibasic = ROOT / "build" / "hibasic.bin"
+    if hibasic.exists():
+        emu.write_mem_range(0xE000, hibasic.read_bytes())
     emu.set_georam_enabled(True)
     emu.write_mem(0x0000, 0x2F)
-    emu.write_mem(0x0001, 0x30)
+    emu.write_mem(0x0001, 0x35)
+    if hasattr(emu, "set_sp"):
+        emu.set_sp(0xFF)
+    install_kernal_stubs(emu)
     return emu
 
 
 def _linked_bytes(symbol_name: str, length: int) -> bytes:
-    """Read linked compiler bytes for a symbol body."""
+    """Read linked compiler/HIBASIC bytes for a symbol body."""
     address = _load_symbol_address(symbol_name)
+    if address >= 0xE000:
+        hibasic = (ROOT / "build" / "hibasic.bin").read_bytes()
+        start = address - 0xE000
+        if start < 0 or start + length > len(hibasic):
+            pytest.fail(f"Symbol {symbol_name!r} is outside build/hibasic.bin.")
+        return hibasic[start : start + length]
     payload = (ROOT / "build" / "compiler.bin").read_bytes()
     load_addr = payload[0] | (payload[1] << 8)
     start = address - load_addr + 2
@@ -437,11 +453,14 @@ class TestInspectWedge:
     def test_wedge_dispatches_prefix(self, command: bytes, kind: int) -> None:
         """inspect_wedge should call standalone wedge service."""
         emu = _new_emu()
-        record = 0x0400
+        record = 0xC800
         emu.write_mem_range(record, command + b"\x00")
+        # EOF after open so directory/status/stream handlers return cleanly.
+        emu.write_mem(0x90, 0x40)
+        emu.write_mem(0xBA, 8)
         emu.set_x(record & 0xFF)
         emu.set_y(record >> 8)
-        emu.execute(_load_symbol_address("inspect_wedge"), 10_000)
+        emu.execute(_load_symbol_address("inspect_wedge"), 50_000)
 
         assert not _carry_is_set(emu)
         assert emu.read_mem(_load_symbol_address("wedge_last_command")) == kind
@@ -449,10 +468,11 @@ class TestInspectWedge:
     def test_wedge_device_selection_updates_kernal_fa(self) -> None:
         """@10 changes the same current-device byte used by LOAD and COMPILE."""
         emu = _new_emu()
-        record = 0x0400
+        record = 0xC800
         emu.write_mem_range(record, b"@10\x00")
+        emu.write_mem(0xBA, 8)
         emu.set_x(record & 0xFF)
         emu.set_y(record >> 8)
-        emu.execute(_load_symbol_address("inspect_wedge"), 10_000)
+        emu.execute(_load_symbol_address("inspect_wedge"), 50_000)
         assert not _carry_is_set(emu)
         assert emu.read_mem(0xBA) == 10

@@ -12,7 +12,12 @@ from pathlib import Path
 
 import pytest
 
-from package_d64 import validate_d64
+from package_d64 import (
+    validate_d64,
+    validate_dual_d64_release,
+    validate_prg_header,
+    validate_reu_patch,
+)
 from populate_georam import COLD_SEGMENTS
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -46,15 +51,34 @@ class TestD64Contents:
         assert path.stat().st_size == 174848
 
     def test_d64_uses_lowercase_release_names(self) -> None:
-        """Release directory names are stored literally in lowercase."""
+        """Release directory names are dual-device basicv3 + georam + reu."""
         path = ROOT / "build" / "compiler.d64"
         if not path.exists():
             pytest.skip("build/compiler.d64 not found")
         manifest = validate_d64(str(path))
         assert manifest["disk_title"] == "compiler2"
+        assert manifest.get("valid") is True
         files = manifest["files"]
-        assert [entry["name"] for entry in files] == ["basicv3", "georam"]
+        assert [entry["name"] for entry in files] == ["basicv3", "georam", "reu"]
+        assert all(entry["type"] == "PRG" for entry in files)
+        assert 1 <= files[0]["size_sectors"] <= 100
         assert 8 <= files[1]["size_sectors"] <= 259
+        assert 1 <= files[2]["size_sectors"] <= 16
+
+    def test_dual_d64_release_headers_and_sizes(self) -> None:
+        """Host sidecars and D64 satisfy dual-device header/size contracts."""
+        d64 = ROOT / "build" / "compiler.d64"
+        basicv3 = ROOT / "build" / "basicv3.prg"
+        georam = ROOT / "build" / "georam.bin"
+        reu = ROOT / "build" / "reu.bin"
+        missing = [p for p in (d64, basicv3, georam, reu) if not p.exists()]
+        if missing:
+            pytest.skip(f"release artifacts missing: {missing}")
+        assert validate_dual_d64_release(d64, basicv3, georam, reu) == []
+        assert validate_prg_header(str(basicv3)) == []
+        assert validate_reu_patch(reu) == []
+        assert georam.stat().st_size >= 65538
+        assert d64.stat().st_size == 174848
 
     def test_d64_georam_is_exact_packaged_sidecar(self, tmp_path: Path) -> None:
         """The D64 georam file exactly matches the selected build sidecar."""
@@ -170,7 +194,8 @@ class TestPrgHeader:
         linked_parts = []
         for name in COLD_SEGMENTS:
             start, size = matches[name]
-            if name == "HIBASIC":
+            # Cold segments may be placed in RAM_HIGH ($E000+) / hibasic.bin.
+            if start >= 0xE000 or name == "HIBASIC":
                 offset = start - 0xE000
                 linked_parts.append(hibasic[offset : offset + size])
             else:
@@ -197,8 +222,14 @@ class TestPrgHeader:
         linked_address = int(match.group(1), 16)
         compiler = (ROOT / "build" / "compiler.bin").read_bytes()
         load_address = int.from_bytes(compiler[:2], "little")
-        linked_offset = 2 + linked_address - load_address
-        linked_bytes = compiler[linked_offset : linked_offset + 16]
+        hibasic = (ROOT / "build" / "hibasic.bin").read_bytes()
+        if linked_address >= 0xE000:
+            linked_bytes = hibasic[
+                linked_address - 0xE000 : linked_address - 0xE000 + 16
+            ]
+        else:
+            linked_offset = 2 + linked_address - load_address
+            linked_bytes = compiler[linked_offset : linked_offset + 16]
         assert len(linked_bytes) == 16
 
         payload = (ROOT / "build" / "georam.bin").read_bytes()[2:]

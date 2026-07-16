@@ -13,11 +13,15 @@ ROOT = Path(__file__).resolve().parents[2]
 TOOLS_ROOT = ROOT.parent / "tools"
 if str(TOOLS_ROOT) not in sys.path:
     sys.path.insert(0, str(TOOLS_ROOT))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 try:
     from emu6502_c64_bindings import C64Emu6502
 except ImportError:
     pass
+
+from tests.kernal_stubs import install_kernal_stubs  # noqa: E402
 
 
 def _artifact_root() -> Path:
@@ -39,7 +43,15 @@ def _load_binary(emu: C64Emu6502) -> None:
     payload = (_artifact_root() / "compiler.bin").read_bytes()
     load_addr = payload[0] | (payload[1] << 8)
     emu.write_mem_range(load_addr, payload[2:])
+    hibasic = _artifact_root() / "hibasic.bin"
+    if hibasic.exists():
+        emu.write_mem_range(0xE000, hibasic.read_bytes())
+        # $01=$35: KERNAL/BASIC ROM out so HIBASIC RAM at $E000+ is executable.
+        emu.write_mem(0x0001, 0x35)
     emu.set_georam_enabled(True)
+    if hasattr(emu, "set_sp"):
+        emu.set_sp(0xFF)
+    install_kernal_stubs(emu)
 
 
 def _load_symbol_address(symbol_name: str) -> int:

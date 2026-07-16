@@ -16,6 +16,8 @@ $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Ca65 = Join-Path $ToolsRoot "ca65.exe"
 $Ld65 = Join-Path $ToolsRoot "ld65.exe"
 $Python = "C:\Users\me\AppData\Local\Programs\Python\Python313\python.exe"
+$env:COMPILER2_CA65 = $Ca65
+$env:COMPILER2_LD65 = $Ld65
 
 # Validate tool paths
 if (-not (Test-Path $Ca65)) { throw "ca65.exe not found at $Ca65" }
@@ -66,7 +68,8 @@ $Sources = @($MainSource) + @(
     Get-ChildItem -Path (Join-Path $Root "src") -Recurse -Filter "*.asm" |
         Where-Object {
             $_.FullName -ne $MainSource -and
-            $_.FullName -notlike (Join-Path $Root "src/common/*")
+            $_.FullName -notlike (Join-Path $Root "src/common/*") -and
+            $_.FullName -notlike (Join-Path $Root "src/standalone/*")
         } |
         Sort-Object FullName |
         ForEach-Object { $_.FullName }
@@ -114,8 +117,10 @@ if ($LASTEXITCODE -ne 0) { throw "geoRAM payload population failed." }
 
 # Extract segments
 & $Python tools/extract_segments.py "$OutDir/compiler.map" "$OutDir/compiler.bin" "$OutDir/compile.bin"
+if ($LASTEXITCODE -ne 0) { throw "Segment extraction failed." }
 # Stage & pack
 & $Python tools/prepare_compressor_segments.py "$OutDir/compile.bin" "$OutDir/basicv3.prg"
+if ($LASTEXITCODE -ne 0) { throw "Compressor segment staging failed." }
 $GeoramPath = Join-Path $Root "$OutDir/georam.bin"
 if (Test-Path $GeoramPath) {
     $GeoramBytes = [System.IO.File]::ReadAllBytes($GeoramPath)
@@ -145,6 +150,29 @@ if ($UseCompressor) {
         --compressor-root $CompressorRoot
     if ($LASTEXITCODE -ne 0) { throw "Compressor artifact build failed." }
 }
+# Stock COMPILE export baseline: source-free COMPILED.PRG (docs/COMPILE_EXPORT.md).
+# Separate ca65/ld65 target — not linked into the development compiler image.
+Write-Host "Packaging stock COMPILE export (COMPILED.PRG)" -ForegroundColor Green
+$StandaloneSrc = Join-Path $Root "src/standalone/compiled_export.asm"
+$StandaloneCfg = Join-Path $Root "src/standalone/compiled_export.cfg"
+$StandaloneObj = Join-Path $Root "$OutDir/obj/standalone_compiled_export.o"
+$StandaloneRaw = Join-Path $Root "$OutDir/compiled_export.raw"
+$CompiledPrg = Join-Path $Root "$OutDir/COMPILED.PRG"
+if (-not (Test-Path $StandaloneSrc)) {
+    throw "src/standalone/compiled_export.asm not found; COMPILE export packaging cannot continue."
+}
+& $Ca65 $StandaloneSrc -o $StandaloneObj -I "$OutDir" -I "src"
+if ($LASTEXITCODE -ne 0) { throw "Assembly failed for standalone/compiled_export.asm." }
+& $Ld65 -C $StandaloneCfg -o $StandaloneRaw $StandaloneObj
+if ($LASTEXITCODE -ne 0) { throw "Linking COMPILED.PRG failed." }
+$StandaloneBytes = [System.IO.File]::ReadAllBytes($StandaloneRaw)
+$CompiledBytes = New-Object byte[] ($StandaloneBytes.Length + 2)
+$CompiledBytes[0] = 0x01
+$CompiledBytes[1] = 0x08
+[Array]::Copy($StandaloneBytes, 0, $CompiledBytes, 2, $StandaloneBytes.Length)
+[System.IO.File]::WriteAllBytes($CompiledPrg, $CompiledBytes)
+Write-Host ("  wrote {0} ({1} bytes)" -f $CompiledPrg, $CompiledBytes.Length)
+
 # Dual-device release: always emit reu.bin (REU patch) + package BASICV3/GEORAM/REU.
 # ExpansionPreference only records both-present selection policy; both sidecars ship.
 Write-Host "Building REU patch (preference=$ExpansionPreference)" -ForegroundColor Green

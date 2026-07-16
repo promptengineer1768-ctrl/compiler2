@@ -15,7 +15,6 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.mark.e2e
 @pytest.mark.georam
-@pytest.mark.smoke
 @pytest.mark.vice
 @pytest.mark.hardware
 @pytest.mark.basicv3

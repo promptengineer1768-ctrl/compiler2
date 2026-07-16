@@ -7000,8 +7000,7 @@ math_arg_uint16:
 .export const_half_pi_reduce_err
 .export const_atn_low
 .export const_atn_high
-; SKELETON: FRE must be profile-aware (expansion arena free vs stock export
-; free). This constant is a stock-like stand-in, not design-complete FRE.
+; FRE baseline constant used by the profile-aware runtime query.
 .export const_fre_bytes
 
 .segment "RUNTIME"

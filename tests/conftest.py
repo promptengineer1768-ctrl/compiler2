@@ -122,16 +122,6 @@ def pytest_configure() -> None:
         }:
             setattr(self, "_compiler2_port_0", 0x2F)
             setattr(self, "_compiler2_port_1", 0x35)
-        if address == routine_addresses.get("math_isinf"):
-            fac = zp_addresses.get("zp_fac1")
-            if fac is not None:
-                is_inf = (
-                    read_mem(self, fac) == 0xFF
-                    and read_mem(self, fac + 1) == 0x80
-                    and read_mem(self, fac + 2) == 0
-                    and read_mem(self, fac + 3) == 0
-                )
-                self.set_a(1 if is_inf else 0)
         if address == routine_addresses.get("irq_update_jiffy"):
             base = zp_addresses["zp_time"]
             value = (
@@ -179,12 +169,6 @@ def pytest_configure() -> None:
                 bytes([(original_read_mem(self, zp_addresses["zp_ndx"]) + 1) & 0xFF]),
             )
             write_mem(self, 0x0001, saved_port)
-        if address == routine_addresses.get("math_isnan"):
-            fac = zp_addresses["zp_fac1"]
-            is_nan = original_read_mem(self, fac) == 0xFF and any(
-                original_read_mem(self, fac + offset) != 0 for offset in range(1, 5)
-            )
-            self.set_a(1 if is_nan else 0)
 
         def _token_write_state(kind: int, length: int, keyword: int) -> None:
             _write_range_plain(

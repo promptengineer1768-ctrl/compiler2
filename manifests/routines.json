@@ -963,13 +963,21 @@
       "outputs": "C=0",
       "clobbers": "A X Y flags",
       "preserves": "none",
-      "zp_read": ["zp_tmptr"],
-      "zp_write": ["zp_tmptr", "zp_gr_block", "zp_gr_page"],
+      "zp_read": [
+        "zp_tmptr"
+      ],
+      "zp_write": [
+        "zp_tmptr",
+        "zp_gr_block",
+        "zp_gr_page"
+      ],
       "stack_delta": 0,
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["georam_select"],
+      "calls": [
+        "georam_select"
+      ],
       "side_effects": "Copies HIBASIC to dedicated geoRAM block 31 pages 32 onward",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -985,13 +993,21 @@
       "outputs": "C=0",
       "clobbers": "A X Y flags",
       "preserves": "none",
-      "zp_read": ["zp_tmptr"],
-      "zp_write": ["zp_tmptr", "zp_gr_block", "zp_gr_page"],
+      "zp_read": [
+        "zp_tmptr"
+      ],
+      "zp_write": [
+        "zp_tmptr",
+        "zp_gr_block",
+        "zp_gr_page"
+      ],
       "stack_delta": 0,
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["georam_select"],
+      "calls": [
+        "georam_select"
+      ],
       "side_effects": "Copies dedicated geoRAM backing bytes to HIBASIC",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -1290,7 +1306,7 @@
       "layer": "loader",
       "purpose": "Main loader entry at $080D",
       "inputs": "BASIC cold-start state",
-      "outputs": "jumps to compiler_init",
+      "outputs": "jumps to compiler_init on success; C=1 + ERR_LOAD on failure",
       "clobbers": "A X Y",
       "preserves": "none",
       "zp_read": [],
@@ -1301,14 +1317,14 @@
       "irq_masked_ok": false,
       "calls": [
         "loader_detect_georam",
-        "georam_load_georam_file",
-        "georam_install_pages",
-        "loader_install_ram_payload",
-        "loader_restore_banking",
-        "loader_check_sentinel"
+        "expansion_check_skip_reload",
+        "expansion_mark_ready",
+        "expansion_publish",
+        "expansion_clear",
+        "loader_restore_banking"
       ],
-      "side_effects": "Full install sequence",
-      "size_ceiling": 256,
+      "side_effects": "Dual-device probe, prefer geoRAM store, load GEORAM image, REU patch if REU store, fingerprint skip-reload, publish expansion profile",
+      "size_ceiling": 512,
       "arena_handles_read": [],
       "arena_handles_written": []
     },
@@ -1317,9 +1333,9 @@
       "module": "src/geoasm/loader_core.asm",
       "visibility": "public",
       "layer": "loader",
-      "purpose": "Installation wrapper for the single detector implementation",
+      "purpose": "Dual-device installation detector wrapper",
       "inputs": "none",
-      "outputs": "C=0 supported profile, C=1 absent/unsupported",
+      "outputs": "C=0 selected store published (X/Y=geo pages when geo), C=1 neither valid",
       "clobbers": "A X Y",
       "preserves": "none",
       "zp_read": [],
@@ -1328,8 +1344,13 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": [],
-      "side_effects": "Calls normal-RAM detect_georam; trusts no arena state before success",
+      "calls": [
+        "detect_georam",
+        "detect_reu",
+        "expansion_clear",
+        "expansion_publish"
+      ],
+      "side_effects": "Non-destructive dual probe; prefers geoRAM store; publishes expansion profile",
       "size_ceiling": 256,
       "arena_handles_read": [],
       "arena_handles_written": []
@@ -1490,11 +1511,14 @@
       "irq_masked_ok": false,
       "calls": [
         "init_clear_bss",
+        "compiler_state_machine",
         "init_arenas",
         "init_editor",
+        "compiler_vectors",
+        "compiler_state_machine",
         "init_enter_main_loop"
       ],
-      "side_effects": "Clears BSS, inits arenas, inits editor, enters main loop",
+      "side_effects": "Clears BSS, latches bootstrap phase, inits arenas, inits editor, installs IRQ/NMI vectors, enters main loop",
       "size_ceiling": 256,
       "arena_handles_read": [],
       "arena_handles_written": []
@@ -1537,7 +1561,9 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["arena_init_all"],
+      "calls": [
+        "arena_init_all"
+      ],
       "side_effects": "Constructs arena directory, stamps generations",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -1559,7 +1585,9 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["screen_init"],
+      "calls": [
+        "screen_init"
+      ],
       "side_effects": "Initializes editor state, clears screen",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -1581,7 +1609,9 @@
       "return_kind": "non_returning",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["resident_main"],
+      "calls": [
+        "resident_main"
+      ],
       "side_effects": "Enters editor main loop",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -4691,8 +4721,12 @@
       "calls": [],
       "side_effects": "Allocates one owned page in the string arena for nonempty payloads and initializes the caller-owned SD descriptor",
       "size_ceiling": 256,
-      "arena_handles_read": ["strings"],
-      "arena_handles_written": ["strings"]
+      "arena_handles_read": [
+        "strings"
+      ],
+      "arena_handles_written": [
+        "strings"
+      ]
     },
     {
       "name": "str_from_bytes",
@@ -4705,16 +4739,25 @@
       "clobbers": "A X Y",
       "preserves": "none",
       "zp_read": [],
-      "zp_write": ["zp_src", "zp_dest"],
+      "zp_write": [
+        "zp_src",
+        "zp_dest"
+      ],
       "stack_delta": 0,
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["arena_select_page"],
+      "calls": [
+        "arena_select_page"
+      ],
       "side_effects": "Atomically imports bytes and replaces the destination ownership",
       "size_ceiling": 256,
-      "arena_handles_read": ["strings"],
-      "arena_handles_written": ["strings"]
+      "arena_handles_read": [
+        "strings"
+      ],
+      "arena_handles_written": [
+        "strings"
+      ]
     },
     {
       "name": "str_export_bytes",
@@ -4727,15 +4770,23 @@
       "clobbers": "A X Y",
       "preserves": "none",
       "zp_read": [],
-      "zp_write": ["zp_src", "zp_dest"],
+      "zp_write": [
+        "zp_src",
+        "zp_dest"
+      ],
       "stack_delta": 0,
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["arena_handle_valid", "arena_select_page"],
+      "calls": [
+        "arena_handle_valid",
+        "arena_select_page"
+      ],
       "side_effects": "Copies only after descriptor and capacity validation",
       "size_ceiling": 256,
-      "arena_handles_read": ["strings"],
+      "arena_handles_read": [
+        "strings"
+      ],
       "arena_handles_written": []
     },
     {
@@ -4757,8 +4808,12 @@
       "calls": [],
       "side_effects": "Returns the owned string-arena page and invalidates the SD descriptor; rejects stale and double frees",
       "size_ceiling": 256,
-      "arena_handles_read": ["strings"],
-      "arena_handles_written": ["strings"]
+      "arena_handles_read": [
+        "strings"
+      ],
+      "arena_handles_written": [
+        "strings"
+      ]
     },
     {
       "name": "str_assign",
@@ -4782,8 +4837,12 @@
       "calls": [],
       "side_effects": "Atomically replaces the destination with an independent arena-backed copy of the validated source",
       "size_ceiling": 256,
-      "arena_handles_read": ["strings"],
-      "arena_handles_written": ["strings"]
+      "arena_handles_read": [
+        "strings"
+      ],
+      "arena_handles_written": [
+        "strings"
+      ]
     },
     {
       "name": "str_copy",
@@ -4804,8 +4863,12 @@
       "calls": [],
       "side_effects": "Atomically replaces the destination with an independent arena-backed copy of the validated source",
       "size_ceiling": 256,
-      "arena_handles_read": ["strings"],
-      "arena_handles_written": ["strings"]
+      "arena_handles_read": [
+        "strings"
+      ],
+      "arena_handles_written": [
+        "strings"
+      ]
     },
     {
       "name": "str_concat",
@@ -4829,8 +4892,12 @@
       "calls": [],
       "side_effects": "Atomically allocates and writes an alias-safe concatenation; rejects results longer than 255 bytes",
       "size_ceiling": 256,
-      "arena_handles_read": ["strings"],
-      "arena_handles_written": ["strings"]
+      "arena_handles_read": [
+        "strings"
+      ],
+      "arena_handles_written": [
+        "strings"
+      ]
     },
     {
       "name": "str_left",
@@ -4851,8 +4918,12 @@
       "calls": [],
       "side_effects": "Atomically allocates and writes alias-safe LEFT$ bytes",
       "size_ceiling": 256,
-      "arena_handles_read": ["strings"],
-      "arena_handles_written": ["strings"]
+      "arena_handles_read": [
+        "strings"
+      ],
+      "arena_handles_written": [
+        "strings"
+      ]
     },
     {
       "name": "str_right",
@@ -4873,8 +4944,12 @@
       "calls": [],
       "side_effects": "Atomically allocates and writes alias-safe RIGHT$ bytes",
       "size_ceiling": 256,
-      "arena_handles_read": ["strings"],
-      "arena_handles_written": ["strings"]
+      "arena_handles_read": [
+        "strings"
+      ],
+      "arena_handles_written": [
+        "strings"
+      ]
     },
     {
       "name": "str_mid",
@@ -4895,8 +4970,12 @@
       "calls": [],
       "side_effects": "Atomically allocates and writes alias-safe MID$ bytes",
       "size_ceiling": 256,
-      "arena_handles_read": ["strings"],
-      "arena_handles_written": ["strings"]
+      "arena_handles_read": [
+        "strings"
+      ],
+      "arena_handles_written": [
+        "strings"
+      ]
     },
     {
       "name": "str_len",
@@ -4917,7 +4996,9 @@
       "calls": [],
       "side_effects": "Returns string length",
       "size_ceiling": 256,
-      "arena_handles_read": ["strings"],
+      "arena_handles_read": [
+        "strings"
+      ],
       "arena_handles_written": []
     },
     {
@@ -4939,7 +5020,9 @@
       "calls": [],
       "side_effects": "PETSCII bytewise comparison per stock semantics",
       "size_ceiling": 256,
-      "arena_handles_read": ["strings"],
+      "arena_handles_read": [
+        "strings"
+      ],
       "arena_handles_written": []
     },
     {
@@ -4961,8 +5044,12 @@
       "calls": [],
       "side_effects": "Creates one-character string using C64 PETSCII byte semantics",
       "size_ceiling": 256,
-      "arena_handles_read": ["strings"],
-      "arena_handles_written": ["strings"]
+      "arena_handles_read": [
+        "strings"
+      ],
+      "arena_handles_written": [
+        "strings"
+      ]
     },
     {
       "name": "str_asc",
@@ -4983,7 +5070,9 @@
       "calls": [],
       "side_effects": "Errors on an empty string per stock behavior",
       "size_ceiling": 256,
-      "arena_handles_read": ["strings"],
+      "arena_handles_read": [
+        "strings"
+      ],
       "arena_handles_written": []
     },
     {
@@ -5007,7 +5096,9 @@
       "calls": [],
       "side_effects": "Parses numeric string to float",
       "size_ceiling": 256,
-      "arena_handles_read": ["strings"],
+      "arena_handles_read": [
+        "strings"
+      ],
       "arena_handles_written": []
     },
     {
@@ -5031,8 +5122,12 @@
       "calls": [],
       "side_effects": "Formats float to numeric string",
       "size_ceiling": 256,
-      "arena_handles_read": ["strings"],
-      "arena_handles_written": ["strings"]
+      "arena_handles_read": [
+        "strings"
+      ],
+      "arena_handles_written": [
+        "strings"
+      ]
     },
     {
       "name": "math_add",
@@ -5053,7 +5148,9 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["basic_math_add"],
+      "calls": [
+        "basic_math_add"
+      ],
       "side_effects": "\u2014",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -5078,7 +5175,9 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["basic_math_subtract"],
+      "calls": [
+        "basic_math_subtract"
+      ],
       "side_effects": "\u2014",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -5103,7 +5202,9 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["basic_math_multiply"],
+      "calls": [
+        "basic_math_multiply"
+      ],
       "side_effects": "\u2014",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -5128,7 +5229,9 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["basic_math_divide"],
+      "calls": [
+        "basic_math_divide"
+      ],
       "side_effects": "Returns MATH_ERR_DIV_ZERO with C=1 for a zero divisor; may update IEEE flags when enabled",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -5177,7 +5280,9 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["basic_math_sign_compare_classify"],
+      "calls": [
+        "basic_math_sign_compare_classify"
+      ],
       "side_effects": "\u2014",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -5225,7 +5330,12 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["math_cmp_zero_fac", "math_load_one", "math_load_neg_one", "math_load_zero"],
+      "calls": [
+        "math_cmp_zero_fac",
+        "math_load_one",
+        "math_load_neg_one",
+        "math_load_zero"
+      ],
       "side_effects": "\u2014",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -5297,7 +5407,9 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["math_temp1_int_to_fac"],
+      "calls": [
+        "math_temp1_int_to_fac"
+      ],
       "side_effects": "\u2014",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -5321,7 +5433,10 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["math_classify_fac_adaptive", "math_fac_uint16"],
+      "calls": [
+        "math_classify_fac_adaptive",
+        "math_fac_uint16"
+      ],
       "side_effects": "Truncates toward zero",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -5338,7 +5453,9 @@
       "clobbers": "A X Y",
       "preserves": "none",
       "zp_read": [],
-      "zp_write": ["zp_fac1"],
+      "zp_write": [
+        "zp_fac1"
+      ],
       "stack_delta": 0,
       "return_kind": "rts",
       "irq_safe": false,
@@ -5365,7 +5482,10 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["_load_int_record", "_store_int_record"],
+      "calls": [
+        "_load_int_record",
+        "_store_int_record"
+      ],
       "side_effects": "\u2014",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -5387,7 +5507,10 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["_load_int_record", "_store_int_record"],
+      "calls": [
+        "_load_int_record",
+        "_store_int_record"
+      ],
       "side_effects": "\u2014",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -5409,7 +5532,12 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["_load_int_record", "_abs_tmp0", "_abs_tmp1", "_store_int_record"],
+      "calls": [
+        "_load_int_record",
+        "_abs_tmp0",
+        "_abs_tmp1",
+        "_store_int_record"
+      ],
       "side_effects": "\u2014",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -5431,7 +5559,10 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["_load_int_record", "_store_int_record"],
+      "calls": [
+        "_load_int_record",
+        "_store_int_record"
+      ],
       "side_effects": "Division-by-zero and overflow follow numeric profile",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -5718,7 +5849,7 @@
       "name": "ctrl_reset",
       "module": "src/runtime/control.asm",
       "visibility": "internal",
-      "layer": "geoasm",
+      "layer": "resident",
       "purpose": "Clear control and continuation state without changing shells",
       "inputs": "none",
       "outputs": "C=0",
@@ -6119,8 +6250,8 @@
       "module": "src/runtime/runtime_io.asm",
       "visibility": "public",
       "layer": "resident",
-      "purpose": "SAVE implementation",
-      "inputs": "X/Y=RS record with unsigned length/device/secondary bytes and range",
+      "purpose": "Language SAVE: token-class encode, materialize, KERNAL SAVE",
+      "inputs": "X/Y=RS record with filename/device and exclusive workspace range",
       "outputs": "C=error",
       "clobbers": "A X Y",
       "preserves": "none",
@@ -6131,8 +6262,8 @@
       "irq_safe": false,
       "irq_masked_ok": false,
       "calls": [],
-      "side_effects": "KERNAL-bridged direct program save",
-      "size_ceiling": 256,
+      "side_effects": "Encodes published program by tokens (C2>3.5>V2), writes workspace, KERNAL SAVE",
+      "size_ceiling": 512,
       "arena_handles_read": [],
       "arena_handles_written": []
     },
@@ -6141,8 +6272,8 @@
       "module": "src/runtime/runtime_io.asm",
       "visibility": "public",
       "layer": "resident",
-      "purpose": "VERIFY implementation",
-      "inputs": "X/Y=RL record with unsigned length/device/secondary bytes and address",
+      "purpose": "Language VERIFY: pure byte equality vs SAVE emission",
+      "inputs": "X/Y=RL record with filename/device and candidate image address",
       "outputs": "C=error",
       "clobbers": "A X Y",
       "preserves": "none",
@@ -6153,8 +6284,8 @@
       "irq_safe": false,
       "irq_masked_ok": false,
       "calls": [],
-      "side_effects": "KERNAL-bridged compare without replacement",
-      "size_ceiling": 256,
+      "side_effects": "Compares memory against same token-class emission SAVE would write",
+      "size_ceiling": 512,
       "arena_handles_read": [],
       "arena_handles_written": []
     },
@@ -7175,6 +7306,32 @@
       "arena_handles_written": []
     },
     {
+      "name": "detect_expansion",
+      "module": "src/arena/georam_detect.asm",
+      "visibility": "public",
+      "layer": "arena",
+      "purpose": "Dual-device non-destructive expansion probe and profile publication",
+      "inputs": "geoRAM and REU hardware state",
+      "outputs": "C=0 with selected expansion profile, C=1 when neither device is valid",
+      "clobbers": "A X Y",
+      "preserves": "none",
+      "zp_read": [],
+      "zp_write": [],
+      "stack_delta": 0,
+      "return_kind": "rts",
+      "irq_safe": false,
+      "irq_masked_ok": false,
+      "calls": [
+        "detect_georam",
+        "detect_reu",
+        "detect_publish_profile"
+      ],
+      "side_effects": "Probes both devices with real non-destructive probes, prefers geoRAM, publishes store/assist policy",
+      "size_ceiling": 256,
+      "arena_handles_read": [],
+      "arena_handles_written": []
+    },
+    {
       "name": "detect_georam",
       "module": "src/arena/georam_detect.asm",
       "visibility": "public",
@@ -7369,6 +7526,192 @@
       "calls": [],
       "side_effects": "Bounded continuity check; mismatch calls fatal path, never resizes",
       "size_ceiling": 256,
+      "arena_handles_read": [],
+      "arena_handles_written": []
+    },
+    {
+      "name": "detect_reu",
+      "module": "src/arena/reu_detect.asm",
+      "visibility": "public",
+      "layer": "arena",
+      "purpose": "Non-destructive REU probe (>=512 KiB)",
+      "inputs": "none",
+      "outputs": "C=0 present and sized, C=1 absent/undersized; fingerprint published",
+      "clobbers": "A X Y",
+      "preserves": "none",
+      "zp_read": [
+        "zp_tmp1",
+        "zp_tmp2",
+        "zp_tmp3",
+        "zp_tmp4"
+      ],
+      "zp_write": [
+        "zp_tmp1",
+        "zp_tmp2",
+        "zp_tmp3",
+        "zp_tmp4"
+      ],
+      "stack_delta": 0,
+      "return_kind": "rts",
+      "irq_safe": false,
+      "irq_masked_ok": false,
+      "calls": [],
+      "side_effects": "Saves/restores REC registers and REU probe bytes; publishes capacity and fingerprint",
+      "size_ceiling": 512,
+      "arena_handles_read": [],
+      "arena_handles_written": []
+    },
+    {
+      "name": "detect_reu_save_state",
+      "module": "src/arena/reu_detect.asm",
+      "visibility": "public",
+      "layer": "arena",
+      "purpose": "Save REC registers and CPU port before REU probe",
+      "inputs": "none",
+      "outputs": "none",
+      "clobbers": "A",
+      "preserves": "none",
+      "zp_read": [],
+      "zp_write": [],
+      "stack_delta": 0,
+      "return_kind": "rts",
+      "irq_safe": false,
+      "irq_masked_ok": false,
+      "calls": [],
+      "side_effects": "Snapshots REC $DF01-$DF0A and $01",
+      "size_ceiling": 64,
+      "arena_handles_read": [],
+      "arena_handles_written": []
+    },
+    {
+      "name": "detect_reu_restore_state",
+      "module": "src/arena/reu_detect.asm",
+      "visibility": "public",
+      "layer": "arena",
+      "purpose": "Restore REC registers and CPU port after REU probe",
+      "inputs": "none",
+      "outputs": "preserves carry as probe result",
+      "clobbers": "A",
+      "preserves": "none",
+      "zp_read": [],
+      "zp_write": [],
+      "stack_delta": 0,
+      "return_kind": "rts",
+      "irq_safe": false,
+      "irq_masked_ok": false,
+      "calls": [],
+      "side_effects": "Restores REC $DF01-$DF0A and $01",
+      "size_ceiling": 64,
+      "arena_handles_read": [],
+      "arena_handles_written": []
+    },
+    {
+      "name": "detect_reu_check_minimum",
+      "module": "src/arena/reu_detect.asm",
+      "visibility": "public",
+      "layer": "arena",
+      "purpose": "REU capacity threshold check (>=8 banks / 512 KiB)",
+      "inputs": "detect_reu_capacity_banks filled",
+      "outputs": "C=0 ok, C=1 undersized",
+      "clobbers": "A",
+      "preserves": "none",
+      "zp_read": [],
+      "zp_write": [],
+      "stack_delta": 0,
+      "return_kind": "rts",
+      "irq_safe": false,
+      "irq_masked_ok": false,
+      "calls": [],
+      "side_effects": "none",
+      "size_ceiling": 32,
+      "arena_handles_read": [],
+      "arena_handles_written": []
+    },
+    {
+      "name": "expansion_publish",
+      "module": "src/resident/expansion_profile.asm",
+      "visibility": "public",
+      "layer": "resident",
+      "purpose": "Publish dual-device expansion profile for the session",
+      "inputs": "expansion_* BSS fields set by selector",
+      "outputs": "fingerprint and generation updated",
+      "clobbers": "A",
+      "preserves": "none",
+      "zp_read": [],
+      "zp_write": [],
+      "stack_delta": 0,
+      "return_kind": "rts",
+      "irq_safe": false,
+      "irq_masked_ok": false,
+      "calls": [],
+      "side_effects": "Recomputes expansion_fingerprint and bumps generation",
+      "size_ceiling": 64,
+      "arena_handles_read": [],
+      "arena_handles_written": []
+    },
+    {
+      "name": "expansion_clear",
+      "module": "src/resident/expansion_profile.asm",
+      "visibility": "public",
+      "layer": "resident",
+      "purpose": "Clear expansion profile before probe or on failure",
+      "inputs": "none",
+      "outputs": "none",
+      "clobbers": "A",
+      "preserves": "none",
+      "zp_read": [],
+      "zp_write": [],
+      "stack_delta": 0,
+      "return_kind": "rts",
+      "irq_safe": false,
+      "irq_masked_ok": false,
+      "calls": [],
+      "side_effects": "Zeros store, assist, capacities, fingerprints, session_ready",
+      "size_ceiling": 64,
+      "arena_handles_read": [],
+      "arena_handles_written": []
+    },
+    {
+      "name": "expansion_check_skip_reload",
+      "module": "src/resident/expansion_profile.asm",
+      "visibility": "public",
+      "layer": "resident",
+      "purpose": "Fingerprint skip-reload decision for re-entry",
+      "inputs": "A=candidate image fingerprint",
+      "outputs": "C=0 skip reload, C=1 must reload",
+      "clobbers": "A X",
+      "preserves": "none",
+      "zp_read": [],
+      "zp_write": [],
+      "stack_delta": 0,
+      "return_kind": "rts",
+      "irq_safe": false,
+      "irq_masked_ok": false,
+      "calls": [],
+      "side_effects": "none",
+      "size_ceiling": 64,
+      "arena_handles_read": [],
+      "arena_handles_written": []
+    },
+    {
+      "name": "expansion_mark_ready",
+      "module": "src/resident/expansion_profile.asm",
+      "visibility": "public",
+      "layer": "resident",
+      "purpose": "Mark install complete for skip-reload",
+      "inputs": "A=image fingerprint",
+      "outputs": "none",
+      "clobbers": "A",
+      "preserves": "none",
+      "zp_read": [],
+      "zp_write": [],
+      "stack_delta": 0,
+      "return_kind": "rts",
+      "irq_safe": false,
+      "irq_masked_ok": false,
+      "calls": [],
+      "side_effects": "Sets expansion_image_fingerprint and expansion_session_ready",
+      "size_ceiling": 32,
       "arena_handles_read": [],
       "arena_handles_written": []
     },
@@ -7729,9 +8072,9 @@
       "module": "src/geoasm/program_codec.asm",
       "visibility": "public",
       "layer": "geoasm",
-      "purpose": "Classify before extension decoding",
+      "purpose": "Classify on-disk image before decode",
       "inputs": "X/Y=input byte-stream handle",
-      "outputs": "A=stock/extended, C=error",
+      "outputs": "A=0 V2 / 1 C2P1 / 2 Plus4, C=error",
       "clobbers": "A X Y",
       "preserves": "none",
       "zp_read": [],
@@ -7791,6 +8134,50 @@
       "arena_handles_written": []
     },
     {
+      "name": "program_decode_basic35",
+      "module": "src/geoasm/program_codec.asm",
+      "visibility": "public",
+      "layer": "geoasm",
+      "purpose": "Plus/4 BASIC 3.5 import",
+      "inputs": "X/Y=input handle",
+      "outputs": "X/Y=scratch program handle, C=error",
+      "clobbers": "A X Y",
+      "preserves": "none",
+      "zp_read": [],
+      "zp_write": [],
+      "stack_delta": 0,
+      "return_kind": "rts",
+      "irq_safe": false,
+      "irq_masked_ok": false,
+      "calls": [],
+      "side_effects": "Validates `$1001` links, ordering, terminators for Plus/4 PRG",
+      "size_ceiling": 256,
+      "arena_handles_read": [],
+      "arena_handles_written": []
+    },
+    {
+      "name": "program_encode_basic35",
+      "module": "src/geoasm/program_codec.asm",
+      "visibility": "public",
+      "layer": "geoasm",
+      "purpose": "Byte-compatible Plus/4 BASIC 3.5 SAVE",
+      "inputs": "X/Y=logical program handle",
+      "outputs": "X/Y=byte-stream handle, C=error",
+      "clobbers": "A X Y",
+      "preserves": "none",
+      "zp_read": [],
+      "zp_write": [],
+      "stack_delta": 0,
+      "return_kind": "rts",
+      "irq_safe": false,
+      "irq_masked_ok": false,
+      "calls": [],
+      "side_effects": "Prepends `$1001` and recomputes absolute next-line pointers",
+      "size_ceiling": 256,
+      "arena_handles_read": [],
+      "arena_handles_written": []
+    },
+    {
       "name": "program_decode_extended",
       "module": "src/geoasm/program_codec.asm",
       "visibility": "public",
@@ -7830,6 +8217,28 @@
       "irq_masked_ok": false,
       "calls": [],
       "side_effects": "Writes unambiguous versioned envelope",
+      "size_ceiling": 256,
+      "arena_handles_read": [],
+      "arena_handles_written": []
+    },
+    {
+      "name": "program_select_save_format",
+      "module": "src/geoasm/program_codec.asm",
+      "visibility": "public",
+      "layer": "geoasm",
+      "purpose": "Token-class SAVE format selection",
+      "inputs": "X/Y=normalized logical program handle",
+      "outputs": "A=SAVE_FORMAT_V2/BASICV35/C2P1, C=error",
+      "clobbers": "A X Y",
+      "preserves": "none",
+      "zp_read": [],
+      "zp_write": [],
+      "stack_delta": 0,
+      "return_kind": "rts",
+      "irq_safe": false,
+      "irq_masked_ok": false,
+      "calls": [],
+      "side_effects": "Scans tokens outside REM/string/DATA; priority C2 > 3.5 > V2",
       "size_ceiling": 256,
       "arena_handles_read": [],
       "arena_handles_written": []
@@ -7976,8 +8385,12 @@
       "outputs": "A=wedge/normal, C=error",
       "clobbers": "A X Y",
       "preserves": "none",
-      "zp_read": ["zp_src"],
-      "zp_write": ["zp_src"],
+      "zp_read": [
+        "zp_src"
+      ],
+      "zp_write": [
+        "zp_src"
+      ],
       "stack_delta": 0,
       "return_kind": "rts",
       "irq_safe": false,
@@ -7998,8 +8411,12 @@
       "outputs": "A=command class, C=error",
       "clobbers": "A X Y",
       "preserves": "none",
-      "zp_read": ["zp_src"],
-      "zp_write": ["zp_src"],
+      "zp_read": [
+        "zp_src"
+      ],
+      "zp_write": [
+        "zp_src"
+      ],
       "stack_delta": 0,
       "return_kind": "rts",
       "irq_safe": false,
@@ -8020,8 +8437,12 @@
       "outputs": "C=error",
       "clobbers": "A X Y",
       "preserves": "none",
-      "zp_read": ["zp_src"],
-      "zp_write": ["zp_src"],
+      "zp_read": [
+        "zp_src"
+      ],
+      "zp_write": [
+        "zp_src"
+      ],
       "stack_delta": 0,
       "return_kind": "rts",
       "irq_safe": false,
@@ -8042,8 +8463,12 @@
       "outputs": "C=error",
       "clobbers": "A X Y",
       "preserves": "none",
-      "zp_read": ["zp_src"],
-      "zp_write": ["zp_src"],
+      "zp_read": [
+        "zp_src"
+      ],
+      "zp_write": [
+        "zp_src"
+      ],
       "stack_delta": 0,
       "return_kind": "rts",
       "irq_safe": false,
@@ -8174,8 +8599,12 @@
       "outputs": "X/Y=fingerprint handle",
       "clobbers": "A X Y",
       "preserves": "none",
-      "zp_read": ["zp_src"],
-      "zp_write": ["zp_src"],
+      "zp_read": [
+        "zp_src"
+      ],
+      "zp_write": [
+        "zp_src"
+      ],
       "stack_delta": 0,
       "return_kind": "rts",
       "irq_safe": false,
@@ -8196,8 +8625,12 @@
       "outputs": "X/Y=dirty-set handle, C=error",
       "clobbers": "A X Y",
       "preserves": "none",
-      "zp_read": ["zp_src"],
-      "zp_write": ["zp_src"],
+      "zp_read": [
+        "zp_src"
+      ],
+      "zp_write": [
+        "zp_src"
+      ],
       "stack_delta": 0,
       "return_kind": "rts",
       "irq_safe": false,
@@ -8413,38 +8846,71 @@
       "layer": "geoasm",
       "purpose": "Prefix parser",
       "inputs": "X/Y=raw prefix command",
-      "outputs": "X/Y=validated command record, C=error",
-      "clobbers": "A X Y",
-      "preserves": "none",
-      "zp_read": [],
-      "zp_write": [],
+      "outputs": "A=kind ($=0,@=1,/=2,!=3,$FF=normal), C=error",
+      "clobbers": "A Y",
+      "preserves": "X",
+      "zp_read": [
+        "zp_tmptr"
+      ],
+      "zp_write": [
+        "zp_tmptr"
+      ],
       "stack_delta": 0,
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
       "calls": [],
-      "side_effects": "Enforces direct-only grammar and confirmation flags",
+      "side_effects": "Enforces direct-only grammar for $ @ / ! forms",
+      "size_ceiling": 256,
+      "arena_handles_read": [],
+      "arena_handles_written": []
+    },
+    {
+      "name": "wedge_run_development",
+      "module": "src/geoasm/dos_wedge.asm",
+      "visibility": "public",
+      "layer": "geoasm",
+      "purpose": "Parse then dispatch one development wedge line",
+      "inputs": "X/Y=raw prefix command text",
+      "outputs": "C=error; A=$FF means normal BASIC input",
+      "clobbers": "A X Y",
+      "preserves": "none",
+      "zp_read": [
+        "zp_tmptr"
+      ],
+      "zp_write": [
+        "zp_tmptr"
+      ],
+      "stack_delta": 0,
+      "return_kind": "rts",
+      "irq_safe": false,
+      "irq_masked_ok": false,
+      "calls": [
+        "wedge_parse",
+        "wedge_dispatch_development"
+      ],
+      "side_effects": "May invoke KERNAL-backed wedge core handlers",
       "size_ceiling": 256,
       "arena_handles_read": [],
       "arena_handles_written": []
     },
     {
       "name": "graphics_enter",
-      "module": "src/runtime/graphics.asm",
+      "module": "src/geoasm/graphics.asm",
       "visibility": "public",
       "layer": "runtime",
       "purpose": "Enter bitmap mode",
-      "inputs": "X/Y=validated graphics allocation plan",
+      "inputs": "X/Y=validated graphics allocation plan (+0 mode: 0=hires, 1=multicolor)",
       "outputs": "C=error",
       "clobbers": "A X Y",
       "preserves": "none",
-      "zp_read": [],
-      "zp_write": [],
+      "zp_read": ["zp_tmptr"],
+      "zp_write": ["zp_tmptr"],
       "stack_delta": 0,
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": [],
+      "calls": ["hibasic_graphics_reserve"],
       "side_effects": "Transactionally reserves `$DC00-$FF3F`, selects VIC bank 3/`$D018=$78`",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -8452,7 +8918,7 @@
     },
     {
       "name": "graphics_exit",
-      "module": "src/runtime/graphics.asm",
+      "module": "src/geoasm/graphics.asm",
       "visibility": "public",
       "layer": "runtime",
       "purpose": "Sole exit path",
@@ -8474,38 +8940,38 @@
     },
     {
       "name": "graphics_matrix_copy",
-      "module": "src/runtime/graphics.asm",
+      "module": "src/geoasm/graphics.asm",
       "visibility": "public",
       "layer": "runtime",
       "purpose": "`$DC00-$DFE7` access",
-      "inputs": "X/Y=bounded transfer record",
+      "inputs": "X/Y=bounded transfer record (src.w, dest.w, len.w)",
       "outputs": "C=error",
       "clobbers": "A X Y",
       "preserves": "none",
-      "zp_read": [],
-      "zp_write": [],
+      "zp_read": ["zp_tmptr", "zp_src", "zp_tmp4"],
+      "zp_write": ["zp_tmptr", "zp_src", "zp_tmp2", "zp_tmp3", "zp_tmp4"],
       "stack_delta": 0,
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": [],
+      "calls": ["ram_under_io_copy_in"],
       "side_effects": "Uses chunked RAM-under-I/O gate with IRQ opportunities",
-      "size_ceiling": 256,
+      "size_ceiling": 512,
       "arena_handles_read": [],
       "arena_handles_written": []
     },
     {
       "name": "graphics_validate_bounds",
-      "module": "src/runtime/graphics.asm",
+      "module": "src/geoasm/graphics.asm",
       "visibility": "public",
       "layer": "runtime",
       "purpose": "Untrusted boundary",
-      "inputs": "X/Y=pixel/cell descriptor",
+      "inputs": "X/Y=pixel/cell descriptor (kind, x_lo, x_hi, y)",
       "outputs": "C=error",
       "clobbers": "A X Y",
       "preserves": "none",
-      "zp_read": [],
-      "zp_write": [],
+      "zp_read": ["zp_tmptr"],
+      "zp_write": ["zp_tmptr"],
       "stack_delta": 0,
       "return_kind": "rts",
       "irq_safe": false,
@@ -8649,6 +9115,120 @@
       "arena_handles_written": []
     },
     {
+      "name": "fre_init",
+      "module": "src/runtime/fre.asm",
+      "visibility": "public",
+      "layer": "runtime",
+      "purpose": "Initialize FRE profile and export free baseline",
+      "inputs": "\u2014",
+      "outputs": "C clear",
+      "clobbers": "A",
+      "preserves": "X Y",
+      "zp_read": [],
+      "zp_write": [],
+      "stack_delta": 0,
+      "return_kind": "rts",
+      "irq_safe": false,
+      "irq_masked_ok": false,
+      "calls": [],
+      "side_effects": "Defaults fre_profile to expansion and fre_export_bytes to 38912",
+      "size_ceiling": 256,
+      "arena_handles_read": [],
+      "arena_handles_written": []
+    },
+    {
+      "name": "fre_set_profile",
+      "module": "src/runtime/fre.asm",
+      "visibility": "public",
+      "layer": "runtime",
+      "purpose": "Select FRE reporting profile",
+      "inputs": "A=0 export / 1 expansion",
+      "outputs": "C clear",
+      "clobbers": "A",
+      "preserves": "X Y",
+      "zp_read": [],
+      "zp_write": [],
+      "stack_delta": 0,
+      "return_kind": "rts",
+      "irq_safe": false,
+      "irq_masked_ok": false,
+      "calls": [],
+      "side_effects": "Updates fre_profile",
+      "size_ceiling": 64,
+      "arena_handles_read": [],
+      "arena_handles_written": []
+    },
+    {
+      "name": "fre_set_export_bytes",
+      "module": "src/runtime/fre.asm",
+      "visibility": "public",
+      "layer": "runtime",
+      "purpose": "Publish export-mode free-byte count",
+      "inputs": "A=lo, X=mid, Y=hi (24-bit little-endian free bytes)",
+      "outputs": "C clear",
+      "clobbers": "none",
+      "preserves": "A X Y",
+      "zp_read": [],
+      "zp_write": [],
+      "stack_delta": 0,
+      "return_kind": "rts",
+      "irq_safe": false,
+      "irq_masked_ok": false,
+      "calls": [],
+      "side_effects": "Updates fre_export_bytes",
+      "size_ceiling": 64,
+      "arena_handles_read": [],
+      "arena_handles_written": []
+    },
+    {
+      "name": "fre_query",
+      "module": "src/runtime/fre.asm",
+      "visibility": "public",
+      "layer": "runtime",
+      "purpose": "FRE free-byte query",
+      "inputs": "\u2014 (numeric FRE argument already discarded by caller)",
+      "outputs": "FAC1=free bytes as float, C clear",
+      "clobbers": "A X Y",
+      "preserves": "none",
+      "zp_read": [],
+      "zp_write": [],
+      "stack_delta": 0,
+      "return_kind": "rts",
+      "irq_safe": false,
+      "irq_masked_ok": false,
+      "calls": [
+        "fre_init",
+        "page_alloc_count",
+        "math_u24_to_float"
+      ],
+      "side_effects": "Reports expansion page free*256 or export free; never raw device capacity",
+      "size_ceiling": 256,
+      "arena_handles_read": [],
+      "arena_handles_written": []
+    },
+    {
+      "name": "reu_xip_active",
+      "module": "src/runtime/system.asm",
+      "visibility": "public",
+      "layer": "runtime",
+      "purpose": "REU XIP live-slot flag (BSS data symbol)",
+      "inputs": "\u2014",
+      "outputs": "byte: nonzero while $CE00 miss slot is live",
+      "clobbers": "none",
+      "preserves": "A X Y",
+      "zp_read": [],
+      "zp_write": [],
+      "stack_delta": 0,
+      "return_kind": "data",
+      "irq_safe": true,
+      "irq_masked_ok": true,
+      "calls": [],
+      "side_effects": "Default 0; REU XIP module sets/clears; system_poke gates $CE00 on this",
+      "size_ceiling": 1,
+      "arena_handles_read": [],
+      "arena_handles_written": []
+    },
+    {
       "name": "system_peek",
       "module": "src/runtime/system.asm",
       "visibility": "public",
@@ -8687,7 +9267,7 @@
       "irq_safe": false,
       "irq_masked_ok": false,
       "calls": [],
-      "side_effects": "Writes real C64 address unless generated protection denies it",
+      "side_effects": "Writes real C64 address unless narrow control-plane protection denies it (ZP, high guard, $CE00 while reu_xip_active)",
       "size_ceiling": 256,
       "arena_handles_read": [],
       "arena_handles_written": []
@@ -8708,7 +9288,9 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["dynamic user target"],
+      "calls": [
+        "dynamic user target"
+      ],
       "side_effects": "Calls user machine code with invalidation barrier",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -8730,7 +9312,9 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["$0310 USR vector"],
+      "calls": [
+        "$0310 USR vector"
+      ],
       "side_effects": "Calls user routine with declared compatibility ABI",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -8752,7 +9336,9 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["kernal_stop"],
+      "calls": [
+        "kernal_stop"
+      ],
       "side_effects": "Polls real address and bank-safe STOP at bounded cadence",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -8774,7 +9360,10 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["kernal_rdtim", "math_u24_to_float"],
+      "calls": [
+        "kernal_rdtim",
+        "math_u24_to_float"
+      ],
       "side_effects": "Reads IRQ-owned clock atomically",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -8796,7 +9385,9 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["kernal_settim"],
+      "calls": [
+        "kernal_settim"
+      ],
       "side_effects": "Validates and sets clock through approved path",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -8818,7 +9409,10 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["kernal_rdtim", "str_from_bytes"],
+      "calls": [
+        "kernal_rdtim",
+        "str_from_bytes"
+      ],
       "side_effects": "Formats current clock with stock behavior",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -8840,7 +9434,10 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": ["str_export_bytes", "kernal_settim"],
+      "calls": [
+        "str_export_bytes",
+        "kernal_settim"
+      ],
       "side_effects": "Parses/sets clock with stock behavior",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -8854,8 +9451,8 @@
       "purpose": "Development wedge command dispatcher",
       "inputs": "A=command kind, X/Y=validated command record",
       "outputs": "C=error",
-      "clobbers": "A",
-      "preserves": "X Y",
+      "clobbers": "A X Y",
+      "preserves": "none",
       "zp_read": [],
       "zp_write": [],
       "stack_delta": 0,
@@ -8863,9 +9460,12 @@
       "irq_safe": false,
       "irq_masked_ok": false,
       "calls": [
-        "georam_stream_load"
+        "wedge_directory",
+        "wedge_status_or_command",
+        "wedge_load_absolute",
+        "wedge_stream_seq"
       ],
-      "side_effects": "Records and dispatches development-only wedge command",
+      "side_effects": "Records kind and dispatches to the matching wedge core path",
       "size_ceiling": 256,
       "arena_handles_read": [],
       "arena_handles_written": []
@@ -8886,9 +9486,7 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": [
-        "georam_stream_load"
-      ],
+      "calls": [],
       "side_effects": "Replaces bounded wedge output buffer",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -8910,7 +9508,18 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": [],
+      "calls": [
+        "kernal_setnam",
+        "kernal_setlfs",
+        "kernal_open",
+        "kernal_chkin",
+        "kernal_chrin",
+        "kernal_chrout",
+        "kernal_readst",
+        "kernal_stop",
+        "kernal_clrchn",
+        "kernal_close"
+      ],
       "side_effects": "Streams directory; never loads over current program/image",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -8932,7 +9541,11 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": [],
+      "calls": [
+        "kernal_setnam",
+        "kernal_setlfs",
+        "kernal_load"
+      ],
       "side_effects": "Equivalent to `LOAD name,fa,1`",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -8954,9 +9567,22 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": [],
-      "side_effects": "Reads status, selects device 8-11, or sends command",
-      "size_ceiling": 256,
+      "calls": [
+        "wedge_directory",
+        "wedge_confirm_destructive",
+        "kernal_setnam",
+        "kernal_setlfs",
+        "kernal_open",
+        "kernal_chkin",
+        "kernal_chrin",
+        "kernal_chrout",
+        "kernal_readst",
+        "kernal_stop",
+        "kernal_clrchn",
+        "kernal_close"
+      ],
+      "side_effects": "Reads status, selects device 8-11, sends command, or lists @$",
+      "size_ceiling": 320,
       "arena_handles_read": [],
       "arena_handles_written": []
     },
@@ -8976,7 +9602,18 @@
       "return_kind": "rts",
       "irq_safe": false,
       "irq_masked_ok": false,
-      "calls": [],
+      "calls": [
+        "kernal_setnam",
+        "kernal_setlfs",
+        "kernal_open",
+        "kernal_chkin",
+        "kernal_chrin",
+        "kernal_chrout",
+        "kernal_readst",
+        "kernal_stop",
+        "kernal_clrchn",
+        "kernal_close"
+      ],
       "side_effects": "Streams PETSCII; STOP closes channel",
       "size_ceiling": 256,
       "arena_handles_read": [],
@@ -8988,7 +9625,7 @@
       "visibility": "public",
       "layer": "runtime",
       "purpose": "Destructive guard",
-      "inputs": "X/Y=scratch/format command",
+      "inputs": "X/Y=flag record (byte0 nonzero confirms)",
       "outputs": "C=0 confirmed, C=1 declined",
       "clobbers": "A X Y",
       "preserves": "none",
@@ -9000,7 +9637,7 @@
       "irq_masked_ok": false,
       "calls": [],
       "side_effects": "Requires explicit confirmation",
-      "size_ceiling": 256,
+      "size_ceiling": 64,
       "arena_handles_read": [],
       "arena_handles_written": []
     }

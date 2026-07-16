@@ -19,6 +19,28 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TRACE_JSON = PROJECT_ROOT / "manifests" / "traceability.json"
 LIMITS_YAML = PROJECT_ROOT / "tests" / "e2e" / "cases" / "basicv2_limits.yaml"
 MATRIX_JSON = PROJECT_ROOT / "build" / "requirements_matrix.json"
+REQUIREMENTS_DOCS = (
+    PROJECT_ROOT / "REQUIREMENTS.md",
+    PROJECT_ROOT / "REU_REQUIREMENTS.md",
+)
+
+
+def _normative_requirement_ids() -> set[str]:
+    """Return stable IDs declared by the normative requirement headings."""
+    requirement_ids: set[str] = set()
+    numbered_heading = re.compile(r"^#{2,6}\s+(\d+(?:\.\d+)*)\b")
+    reu_heading = re.compile(r"^#{2,6}\s+(RREU-\d+)\b")
+    for path in REQUIREMENTS_DOCS:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if match := reu_heading.match(line):
+                requirement_ids.add(match.group(1))
+            elif path.name == "REQUIREMENTS.md" and (
+                match := numbered_heading.match(line)
+            ):
+                section = match.group(1)
+                if section != "1":
+                    requirement_ids.add(f"R{section}")
+    return requirement_ids
 
 
 def _discover_python_tests() -> set[str]:
@@ -107,14 +129,70 @@ class TestTraceability:
                 continue
 
             for t in tests:
-                # We accept exact match or substrings to support flexible mapping
-                if not any(t in kt or kt in t for kt in all_known_tests):
+                if t not in all_known_tests:
                     invalid_tests.append((req_id, t))
 
         assert not missing_mappings, f"Requirements without tests: {missing_mappings}"
         assert (
             not invalid_tests
         ), f"Referenced tests not found in test suite: {invalid_tests}"
+
+    def test_all_normative_requirement_sections_are_traced(self) -> None:
+        """Every normative requirement section has one trace record."""
+        with open(TRACE_JSON, "r", encoding="utf-8") as f:
+            records = json.load(f).get("records", [])
+
+        traced_ids = {str(record.get("id")) for record in records}
+        expected_ids = _normative_requirement_ids()
+        assert traced_ids == expected_ids, (
+            f"Missing trace records: {sorted(expected_ids - traced_ids)}; "
+            f"unknown trace records: {sorted(traced_ids - expected_ids)}"
+        )
+
+    def test_trace_records_resolve_contract_paths_and_metadata(self) -> None:
+        """Every trace record names resolvable contract and implementation paths."""
+        with open(TRACE_JSON, "r", encoding="utf-8") as f:
+            records = json.load(f).get("records", [])
+
+        allowed_statuses = {
+            "planned",
+            "implemented",
+            "unsupported",
+            "not-applicable",
+            "passing",
+        }
+        required_fields = {
+            "id",
+            "ears",
+            "source_section",
+            "design_section",
+            "implementation",
+            "tests",
+            "status",
+        }
+        for record in records:
+            assert not required_fields - record.keys(), record.get("id")
+            assert " shall " in f" {record['ears'].lower()} ", record["id"]
+            assert record["status"] in allowed_statuses, record["id"]
+            for field in ("source_section", "design_section", "implementation"):
+                relative_path = str(record[field]).split("#", maxsplit=1)[0]
+                assert (PROJECT_ROOT / relative_path).exists(), (
+                    record["id"],
+                    field,
+                    relative_path,
+                )
+
+    def test_stock_semantic_records_name_fixture_provenance(self) -> None:
+        """Stock semantic trace records identify their immutable fixture corpus."""
+        with open(TRACE_JSON, "r", encoding="utf-8") as f:
+            records = {
+                str(record["id"]): record for record in json.load(f).get("records", [])
+            }
+
+        for requirement_id in ("R3.1", "R3.2", "R3.3", "R13.2"):
+            provenance = records[requirement_id].get("reference_fixture_provenance")
+            assert provenance, requirement_id
+            assert (PROJECT_ROOT / str(provenance)).is_dir(), requirement_id
 
     def test_tests_to_requirements_mapping(self) -> None:
         """Every mapped test has an inverse requirement index entry."""

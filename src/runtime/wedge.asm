@@ -1,5 +1,6 @@
 ; src/runtime/wedge.asm
-; Development DOS wedge dispatch and bounded output formatting.
+; Normal-RAM DOS wedge core: directory, load, status/command, SEQ stream.
+; Included by the installed runtime and standalone COMPILE exports.
 
 .include "common/constants.asm"
 .include "common/zp.inc"
@@ -27,29 +28,48 @@ wedge_output_length:
 .export wedge_current_device
 wedge_current_device:
     .res 1
+.export wedge_destructive_confirmed
+wedge_destructive_confirmed:
+    .res 1
 wedge_request: .res 2
 wedge_name: .res 2
 wedge_name_length: .res 1
 wedge_byte: .res 1
 wedge_logical: .res 1
 wedge_secondary: .res 1
+wedge_quoted: .res 1
 
 .segment "RODATA"
 wedge_directory_name: .byte '$'
 
+; Normal-RAM CODE: kept in the low image so local KERNAL stubs (above the
+; RAM_HIGH install, currently $F900+) cannot overwrite the wedge core.
+; Standalone exports include this segment with the rest of the runtime image.
 .segment "CODE"
 
 ; wedge_dispatch_development - Dispatch one validated development command.
-; Inputs: A = command kind, X/Y = command record. Outputs: C=error.
-; Side effects: records dispatch kind. Clobbers: A. Flags: C clear for 0..3,
-; set otherwise. Zero page: none.
+; Inputs: A = command kind ($=0, @=1, /=2, !=3), X/Y = command text pointer.
+; Outputs: C=error. Side effects: records kind and runs the matching core path.
+; Clobbers: A, X, Y. Flags: C set for invalid kind or handler error.
+; Zero page: as used by the selected handler.
 .export wedge_dispatch_development
 wedge_dispatch_development:
     cmp #4
     bcs @invalid
     sta wedge_last_command
-    clc
-    rts
+    cmp #WEDGE_DIRECTORY
+    beq @directory
+    cmp #WEDGE_STATUS
+    beq @status
+    cmp #WEDGE_LOAD
+    beq @load
+    jmp wedge_stream_seq
+@directory:
+    jmp wedge_directory
+@status:
+    jmp wedge_status_or_command
+@load:
+    jmp wedge_load_absolute
 @invalid:
     lda #ERR_SYNTAX
     sec
@@ -79,16 +99,22 @@ wedge_format_directory:
     rts
 
 ; Parse a prefix followed by an optional quoted filename. The returned name
-; points into the caller's command buffer and excludes quotes.
+; points into the caller's command buffer and excludes quotes. Unquoted names
+; end at comma, colon (streamed as part of DOS forms after the name start is
+; already past the prefix), end-of-line, or a closing quote.
 .proc wedge_parse_name
     stx wedge_request
     sty wedge_request+1
     stx zp_src
     sty zp_src+1
+    lda #0
+    sta wedge_quoted
     ldy #1
     lda (zp_src),y
     cmp #'"'
     bne @start
+    lda #1
+    sta wedge_quoted
     iny
 @start:
     tya
@@ -104,6 +130,12 @@ wedge_format_directory:
     beq @done
     cmp #'"'
     beq @quoted_done
+    lda wedge_quoted
+    bne @accept
+    lda (zp_src),y
+    cmp #','
+    beq @done
+@accept:
     inx
     iny
     bne @scan
@@ -150,8 +182,15 @@ wedge_format_directory:
     beq @close
     jsr kernal_chrin
     sta wedge_byte
+    ; Stock pattern: re-check status after CHRIN so EOF after the last byte
+    ; closes the channel without depending on a trailing data byte.
+    jsr kernal_readst
+    pha
+    lda wedge_byte
     jsr kernal_chrout
-    bcs @close_error
+    bcs @close_error_pl
+    pla
+    bne @close
     jmp @next
 @close:
     jsr kernal_clrchn
@@ -159,6 +198,8 @@ wedge_format_directory:
     jsr kernal_close
     clc
     rts
+@close_error_pl:
+    pla
 @close_error:
     php
     jsr kernal_clrchn
@@ -171,7 +212,7 @@ wedge_format_directory:
 
 ; wedge_directory - Open "$" on the current device and stream it without
 ; loading over BASIC memory.
-; Inputs: X/Y = textual $ command. Outputs: C=KERNAL error.
+; Inputs: X/Y = textual $ / @$ command. Outputs: C=KERNAL error.
 ; Side effects: KERNAL channels and screen output. Clobbers: A, X, Y.
 .export wedge_directory
 wedge_directory:
@@ -192,9 +233,10 @@ wedge_directory:
 @done:
     rts
 
-; wedge_load_absolute - Select absolute-load semantics.
-; Inputs: X/Y = filename/current-device record. Outputs: C clear.
-; Side effects: records load dispatch. Clobbers: A. Zero page: none.
+; wedge_load_absolute - Absolute PRG load equivalent to LOAD "name",fa,1.
+; Inputs: X/Y = /filename text. Outputs: C=KERNAL error.
+; Side effects: records load dispatch; may replace program memory via LOAD.
+; Clobbers: A, X, Y. Zero page: zp_src.
 .export wedge_load_absolute
 wedge_load_absolute:
     lda #WEDGE_LOAD
@@ -218,10 +260,10 @@ wedge_load_absolute:
 @done:
     rts
 
-; wedge_status_or_command - Select status/device/command semantics.
-; Inputs: A = status/command selector, X/Y = validated command record.
-; Outputs: C clear. Side effects: records status dispatch. Clobbers: A.
-; Zero page: none.
+; wedge_status_or_command - Bare @ status, @8-@11 device select, @$ directory,
+; or @command sent on the command channel (with confirmation for S/N forms).
+; Inputs: X/Y = validated @ command text. Outputs: C=error or declined.
+; Side effects: may write fa ($BA), open channels, stream status. Clobbers: A,X,Y.
 .export wedge_status_or_command
 wedge_status_or_command:
     lda #WEDGE_STATUS
@@ -232,6 +274,9 @@ wedge_status_or_command:
     sty zp_src+1
     ldy #1
     lda (zp_src),y
+    ; @$ is the Action Replay directory alias.
+    cmp #'$'
+    beq @at_directory
     cmp #'1'
     beq @two_digit_device
     cmp #'8'
@@ -239,13 +284,22 @@ wedge_status_or_command:
     cmp #('9'+1)
     bcc @single_device
     jmp @command
+@at_directory:
+    iny
+    lda (zp_src),y
+    bne @command
+    jmp wedge_directory
 @two_digit_device:
     iny
     lda (zp_src),y
     cmp #'0'
-    beq @device_ten
+    bne @check_eleven
+    jmp @device_ten
+@check_eleven:
     cmp #'1'
-    beq @device_eleven
+    bne @two_digit_fail
+    jmp @device_eleven
+@two_digit_fail:
     jmp @command
 @single_device:
     sec
@@ -282,6 +336,30 @@ wedge_status_or_command:
     bcs @done
     jmp wedge_stream_channel
 @named_command:
+    ; Scratch (S...) and NEW/format (N...) require prior confirmation.
+    ldy #1
+    lda (zp_src),y
+    cmp #'"'
+    bne @check_destructive
+    iny
+    lda (zp_src),y
+@check_destructive:
+    and #$7F
+    cmp #'S'
+    beq @need_confirm
+    cmp #'N'
+    beq @need_confirm
+    jmp @send_named
+@need_confirm:
+    ldx #<wedge_destructive_confirmed
+    ldy #>wedge_destructive_confirmed
+    jsr wedge_confirm_destructive
+    bcs @declined
+    lda #0
+    sta wedge_destructive_confirmed
+@send_named:
+    ldx wedge_request
+    ldy wedge_request+1
     jsr wedge_parse_name
     bcs @done
     lda #15
@@ -304,12 +382,16 @@ wedge_status_or_command:
     sta $BA
     sta wedge_current_device
     clc
+    rts
+@declined:
+    lda #ERR_SYNTAX
+    sec
 @done:
     rts
 
-; wedge_stream_seq - Select sequential-file streaming.
-; Inputs: X/Y = filename/output record. Outputs: C clear.
-; Side effects: records stream dispatch. Clobbers: A. Zero page: none.
+; wedge_stream_seq - Stream a SEQ file's PETSCII to the current screen.
+; Inputs: X/Y = !filename text. Outputs: C=error or STOP. STOP closes the file.
+; Side effects: KERNAL channels and screen output. Clobbers: A, X, Y.
 .export wedge_stream_seq
 wedge_stream_seq:
     lda #WEDGE_STREAM
@@ -326,7 +408,7 @@ wedge_stream_seq:
     rts
 
 ; wedge_confirm_destructive - Require an explicit confirmation byte.
-; Inputs: X/Y -> command record; byte zero nonzero confirms. Outputs: C clear
+; Inputs: X/Y -> flag record; byte zero nonzero confirms. Outputs: C clear
 ; when confirmed, set when declined. Side effects: none. Clobbers: A, X, Y.
 ; Zero page: none.
 .export wedge_confirm_destructive

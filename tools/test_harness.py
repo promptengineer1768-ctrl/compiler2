@@ -188,10 +188,16 @@ def generate_requirements_matrix(
             {
                 "id": r["id"],
                 "ears": r["ears"],
+                "source_section": r["source_section"],
                 "design_section": r["design_section"],
                 "implementation": r["implementation"],
                 "tests": r["tests"],
                 "status": r["status"],
+                **(
+                    {"reference_fixture_provenance": r["reference_fixture_provenance"]}
+                    if "reference_fixture_provenance" in r
+                    else {}
+                ),
             }
             for r in records
         ],
@@ -212,13 +218,15 @@ def generate_requirements_matrix(
     md_lines = [
         "# Requirements Traceability Matrix",
         "",
-        "| Requirement ID | EARS Requirement | Design Section | Implementation | Test Nodes | Status |",
-        "|---|---|---|---|---|---|",
+        "| Requirement ID | EARS Requirement | Source Section | Design Section | Implementation | Test Nodes | Status |",
+        "|---|---|---|---|---|---|---|",
     ]
     for r in records:
         tests_str = ", ".join(f"`{t}`" for t in r["tests"])
         md_lines.append(
-            f"| `{r['id']}` | {r['ears']} | `{r['design_section']}` | `{r['implementation']}` | {tests_str} | {r['status']} |"
+            f"| `{r['id']}` | {r['ears']} | `{r['source_section']}` | "
+            f"`{r['design_section']}` | `{r['implementation']}` | {tests_str} | "
+            f"{r['status']} |"
         )
     md_lines.extend(
         [

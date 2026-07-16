@@ -1,4 +1,4 @@
-; Compiler 2 production entry stub.
+; Compiler 2 production BASIC bootstrap entry.
 ;
 ; The tokenized one-line BASIC program is:
 ;

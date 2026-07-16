@@ -21,6 +21,17 @@ GEORAM_BACKED_SEGMENTS = {
     "RODATA",
 }
 
+# Segments placed in RAM_HIGH ($E000+, hibasic.bin) must not be folded into the
+# low-RAM compile.bin span extracted from compiler.bin.
+RAM_HIGH_SEGMENTS = {
+    "EDITOR_PINNED",
+    "HIBASIC",
+    "EDITOR",
+    "WEDGE",
+    "COMPRESSOR",
+}
+RAM_HIGH_START = 0xE000
+
 
 def parse_segments(map_path: str) -> List[Dict[str, Any]]:
     """Parses segments from the linker map file.
@@ -88,6 +99,10 @@ def extract_payload(
         if "GEORAM_PAGE" not in segment["name"]
         and segment["name"] not in ("ZEROPAGE", "VECTORS")
         and segment["name"] not in GEORAM_BACKED_SEGMENTS
+        and segment["name"] not in RAM_HIGH_SEGMENTS
+        # HIBASIC / RAM_HIGH ($E000+) is a separate ld65 output (hibasic.bin).
+        and int(segment["start"]) < RAM_HIGH_START
+        and int(segment["end"]) < RAM_HIGH_START
     ]
     if not ram_segments:
         raise ValueError("Linker map contains no file-backed RAM segments")
@@ -132,6 +147,9 @@ def validate_payload(
         if "GEORAM_PAGE" not in segment["name"]
         and segment["name"] not in ("ZEROPAGE", "VECTORS")
         and segment["name"] not in GEORAM_BACKED_SEGMENTS
+        and segment["name"] not in RAM_HIGH_SEGMENTS
+        and int(segment["start"]) < RAM_HIGH_START
+        and int(segment["end"]) < RAM_HIGH_START
     ]
     if not ram_segments:
         return ["linker map contains no file-backed RAM segments"]

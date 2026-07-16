@@ -13,6 +13,33 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+DEFAULT_TOOLS_ROOT = Path(r"C:\Users\me\Documents\Coding Projects\tools")
+FINAL_ARTIFACT_NAMES = (
+    "compiler.bin",
+    "georam.bin",
+    "reu.bin",
+    "basicv3.prg",
+    "compiler.map",
+    "compiler.lbl",
+    "compiler.d64",
+    "loader_manifest.json",
+    "reu_loader_manifest.json",
+    "routine_directory.json",
+    "overlay_directory.json",
+    "reu_layout.json",
+    "arena_layout.json",
+    "runtime_abi.json",
+    "production_entries.json",
+    "test_entries.json",
+    "zp_allocation.json",
+    "size_report.json",
+    "keyword_lookup_report.json",
+    "requirements_matrix.json",
+    "requirements_matrix.md",
+    "API.md",
+    "MAP.md",
+)
+
 
 def _load_json(path: str) -> dict[str, Any]:
     """Load one JSON object from disk."""
@@ -20,6 +47,142 @@ def _load_json(path: str) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError(f"{path} must contain a JSON object")
     return data
+
+
+def _sha256_file(path: Path) -> str:
+    """Return the SHA-256 digest of one file."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _read_tool_version(executable: Path) -> str:
+    """Return one checked executable version string."""
+    result = subprocess.run(
+        [str(executable), "--version"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    output = (result.stdout + result.stderr).strip()
+    if result.returncode != 0:
+        raise RuntimeError(f"{executable.name} --version exited {result.returncode}")
+    if not output:
+        raise RuntimeError(f"{executable.name} --version returned no version string")
+    return output
+
+
+def configured_tool_versions() -> dict[str, str]:
+    """Return actual versions for the configured production toolchain."""
+    ca65 = Path(os.environ.get("COMPILER2_CA65", DEFAULT_TOOLS_ROOT / "ca65.exe"))
+    ld65 = Path(os.environ.get("COMPILER2_LD65", DEFAULT_TOOLS_ROOT / "ld65.exe"))
+    return {
+        "ca65": _read_tool_version(ca65),
+        "ld65": _read_tool_version(ld65),
+        "python": sys.version.split()[0],
+    }
+
+
+def _artifact_records(build_dir: Path) -> dict[str, dict[str, int | str]]:
+    """Return deterministic size and checksum records for final artifacts."""
+    records: dict[str, dict[str, int | str]] = {}
+    for name in FINAL_ARTIFACT_NAMES:
+        path = build_dir / name
+        if path.is_file():
+            records[name] = {
+                "size": path.stat().st_size,
+                "sha256": _sha256_file(path),
+            }
+    missing_references = [name for name in ("API.md", "MAP.md") if name not in records]
+    if missing_references:
+        raise FileNotFoundError(
+            "missing required generated reference(s): " + ", ".join(missing_references)
+        )
+    return records
+
+
+def build_manifest_data(
+    build_dir: Path,
+    *,
+    tool_versions: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    """Build the final reproducibility manifest from current artifacts."""
+    versions = dict(tool_versions or configured_tool_versions())
+    artifacts = _artifact_records(build_dir)
+    artifact_checksums = {
+        name: str(record["sha256"]) for name, record in artifacts.items()
+    }
+    fingerprint = compute_build_fingerprint(versions, artifact_checksums)
+    return {
+        "schema_version": 1,
+        "valid": True,
+        "fingerprint": fingerprint,
+        "compiler2_version": "1.0",
+        "toolchain": {
+            name: {"version": version} for name, version in sorted(versions.items())
+        },
+        "artifacts": artifacts,
+    }
+
+
+def write_build_manifest(build_dir: Path) -> dict[str, Any]:
+    """Write and return the final reproducibility manifest."""
+    data = build_manifest_data(build_dir)
+    build_dir.mkdir(parents=True, exist_ok=True)
+    (build_dir / "build_manifest.json").write_text(
+        json.dumps(data, indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
+    return data
+
+
+def validate_build_manifest(path: str) -> list[str]:
+    """Validate tool versions, fingerprint, and recorded artifact checksums."""
+    manifest_path = Path(path)
+    if not manifest_path.is_file():
+        return [f"build manifest is missing: {path}"]
+    try:
+        manifest = _load_json(path)
+        actual_versions = configured_tool_versions()
+    except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as error:
+        return [str(error)]
+
+    errors: list[str] = []
+    toolchain = manifest.get("toolchain")
+    if not isinstance(toolchain, dict):
+        errors.append("build manifest omits toolchain versions")
+        toolchain = {}
+    for name, actual in sorted(actual_versions.items()):
+        record = toolchain.get(name)
+        if not isinstance(record, dict) or record.get("version") != actual:
+            errors.append(f"build manifest {name} version does not match current tool")
+
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, dict):
+        errors.append("build manifest omits artifact checksums")
+        artifacts = {}
+    build_dir = manifest_path.parent
+    actual_checksums: dict[str, str] = {}
+    for name, record in sorted(artifacts.items()):
+        artifact_path = build_dir / name
+        if not artifact_path.is_file():
+            errors.append(f"recorded artifact is missing: {name}")
+            continue
+        if not isinstance(record, dict):
+            errors.append(f"artifact record is invalid: {name}")
+            continue
+        size = artifact_path.stat().st_size
+        checksum = _sha256_file(artifact_path)
+        actual_checksums[name] = checksum
+        if record.get("size") != size:
+            errors.append(f"artifact size differs from manifest: {name}")
+        if record.get("sha256") != checksum:
+            errors.append(f"artifact checksum differs from manifest: {name}")
+    for name in ("API.md", "MAP.md"):
+        if name not in artifacts:
+            errors.append(f"build manifest omits required reference: {name}")
+
+    expected_fingerprint = compute_build_fingerprint(actual_versions, actual_checksums)
+    if manifest.get("fingerprint") != expected_fingerprint:
+        errors.append("build fingerprint differs from current inputs and artifacts")
+    return errors
 
 
 def validate_tool_versions(
@@ -301,21 +464,45 @@ def validate_manifests() -> bool:
     return True
 
 
-def compute_build_fingerprint() -> str:
-    """Computes a reproducibility hash covering manifests and sources.
+def compute_build_fingerprint(
+    tool_versions: Mapping[str, str] | None = None,
+    artifact_checksums: Mapping[str, str] | None = None,
+) -> str:
+    """Compute a reproducibility hash covering inputs, tools, and artifacts.
 
     Returns:
-        MD5 fingerprint string.
+        SHA-256 fingerprint string.
     """
-    h = hashlib.md5()
-    # Hash manifest files
-    manifest_dir = "manifests"
-    if os.path.exists(manifest_dir):
-        for name in sorted(os.listdir(manifest_dir)):
-            path = os.path.join(manifest_dir, name)
-            if os.path.isfile(path):
-                with open(path, "rb") as f:
-                    h.update(f.read())
+    h = hashlib.sha256()
+    paths: set[Path] = set()
+    for root, pattern in (
+        (Path("manifests"), "*.json"),
+        (Path("src"), "*.asm"),
+        (Path("tools"), "*.py"),
+        (Path("docs"), "*.md"),
+    ):
+        if root.is_dir():
+            paths.update(path for path in root.rglob(pattern) if path.is_file())
+    paths.update(
+        path
+        for path in (
+            Path("build.ps1"),
+            Path("REQUIREMENTS.md"),
+            Path("DESIGN2.md"),
+            Path("REU_REQUIREMENTS.md"),
+            Path("REU_DESIGN.md"),
+        )
+        if path.is_file()
+    )
+    for path in sorted(paths, key=lambda item: item.as_posix()):
+        h.update(path.as_posix().encode("utf-8"))
+        h.update(b"\0")
+        h.update(path.read_bytes())
+        h.update(b"\0")
+    for name, version in sorted((tool_versions or {}).items()):
+        h.update(f"tool:{name}\0{version}\0".encode())
+    for name, checksum in sorted((artifact_checksums or {}).items()):
+        h.update(f"artifact:{name}\0{checksum}\0".encode())
     return h.hexdigest()
 
 
@@ -462,6 +649,30 @@ def _validate_assembled_artifacts() -> list[str]:
     return errors
 
 
+def validate_dual_d64_artifacts(
+    build_dir: str | Path = "build",
+) -> list[str]:
+    """Validate dual-device D64 packaging (basicv3 + georam + reu).
+
+    Args:
+        build_dir: Build output directory containing release artifacts.
+
+    Returns:
+        Deterministic list of packaging/validation errors (empty when valid).
+    """
+    # Local import keeps validate_build importable before tools/ is on sys.path
+    # in callers that only need schema checks.
+    from package_d64 import validate_dual_d64_release
+
+    root = Path(build_dir)
+    return validate_dual_d64_release(
+        root / "compiler.d64",
+        basicv3_path=root / "basicv3.prg",
+        georam_path=root / "georam.bin",
+        reu_path=root / "reu.bin",
+    )
+
+
 def validate_georam_image_budget(size_report_path: str) -> list[str]:
     """Hard-fail when the geoRAM-canonical image exceeds 512 KiB (2048 pages).
 
@@ -564,6 +775,211 @@ def _contract_errors() -> list[str]:
     return errors
 
 
+def _extract_normative_requirement_ids(paths: Sequence[Path]) -> set[str]:
+    """Extract stable trace IDs from normative requirement headings."""
+    requirement_ids: set[str] = set()
+    numbered_heading = re.compile(r"^#{2,6}\s+(\d+(?:\.\d+)*)\b")
+    reu_heading = re.compile(r"^#{2,6}\s+(RREU-\d+)\b")
+    for path in paths:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if match := reu_heading.match(line):
+                requirement_ids.add(match.group(1))
+            elif path.name == "REQUIREMENTS.md" and (
+                match := numbered_heading.match(line)
+            ):
+                section = match.group(1)
+                if section != "1":
+                    requirement_ids.add(f"R{section}")
+    return requirement_ids
+
+
+def _trace_matrix_record(record: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the canonical generated-matrix view of one trace record."""
+    projected = {
+        "id": record["id"],
+        "ears": record["ears"],
+        "source_section": record["source_section"],
+        "design_section": record["design_section"],
+        "implementation": record["implementation"],
+        "tests": record["tests"],
+        "status": record["status"],
+    }
+    if "reference_fixture_provenance" in record:
+        projected["reference_fixture_provenance"] = record[
+            "reference_fixture_provenance"
+        ]
+    return projected
+
+
+def validate_traceability(
+    trace_path: str,
+    matrix_path: str,
+    requirement_paths: Sequence[str] = (
+        "REQUIREMENTS.md",
+        "REU_REQUIREMENTS.md",
+    ),
+    project_root: str = ".",
+) -> list[str]:
+    """Validate complete normative trace coverage and the generated matrix.
+
+    Args:
+        trace_path: Traceability manifest path, relative to ``project_root``.
+        matrix_path: Generated requirements matrix path.
+        requirement_paths: Normative requirement document paths.
+        project_root: Project root used to resolve every contract path.
+
+    Returns:
+        Human-readable validation errors. An empty list means valid.
+    """
+    root = Path(project_root)
+    trace_file = root / trace_path
+    matrix_file = root / matrix_path
+    normative_paths = [root / path for path in requirement_paths]
+    errors: list[str] = []
+
+    for path in normative_paths:
+        if not path.is_file():
+            errors.append(f"Normative requirement source is missing: {path}")
+    if errors:
+        return errors
+    if not trace_file.is_file():
+        return [f"Traceability manifest is missing: {trace_file}"]
+
+    try:
+        trace = _load_json(str(trace_file))
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        return [f"Traceability manifest is invalid: {error}"]
+
+    expected_sources = [Path(path).as_posix() for path in requirement_paths]
+    if trace.get("requirement_sources") != expected_sources:
+        errors.append(
+            "Traceability requirement_sources must name both normative documents: "
+            f"{expected_sources}"
+        )
+
+    raw_records = trace.get("records")
+    if not isinstance(raw_records, list):
+        return errors + ["Traceability records must be a list"]
+    records = [record for record in raw_records if isinstance(record, dict)]
+    if len(records) != len(raw_records):
+        errors.append("Every traceability record must be a JSON object")
+
+    record_ids = [str(record.get("id", "")) for record in records]
+    duplicate_ids = sorted(
+        requirement_id
+        for requirement_id in set(record_ids)
+        if record_ids.count(requirement_id) > 1
+    )
+    if duplicate_ids:
+        errors.append(f"Duplicate traceability IDs: {duplicate_ids}")
+
+    expected_ids = _extract_normative_requirement_ids(normative_paths)
+    traced_ids = set(record_ids)
+    missing_ids = sorted(expected_ids - traced_ids)
+    unknown_ids = sorted(traced_ids - expected_ids)
+    if missing_ids:
+        errors.append(
+            f"Normative requirement sections lack trace records: {missing_ids}"
+        )
+    if unknown_ids:
+        errors.append(f"Trace records use unknown requirement IDs: {unknown_ids}")
+
+    required_fields = (
+        "id",
+        "ears",
+        "source_section",
+        "design_section",
+        "implementation",
+        "tests",
+        "status",
+    )
+    allowed_statuses = {
+        "planned",
+        "implemented",
+        "unsupported",
+        "not-applicable",
+        "passing",
+    }
+    mapped_tests: dict[str, set[str]] = {}
+    for record in records:
+        requirement_id = str(record.get("id", "<missing-id>"))
+        missing_fields = [field for field in required_fields if not record.get(field)]
+        if missing_fields:
+            errors.append(
+                f"Requirement {requirement_id} lacks fields: {missing_fields}"
+            )
+            continue
+        if " shall " not in f" {str(record['ears']).lower()} ":
+            errors.append(
+                f"Requirement {requirement_id} is not an EARS shall statement"
+            )
+        if record["status"] not in allowed_statuses:
+            errors.append(
+                f"Requirement {requirement_id} has invalid status {record['status']}"
+            )
+
+        expected_source = (
+            "REU_REQUIREMENTS.md"
+            if requirement_id.startswith("RREU-")
+            else "REQUIREMENTS.md"
+        )
+        if not str(record["source_section"]).startswith(f"{expected_source}#"):
+            errors.append(
+                f"Requirement {requirement_id} has invalid source_section "
+                f"{record['source_section']}"
+            )
+
+        for field in ("source_section", "design_section", "implementation"):
+            relative_path = str(record[field]).split("#", maxsplit=1)[0]
+            if not (root / relative_path).exists():
+                errors.append(
+                    f"Requirement {requirement_id} {field} path is missing: "
+                    f"{relative_path}"
+                )
+        provenance = record.get("reference_fixture_provenance")
+        if provenance and not (root / str(provenance)).is_dir():
+            errors.append(
+                f"Requirement {requirement_id} fixture provenance is missing: "
+                f"{provenance}"
+            )
+
+        tests = record["tests"]
+        if not isinstance(tests, list) or not all(
+            isinstance(test, str) and test for test in tests
+        ):
+            errors.append(
+                f"Requirement {requirement_id} tests must be non-empty strings"
+            )
+            continue
+        for test_name in tests:
+            mapped_tests.setdefault(test_name, set()).add(requirement_id)
+
+    if not matrix_file.is_file():
+        return errors + [f"Generated requirements matrix is missing: {matrix_file}"]
+    try:
+        matrix = _load_json(str(matrix_file))
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        return errors + [f"Generated requirements matrix is invalid: {error}"]
+
+    expected_records = [_trace_matrix_record(record) for record in records]
+    if matrix.get("mapped_requirements") != expected_records:
+        errors.append(
+            "Generated requirements matrix is stale relative to trace records"
+        )
+    inverse_rows = {
+        str(row.get("test")): set(row.get("requirements", []))
+        for row in matrix.get("mapped_tests", [])
+        if isinstance(row, dict)
+    }
+    if inverse_rows != mapped_tests:
+        errors.append("Generated matrix test-to-requirement index is stale")
+    if matrix.get("requirements_count") != len(records):
+        errors.append("Generated matrix requirement count is stale")
+    if matrix.get("tests_count") != len(mapped_tests):
+        errors.append("Generated matrix test count is stale")
+    return errors
+
+
 def main() -> None:
     """Main execution path for validation."""
     option = sys.argv[1] if len(sys.argv) > 1 else None
@@ -589,40 +1005,15 @@ def main() -> None:
         )
         raise SystemExit(0 if ok else 1)
 
-    if len(sys.argv) > 1 and sys.argv[1] == "--traceability":
-        trace_path = "manifests/traceability.json"
-        if not os.path.exists(trace_path):
-            print("Error: traceability.json is missing.")
-            sys.exit(1)
-        try:
-            with open(trace_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            records = data.get("records", [])
-            mapped_tests: dict[str, set[str]] = {}
-            for r in records:
-                if not r.get("tests"):
-                    print(f"Error: Requirement {r.get('id')} has no tests mapped.")
-                    sys.exit(1)
-                for test_name in r.get("tests", []):
-                    mapped_tests.setdefault(str(test_name), set()).add(str(r.get("id")))
-            matrix_path = "build/requirements_matrix.json"
-            if os.path.exists(matrix_path):
-                with open(matrix_path, "r", encoding="utf-8") as f:
-                    matrix = json.load(f)
-                inverse_rows = {
-                    str(row.get("test")): set(row.get("requirements", []))
-                    for row in matrix.get("mapped_tests", [])
-                }
-                if inverse_rows != mapped_tests:
-                    print(
-                        "Error: requirements matrix test-to-requirement index is stale."
-                    )
-                    sys.exit(1)
-            print("Requirements traceability matrix validated successfully.")
-            sys.exit(0)
-        except Exception as e:
-            print(f"Error: Traceability validation failed: {e}")
-            sys.exit(1)
+    if option == "--traceability":
+        ok = _report_errors(
+            validate_traceability(
+                "manifests/traceability.json",
+                "build/requirements_matrix.json",
+            ),
+            "Requirements traceability matrix validated successfully.",
+        )
+        raise SystemExit(0 if ok else 1)
 
     if option in {"--budgets", "--size-report"}:
         ok = _report_errors(
@@ -693,6 +1084,7 @@ def main() -> None:
         errors.extend(_contract_errors())
         errors.extend(validate_size_report("build/size_report.json"))
         errors.extend(_validate_assembled_artifacts())
+        errors.extend(validate_dual_d64_artifacts("build"))
         errors.extend(
             validate_generated_reference(
                 "build/API.md",
@@ -700,6 +1092,7 @@ def main() -> None:
                 "build/production_entries.json",
             )
         )
+        errors.extend(validate_build_manifest("build/build_manifest.json"))
         ok = _report_errors(errors, "All build contracts validated successfully.")
         raise SystemExit(0 if ok else 1)
 
@@ -710,16 +1103,8 @@ def main() -> None:
     # General validations
     success = validate_manifests()
     if success:
-        fingerprint = compute_build_fingerprint()
-        # Save build_manifest.json
-        manifest_data = {
-            "valid": True,
-            "fingerprint": fingerprint,
-            "compiler2_version": "1.0",
-        }
-        os.makedirs("build", exist_ok=True)
-        with open("build/build_manifest.json", "w", encoding="utf-8") as f:
-            json.dump(manifest_data, f, indent=2)
+        manifest_data = write_build_manifest(Path("build"))
+        fingerprint = str(manifest_data["fingerprint"])
         print(f"Build validation successful. Fingerprint: {fingerprint}")
     else:
         print("Build validation failed.")

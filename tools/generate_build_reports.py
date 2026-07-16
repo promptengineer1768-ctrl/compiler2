@@ -139,7 +139,11 @@ def generate(build_dir: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     # Highest logical page index from placements (block*64 + page) + 1.
     max_placement_index = 0
     for block, page in placement_pages:
-        max_placement_index = max(max_placement_index, int(block) * 64 + int(page) + 1)
+        typed_block = cast(int, block)
+        typed_page = cast(int, page)
+        max_placement_index = max(
+            max_placement_index, typed_block * 64 + typed_page + 1
+        )
     georam_pages = max(len(placement_pages), image_pages, max_placement_index)
     georam_within_limit = (
         georam_pages <= GEORAM_PAGE_LIMIT and georam_bytes <= GEORAM_BYTE_LIMIT

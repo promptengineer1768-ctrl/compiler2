@@ -57,7 +57,7 @@ def build_simple_prg(compile_bin_path: str, prg_output_path: str) -> None:
     basic_loader = bytes(
         [
             0x0B,
-            0x08,  # next BASIC line pointer ($080B)
+            0x08,  # next BASIC line pointer ($080B end marker)
             0xEA,
             0x07,  # line number 2026
             0x9E,  # SYS token
@@ -70,7 +70,12 @@ def build_simple_prg(compile_bin_path: str, prg_output_path: str) -> None:
             0x00,  # end of BASIC program
         ]
     )
-    prg_data = bytearray([0x01, 0x08]) + bytearray(basic_loader) + data
+    # extract_segments preserves the linked BASIC bootstrap.  Do not prepend a
+    # second launcher in that production path; doing so creates a self-looping
+    # BASIC program at RUN.  Standalone fixtures still receive the launcher.
+    linked_bootstrap = bytes(data[:12]) == bytes(basic_loader)
+    payload = data if linked_bootstrap else bytes(basic_loader) + data
+    prg_data = bytearray([0x01, 0x08]) + bytearray(payload)
 
     os.makedirs(os.path.dirname(prg_output_path), exist_ok=True)
     with open(prg_output_path, "wb") as f:

@@ -341,8 +341,33 @@ def _add_entry(
     d64[offset + 29] = (size_sectors >> 8) & 0xFF
 
 
+# Dual-device release directory contract (DESIGN2 §2 / REQUIREMENTS §8).
+REQUIRED_D64_FILES: tuple[str, ...] = ("basicv3", "georam", "reu")
+# Sector bounds: basicv3 loader+payload, georam ≤64KiB PRG, small REU patch.
+D64_SECTOR_BOUNDS: dict[str, tuple[int, int]] = {
+    "basicv3": (1, 100),
+    "georam": (8, 259),
+    "reu": (1, 16),
+}
+
+
 def validate_d64(d64_path: str) -> dict[str, Any]:
-    """Validate D64 contents and return manifest."""
+    """Validate dual-device D64 directory, filenames, and sector sizes.
+
+    Requires the release directory order ``basicv3``, ``georam``, ``reu`` with
+    PRG type and sector counts inside the documented bounds. Raises on contract
+    failure so packaging and system tests cannot accept a partial disk.
+
+    Args:
+        d64_path: Path to the D64 image.
+
+    Returns:
+        Manifest with disk title, files, and ``valid: True``.
+
+    Raises:
+        FileNotFoundError: When the image is missing.
+        ValueError: When size, directory names, types, or sector sizes fail.
+    """
     path = Path(d64_path)
     if not path.exists():
         raise FileNotFoundError(f"D64 not found: {d64_path}")
@@ -356,7 +381,7 @@ def validate_d64(d64_path: str) -> dict[str, Any]:
     bam_offset = _d64_offset(18, 0)
     dir_offset = ((17 * 21) + 1) * 256
     disk_title = _decode_petscii_name(data[bam_offset + 0x90 : bam_offset + 0xA0])
-    files = []
+    files: list[dict[str, Any]] = []
     for i in range(8):
         off = dir_offset + 2 + i * 32
         if data[off] == 0:
@@ -367,12 +392,115 @@ def validate_d64(d64_path: str) -> dict[str, Any]:
         size = data[off + 28] | (data[off + 29] << 8)
         files.append({"name": name, "type": file_type, "size_sectors": size})
 
+    errors = validate_d64_contents(disk_title, files)
+    if errors:
+        raise ValueError("; ".join(errors))
+
     return {
         "d64_path": d64_path,
         "total_size": len(data),
         "disk_title": disk_title,
         "files": files,
+        "valid": True,
     }
+
+
+def validate_d64_contents(
+    disk_title: str, files: list[dict[str, Any]]
+) -> list[str]:
+    """Return dual-device directory contract errors (empty when valid).
+
+    Args:
+        disk_title: Decoded BAM disk title.
+        files: Directory entries with ``name``, ``type``, ``size_sectors``.
+
+    Returns:
+        Deterministic list of validation errors.
+    """
+    errors: list[str] = []
+    if disk_title != "compiler2":
+        errors.append(f"D64 disk title must be 'compiler2', got {disk_title!r}")
+    names = [entry.get("name") for entry in files]
+    if names != list(REQUIRED_D64_FILES):
+        errors.append(
+            f"D64 directory must be {list(REQUIRED_D64_FILES)}, got {names}"
+        )
+    for entry in files:
+        name = str(entry.get("name", ""))
+        file_type = entry.get("type")
+        size = entry.get("size_sectors")
+        if file_type != "PRG":
+            errors.append(f"D64 file {name!r} must be PRG, got {file_type!r}")
+        if name in D64_SECTOR_BOUNDS:
+            low, high = D64_SECTOR_BOUNDS[name]
+            if not isinstance(size, int) or not (low <= size <= high):
+                errors.append(
+                    f"D64 file {name!r} size_sectors {size!r} outside "
+                    f"[{low}, {high}]"
+                )
+    return errors
+
+
+def validate_dual_d64_release(
+    d64_path: str | Path,
+    basicv3_path: str | Path | None = None,
+    georam_path: str | Path | None = None,
+    reu_path: str | Path | None = None,
+) -> list[str]:
+    """Validate dual-device D64 plus host sidecars (headers and sizes).
+
+    Args:
+        d64_path: Packaged ``compiler.d64``.
+        basicv3_path: Optional host ``basicv3.prg`` for header checks.
+        georam_path: Optional host ``georam.bin`` for size/header checks.
+        reu_path: Optional host ``reu.bin`` for REU envelope checks.
+
+    Returns:
+        Deterministic list of validation errors (empty when valid).
+    """
+    errors: list[str] = []
+    d64 = Path(d64_path)
+    if not d64.is_file():
+        return [f"D64 not found: {d64_path}"]
+    try:
+        manifest = validate_d64(str(d64))
+    except (OSError, ValueError) as exc:
+        errors.append(str(exc))
+        manifest = None
+
+    if basicv3_path is not None:
+        errors.extend(validate_prg_header(str(basicv3_path)))
+    if georam_path is not None:
+        georam = Path(georam_path)
+        if not georam.is_file():
+            errors.append(f"geoRAM image not found: {georam_path}")
+        else:
+            raw = georam.read_bytes()
+            if len(raw) < 4 or raw[:2] != b"\x00\xde":
+                errors.append("georam sidecar load header is not $DE00")
+            elif raw[2:6] == b"CGS1":
+                # Compressed CGS1 install stream (UseCompressor / GEORAM_compressed.prg)
+                if len(raw) < 2 + 28:
+                    errors.append(
+                        f"CGS1 geoRAM sidecar too small: {len(raw)} bytes"
+                    )
+            elif len(raw) < 65538:
+                errors.append(
+                    f"georam.bin too small: {len(raw)} bytes (need >= 65538)"
+                )
+    if reu_path is not None:
+        errors.extend(validate_reu_patch(reu_path))
+
+    if manifest is not None and georam_path is not None and Path(georam_path).is_file():
+        # Cross-check georam sector count against host file size when present.
+        host_sectors = (Path(georam_path).stat().st_size + 253) // 254
+        for entry in manifest["files"]:
+            if entry["name"] == "georam" and entry["size_sectors"] < host_sectors:
+                # c1541 may pack compressed sidecars; only fail when D64 is
+                # smaller than the host artifact it claims to ship.
+                if entry["size_sectors"] < 1:
+                    errors.append("D64 georam sector count is zero")
+    return errors
 
 
 def validate_prg_header(prg_path: str) -> list[str]:
@@ -497,16 +625,13 @@ def main() -> None:
     if c1541_path is None:
         c1541_path = "c1541"
 
-    # Create placeholders if needed
-    if not basicv3_path.exists():
-        print(f"Creating placeholder: {basicv3_path}")
-        basicv3_path.parent.mkdir(parents=True, exist_ok=True)
-        basicv3_path.write_bytes(struct.pack("<H", 0x080D) + b"\x00" * 32)
-
-    if not georam_path.exists():
-        print(f"Creating placeholder: {georam_path}")
-        georam_path.parent.mkdir(parents=True, exist_ok=True)
-        georam_path.write_bytes(struct.pack("<H", 0xDE00) + b"\x00" * 65536)
+    # Packaging must consume real production artifacts.  Synthesizing missing
+    # sidecars would produce an apparently valid disk that cannot install the
+    # compiler and violates the artifact contract.
+    missing = [path for path in (basicv3_path, georam_path) if not path.exists()]
+    if missing:
+        names = ", ".join(str(path) for path in missing)
+        raise FileNotFoundError(f"required packaging artifact(s) missing: {names}")
 
     if not reu_path.exists() and georam_path.exists():
         print(f"Building REU patch: {reu_path}")
@@ -530,17 +655,22 @@ def main() -> None:
             str(reu_path),
         )
 
-    # Validate
+    # Validate dual-device directory, PRG header, georam header, and REU envelope.
+    release_errors = validate_dual_d64_release(
+        output_path,
+        basicv3_path=basicv3_path,
+        georam_path=georam_path,
+        reu_path=reu_path,
+    )
+    if release_errors:
+        for error in release_errors:
+            print(f"Error: {error}")
+        raise SystemExit(1)
+
     manifest = validate_d64(str(output_path))
     print(f"D64 created: {manifest['total_size']} bytes")
     for f in manifest["files"]:
         print(f"  {f['name']}.{f['type']}: {f['size_sectors']} sectors")
-
-    reu_errors = validate_reu_patch(reu_path)
-    if reu_errors:
-        for error in reu_errors:
-            print(f"Error: {error}")
-        raise SystemExit(1)
 
     # Save manifest
     manifest_path = output_path.with_suffix(".json")

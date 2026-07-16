@@ -6,7 +6,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -32,13 +32,15 @@ def _address(symbol: str) -> int:
 def _routine_record(symbol: str) -> dict[str, Any]:
     """Return the generated placement record for one production routine."""
     data = json.loads((ROOT / "build" / "routine_directory.json").read_text())
-    return data["routines"][symbol]
+    return cast(dict[str, Any], data["routines"][symbol])
 
 
 def _linked_address(symbol: str) -> int:
     """Resolve a symbol's linked address from the production label file."""
     labels = (ROOT / "build" / "compiler.lbl").read_text(encoding="utf-8")
-    match = re.search(rf"^al\s+([0-9A-Fa-f]{{6}})\s+\.{re.escape(symbol)}$", labels, re.M)
+    match = re.search(
+        rf"^al\s+([0-9A-Fa-f]{{6}})\s+\.{re.escape(symbol)}$", labels, re.M
+    )
     assert match is not None, f"missing linked symbol: {symbol}"
     return int(match.group(1), 16)
 

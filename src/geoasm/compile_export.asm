@@ -52,11 +52,10 @@ EXPORT_DEFAULT_FILENAME_LEN = 8
 export_msg_near:
     .byte "NEAR STOCK LIMIT", 0
 export_msg_near_clear:
-    .byte "STOCK LIMIT OK", 0
+export_msg_exceeds_clear:
+    .byte "OK", 0
 export_msg_exceeds:
     .byte "EXCEEDS STOCK RAM", 0
-export_msg_exceeds_clear:
-    .byte "STOCK RAM OK", 0
 
 .segment "BSS"
 ; EO: magic, name:u16, length:arg-byte, device:arg-byte, secondary:arg-byte.
@@ -387,6 +386,13 @@ export_check_budgets:
     sec
     rts
 
+; Keep the generated public directory entry page-bounded.  Budget helpers and
+; the private writer implementation live after the module's final directory
+; entry and therefore do not inflate export_check_budgets' placed extent.
+.export export_write_prg
+export_write_prg:
+    jmp export_write_prg_impl
+
 ; Edge-triggered soft stock warnings against high-water image_end.
 ; 80%: image_end >= $A800; 100% exceed: image_end > $D000.
 .proc export_apply_soft_budgets
@@ -527,8 +533,8 @@ export_check_budgets:
 ; Output: C clear on success; A=error and C set on validation/KERNAL failure.
 ; Clobbers: A, X, Y. Side effects: SETNAM, SETLFS logical file 1, SAVE.
 ; Zero page: zp_src.
-.export export_write_prg
-export_write_prg:
+.export export_write_prg_impl
+export_write_prg_impl:
     stx zp_src
     sty zp_src+1
     ldy #0

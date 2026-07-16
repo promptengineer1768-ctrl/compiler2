@@ -18,6 +18,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS_ROOT = ROOT.parent / "tools"
 PROJECT_TOOLS_ROOT = ROOT / "tools"
+TEST_BUFFER = 0x0400
 if str(TOOLS_ROOT) not in sys.path:
     sys.path.insert(0, str(TOOLS_ROOT))
 if str(PROJECT_TOOLS_ROOT) not in sys.path:
@@ -424,30 +425,30 @@ class TestMathFma:
         addr = _load_symbol_address("math_fma")
         zp_fac1 = _load_zp_address("zp_fac1")
 
-        # Write operand record to a known location (e.g., $1000)
+        # Write operand record to normal RAM below the linked program image.
         # Record format: a(5 bytes) + b(5 bytes) + c(5 bytes) = 15 bytes
         # a=2.0
-        emu.write_mem(0x1000, 0x82)
-        emu.write_mem(0x1001, 0x00)
-        emu.write_mem(0x1002, 0x00)
-        emu.write_mem(0x1003, 0x00)
-        emu.write_mem(0x1004, 0x00)
+        emu.write_mem(TEST_BUFFER, 0x82)
+        emu.write_mem(TEST_BUFFER + 1, 0x00)
+        emu.write_mem(TEST_BUFFER + 2, 0x00)
+        emu.write_mem(TEST_BUFFER + 3, 0x00)
+        emu.write_mem(TEST_BUFFER + 4, 0x00)
         # b=3.0
-        emu.write_mem(0x1005, 0x82)
-        emu.write_mem(0x1006, 0x40)
-        emu.write_mem(0x1007, 0x00)
-        emu.write_mem(0x1008, 0x00)
-        emu.write_mem(0x1009, 0x00)
+        emu.write_mem(TEST_BUFFER + 5, 0x82)
+        emu.write_mem(TEST_BUFFER + 6, 0x40)
+        emu.write_mem(TEST_BUFFER + 7, 0x00)
+        emu.write_mem(TEST_BUFFER + 8, 0x00)
+        emu.write_mem(TEST_BUFFER + 9, 0x00)
         # c=1.0
-        emu.write_mem(0x100A, 0x81)
-        emu.write_mem(0x100B, 0x00)
-        emu.write_mem(0x100C, 0x00)
-        emu.write_mem(0x100D, 0x00)
-        emu.write_mem(0x100E, 0x00)
+        emu.write_mem(TEST_BUFFER + 10, 0x81)
+        emu.write_mem(TEST_BUFFER + 11, 0x00)
+        emu.write_mem(TEST_BUFFER + 12, 0x00)
+        emu.write_mem(TEST_BUFFER + 13, 0x00)
+        emu.write_mem(TEST_BUFFER + 14, 0x00)
 
         # Set X/Y to point to operand record
-        emu.set_x(0x00)
-        emu.set_y(0x10)
+        emu.set_x(TEST_BUFFER & 0xFF)
+        emu.set_y(TEST_BUFFER >> 8)
 
         emu.execute(addr, 10000)
 
@@ -497,34 +498,35 @@ class TestMathBinary32Text:
         _load_compiler_image(emu)
         zp_fac1 = _load_zp_address("zp_fac1")
         _write_float_to_fac1(emu, zp_fac1, value)
-        emu.set_x(0x00)
-        emu.set_y(0x10)
+        emu.set_x(TEST_BUFFER & 0xFF)
+        emu.set_y(TEST_BUFFER >> 8)
 
         emu.execute(_load_symbol_address("math_bin32str"), 100_000)
 
-        result = emu.read_mem_range(0x1000, 0x1008).decode("ascii")
+        result = emu.read_mem_range(TEST_BUFFER, TEST_BUFFER + 8).decode("ascii")
         expected = "$" + struct.pack(">f", value).hex().upper()
         assert result == expected
 
     @pytest.mark.parametrize(
-        "text", ["3F800000", "$C0200000", "40490FDB"],
+        "text",
+        ["3F800000", "$C0200000", "40490FDB"],
         ids=["one", "prefixed-negative", "pi"],
     )
     def test_val32_matches_python_binary32_oracle(self, text: str) -> None:
         """VAL32 parses canonical text through assembled production bytes."""
         emu = C64Emu6502(lib_path=_dll_path())
         _load_compiler_image(emu)
-        emu.write_mem_range(0x1000, text.encode("ascii"))
-        emu.set_x(0x00)
-        emu.set_y(0x10)
+        emu.write_mem_range(TEST_BUFFER, text.encode("ascii"))
+        emu.set_x(TEST_BUFFER & 0xFF)
+        emu.set_y(TEST_BUFFER >> 8)
 
         emu.execute(_load_symbol_address("math_val32"), 100_000)
 
         bits = text.removeprefix("$")
         expected = struct.unpack(">f", bytes.fromhex(bits))[0]
-        assert _load_float_from_fac1(
-            emu, _load_zp_address("zp_fac1")
-        ) == pytest.approx(expected, rel=1e-6)
+        assert _load_float_from_fac1(emu, _load_zp_address("zp_fac1")) == pytest.approx(
+            expected, rel=1e-6
+        )
 
     def test_math_min(self) -> None:
         """math_min should return the smaller value."""

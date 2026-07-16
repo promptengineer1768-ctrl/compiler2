@@ -689,11 +689,12 @@ _PENDING_SCENARIOS = SCENARIOS[3:]
 @pytest.mark.smoke
 @pytest.mark.parametrize("scenario", _FIXTURE_SCENARIOS)
 def test_statement_catalog_scaffold(scenario: dict[str, object]) -> None:
-    """The canonical BASIC V2 statement matrix is represented in pytest."""
+    """The smoke modes resolve to captured stock VICE observations."""
     assert scenario["profile"] == "basicv2"
     assert scenario["mode"] in {"immediate", "program", "compile"}
     assert scenario["keyword"] in {"PRINT", "FOR", "GOTO"}
     assert scenario["vice_pending"] is False
+    assert_fixture_backed(scenario)
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS)

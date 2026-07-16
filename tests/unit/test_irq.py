@@ -82,7 +82,17 @@ def _load_zp_address(name: str) -> int:
     pytest.fail(f"Zero page symbol '{name}' not found in allocation.")
 
 
-def _load_binary(emu: C64Emu6502) -> None:
+def _load_binary(emu: C64Emu6502, *, enable_georam: bool = False) -> None:
+    """Load the linked image.
+
+    Args:
+        emu: Emulator instance.
+        enable_georam: When True, enable geoRAM so CPU stores stick for real
+            resident execution. Leave False for harness post-hook tests that
+            model KERNAL-backed IRQ helpers without ROM present.
+    """
+    if enable_georam:
+        emu.set_georam_enabled(True)
     bin_path = ROOT / "build" / "compiler.bin"
     if not bin_path.exists():
         pytest.fail("build/compiler.bin not found. Run build.ps1 first.")
@@ -192,3 +202,47 @@ class TestIrq:
 
         assert udtim_body == b"\x20\xea\xff\x60"
         assert scnkey_body == b"\x20\x9f\xff\x60"
+
+    def test_nmi_invalidate_cont_clears_continuation_state(self) -> None:
+        """NMI CONT invalidation zeros handle, stop flag, and control stack SP."""
+        dll = _dll_path()
+        emu = C64Emu6502(lib_path=dll)
+        _load_binary(emu, enable_georam=True)
+        emu._compiler2_real_bytes_only = True
+        zp_stop = _load_zp_address("zp_stop_flag")
+        zp_handle = _load_zp_address("zp_cont_handle")
+        ctrl_sp = _load_symbol_address("ctrl_sp")
+        emu.write_mem(zp_stop, 1)
+        emu.write_mem(zp_handle, 0x34)
+        emu.write_mem(zp_handle + 1, 0x12)
+        emu.write_mem(ctrl_sp, 0x0C)
+        emu.execute(_load_symbol_address("nmi_invalidate_cont"), 10_000)
+        assert emu.read_mem(zp_stop) == 0
+        assert emu.read_mem(zp_handle) == 0
+        assert emu.read_mem(zp_handle + 1) == 0
+        assert emu.read_mem(ctrl_sp) == 0
+
+    def test_nmi_mark_compile_dirty_sets_full_dirty_mask(self) -> None:
+        """NMI marks compile publication fully dirty and invalid."""
+        dll = _dll_path()
+        emu = C64Emu6502(lib_path=dll)
+        _load_binary(emu, enable_georam=True)
+        emu._compiler2_real_bytes_only = True
+        dirty = _load_symbol_address("incremental_dirty_mask")
+        published = _load_symbol_address("incremental_published_valid")
+        emu.write_mem(dirty, 0x00)
+        emu.write_mem(published, 0x01)
+        emu.execute(_load_symbol_address("nmi_mark_compile_dirty"), 10_000)
+        assert emu.read_mem(dirty) == 0xFF
+        assert emu.read_mem(published) == 0x00
+
+    def test_nmi_entry_does_not_return_with_rti_to_interrupted_code(self) -> None:
+        """nmi_entry must distrust the interrupted frame (no early RTI resume)."""
+        body = _linked_bytes(_load_symbol_address("nmi_entry"), 64)
+        # First instruction path must reset stack / mapping, not RTI.
+        assert body[0] != 0x40
+        # Helper calls for CONT invalidation and compile dirty must be present.
+        inv = _load_symbol_address("nmi_invalidate_cont")
+        dirty = _load_symbol_address("nmi_mark_compile_dirty")
+        assert bytes([0x20, inv & 0xFF, inv >> 8]) in body
+        assert bytes([0x20, dirty & 0xFF, dirty >> 8]) in body

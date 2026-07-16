@@ -199,13 +199,38 @@ def _extended_program(body: bytes) -> bytes:
     )
 
 
+def _plus4_program(lines: list[tuple[int, bytes]]) -> bytes:
+    """Build a canonical Plus/4 BASIC 3.5 PRG with load address $1001."""
+    result = bytearray(b"\x01\x10")
+    address = 0x1001
+    for line_number, body in lines:
+        next_address = address + 2 + 2 + len(body) + 1
+        result += bytes(
+            [
+                next_address & 0xFF,
+                next_address >> 8,
+                line_number & 0xFF,
+                line_number >> 8,
+            ]
+        )
+        result += body + b"\x00"
+        address = next_address
+    result += b"\x00\x00"
+    return bytes(result)
+
+
+SAVE_FORMAT_V2 = 0
+SAVE_FORMAT_BASICV35 = 1
+SAVE_FORMAT_C2P1 = 2
+
+
 @pytest.mark.unit
 @pytest.mark.local
 class TestProgramCodec:
     """program_codec.asm unit coverage."""
 
     def test_classify_stock_and_extended_records(self) -> None:
-        """Classification should distinguish stock PRG and C2P1 records."""
+        """Classification should distinguish V2, C2P1, and Plus/4 PRG records."""
         dll = _dll_path()
         emu = C64Emu6502(lib_path=dll)
         _load_binary(emu)
@@ -230,6 +255,15 @@ class TestProgramCodec:
         )
         state = emu.get_state()
         assert state.a == 1
+        assert (int(state.p) & 0x01) == 0
+
+        plus4_addr = 0xC180
+        _write_stream(emu, plus4_addr, bytes([0x01, 0x10, 0x00, 0x00]))
+        assert not _call(
+            emu, "program_classify_file", x=plus4_addr & 0xFF, y=plus4_addr >> 8
+        )
+        state = emu.get_state()
+        assert state.a == 2
         assert (int(state.p) & 0x01) == 0
 
     def test_stock_and_extended_round_trip(self) -> None:
@@ -263,7 +297,8 @@ class TestProgramCodec:
         assert _read_stream(emu, stock_encoded) == stock_payload
 
         ext_src = 0xC300
-        ext_payload = _extended_program(bytes([0xAA, 0xBB, 0xCC, 0xDD]))
+        ext_body = _normalized_program([(10, bytes([0xAA, 0xBB, 0xCC, 0xDD]))])
+        ext_payload = _extended_program(ext_body)
         _write_stream(emu, ext_src, ext_payload)
         assert not _call(
             emu, "program_decode_extended", x=ext_src & 0xFF, y=ext_src >> 8
@@ -271,7 +306,7 @@ class TestProgramCodec:
         state = emu.get_state()
         ext_decoded = state.x | (state.y << 8)
         assert ext_decoded == ext_src
-        assert _read_stream(emu, ext_decoded) == bytes([0xAA, 0xBB, 0xCC, 0xDD])
+        assert _read_stream(emu, ext_decoded) == ext_body
 
         assert not _call(
             emu,
@@ -285,7 +320,7 @@ class TestProgramCodec:
         encoded_payload = _read_stream(emu, ext_encoded)
         assert encoded_payload[:4] == b"C2P1"
         assert encoded_payload[4] == 0x01
-        assert encoded_payload[16:] == bytes([0xAA, 0xBB, 0xCC, 0xDD])
+        assert encoded_payload[16:] == ext_body
 
     @pytest.mark.parametrize("format_name", ["stock", "extended"])
     def test_whole_program_stream_round_trip_spans_multiple_pages(
@@ -305,7 +340,9 @@ class TestProgramCodec:
             decode, encode = "program_decode_stock", "program_encode_stock"
             decoded_expected = _normalized_program(stock_lines)
         else:
-            decoded_expected = bytes(index & 0xFF for index in range(300))
+            decoded_expected = _normalized_program(
+                [(line * 10, bytes([line & 0xFF]) * 8) for line in range(1, 40)]
+            )
             body = _extended_program(decoded_expected)
             decode, encode = "program_decode_extended", "program_encode_extended"
         assert len(body) > 253
@@ -387,7 +424,9 @@ class TestProgramCodec:
         emu = C64Emu6502(lib_path=_dll_path())
         _load_binary(emu)
         assert not _call(emu, "arena_init_all")
-        payload = bytearray(_extended_program(b"\xaa\xbb\xcc\xdd"))
+        payload = bytearray(
+            _extended_program(_normalized_program([(10, b"\xaa\xbb\xcc\xdd")]))
+        )
         offsets = {"version": 4, "abi": 5, "length": 6, "checksum": 8, "reserved": 10}
         payload[offsets[mutation]] ^= 1
         source = 0xC800
@@ -443,8 +482,11 @@ class TestProgramCodec:
             "program_classify_file",
             "program_decode_stock",
             "program_encode_stock",
+            "program_decode_basic35",
+            "program_encode_basic35",
             "program_decode_extended",
             "program_encode_extended",
+            "program_select_save_format",
         ):
             assert _call(emu, routine, x=source & 0xFF, y=source >> 8)
 
@@ -506,3 +548,111 @@ class TestProgramCodec:
             y=descriptor >> 8,
         )
         assert _read_stream(emu, descriptor) == _extended_program(b"")
+
+    def test_extended_decoder_rejects_malformed_body_without_publishing(self) -> None:
+        """Extended import validates the logical body before removing C2P1."""
+        emu = C64Emu6502(lib_path=_dll_path())
+        _load_binary(emu)
+        assert not _call(emu, "arena_init_all")
+        malformed_body = b"\x04\x00\x0a\x00\xaa\x01\x00\x00"
+        descriptor = 0xCD00
+        _write_stream(emu, descriptor, _extended_program(malformed_body))
+        before = _read_stream(emu, descriptor)
+
+        assert _call(
+            emu,
+            "program_decode_extended",
+            x=descriptor & 0xFF,
+            y=descriptor >> 8,
+        )
+        assert _read_stream(emu, descriptor) == before
+
+    def test_extended_encoder_rejects_malformed_body_without_publishing(self) -> None:
+        """Extended export validates normalized input before shifting it."""
+        emu = C64Emu6502(lib_path=_dll_path())
+        _load_binary(emu)
+        assert not _call(emu, "arena_init_all")
+        malformed_body = b"\x04\x00\x0a\x00\xaa\x01\x00\x00"
+        descriptor = 0xCE00
+        _write_stream(emu, descriptor, malformed_body)
+        before = _read_stream(emu, descriptor)
+
+        assert _call(
+            emu,
+            "program_encode_extended",
+            x=descriptor & 0xFF,
+            y=descriptor >> 8,
+        )
+        assert _read_stream(emu, descriptor) == before
+
+    def test_extended_encoder_clones_non_scratch_logical_program(self) -> None:
+        """Extended export leaves a published non-scratch stream unchanged."""
+        emu = C64Emu6502(lib_path=_dll_path())
+        _load_binary(emu)
+        assert not _call(emu, "arena_init_all")
+        logical = _normalized_program([(10, b"\xaa")])
+        source = 0xCF00
+        _write_stream(emu, source, logical, arena=1)
+
+        assert not _call(
+            emu,
+            "program_encode_extended",
+            x=source & 0xFF,
+            y=source >> 8,
+        )
+        state = emu.get_state()
+        encoded = int(state.x) | (int(state.y) << 8)
+        assert encoded != source
+        assert _read_stream(emu, encoded) == _extended_program(logical)
+
+    def test_plus4_basic35_round_trip(self) -> None:
+        """Plus/4 $1001 PRG encode/decode preserves linked-line structure."""
+        emu = C64Emu6502(lib_path=_dll_path())
+        _load_binary(emu)
+        assert not _call(emu, "arena_init_all")
+        # DO / LOOP are BASIC 3.5 tokens $EB / $EC.
+        lines = [(10, bytes([0xEB])), (20, bytes([0xEC]))]
+        payload = _plus4_program(lines)
+        descriptor = 0xCD80
+        _write_stream(emu, descriptor, payload)
+
+        assert not _call(
+            emu, "program_decode_basic35", x=descriptor & 0xFF, y=descriptor >> 8
+        )
+        assert _read_stream(emu, descriptor) == _normalized_program(lines)
+        assert not _call(
+            emu, "program_encode_basic35", x=descriptor & 0xFF, y=descriptor >> 8
+        )
+        assert _read_stream(emu, descriptor) == payload
+
+    @pytest.mark.parametrize(
+        ("lines", "expected_format"),
+        [
+            ([(10, bytes([0x99, ord("1")]))], SAVE_FORMAT_V2),
+            ([(10, bytes([0xEB]))], SAVE_FORMAT_BASICV35),
+            ([(10, bytes([0xCE]))], SAVE_FORMAT_C2P1),
+            # REM body is ignored even if it contains high bytes.
+            ([(10, bytes([0x8F, 0xEB, 0xCE]))], SAVE_FORMAT_V2),
+            # Quoted high bytes are ignored.
+            ([(10, bytes([0x99, ord('"'), 0xEB, ord('"')]))], SAVE_FORMAT_V2),
+            # C2-only wins over BASIC 3.5 tokens.
+            ([(10, bytes([0xEB, 0x3A, 0xCE]))], SAVE_FORMAT_C2P1),
+        ],
+        ids=["v2", "basic35", "c2", "rem-ignored", "string-ignored", "c2-over-35"],
+    )
+    def test_select_save_format_by_tokens_outside_rem_string(
+        self, lines: list[tuple[int, bytes]], expected_format: int
+    ) -> None:
+        """SAVE format follows tokens outside REM/string, C2 > 3.5 > V2."""
+        emu = C64Emu6502(lib_path=_dll_path())
+        _load_binary(emu)
+        assert not _call(emu, "arena_init_all")
+        descriptor = 0xCE80
+        _write_stream(emu, descriptor, _normalized_program(lines))
+        assert not _call(
+            emu,
+            "program_select_save_format",
+            x=descriptor & 0xFF,
+            y=descriptor >> 8,
+        )
+        assert emu.get_state().a == expected_format

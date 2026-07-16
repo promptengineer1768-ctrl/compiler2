@@ -18,6 +18,17 @@ Reference fixtures record the source text, execution mode, reference machine,
 dialect, VICE version, ROM identity, raw observation, normalized result, and
 regeneration fingerprint.
 
+The checked-in stock corpus currently contains:
+
+- 95 C64 BASIC V2 `screen-v1` captures: 41 immediate mode and 54 program mode;
+- 40 Plus/4 BASIC V3.5 `screen-v1` captures: 8 immediate mode and 32 program
+  mode.
+
+Both corpora record VICE 3.10 and exact SHA-256 identities for every selected
+ROM. Offline fixture contracts recompute each regeneration fingerprint and
+replay normalization from `raw_screen` plus `source_text`; catalog placeholders
+are forbidden in both stock buckets.
+
 ## Regeneration Policy
 
 Stock BASIC V2 and implemented BASIC 3.5 fixtures are normally generated once
@@ -39,3 +50,16 @@ Fixture-generation tools and stored fixture locations are implementation
 details of the test harness, but the generated requirements matrix must map
 each critical language case back to its requirement ID and reference
 provenance.
+
+## Offline Verification
+
+Normal development verification must validate the immutable checked-in
+captures without launching VICE:
+
+```powershell
+python -m pytest tests/fixtures/reference -v
+```
+
+The `--generate-reference basicv2` and `--generate-reference basicv35` commands
+are capture workflows, not routine verification commands. Use them only under
+the reviewed regeneration policy above.

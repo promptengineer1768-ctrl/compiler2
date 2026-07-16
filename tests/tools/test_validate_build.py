@@ -7,6 +7,7 @@ reporting structure.
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import sys
 from collections.abc import Iterator
@@ -32,6 +33,42 @@ REQUIRED_MANIFESTS = [
     "runtime_abi.json",
     "traceability.json",
 ]
+
+
+def test_traceability_rejects_missing_normative_section(tmp_path: Path) -> None:
+    """Trace validation derives coverage from both normative source documents."""
+    (tmp_path / "REQUIREMENTS.md").write_text(
+        "# Requirements\n\n## 1. Status\n\n## 2. Product\n", encoding="utf-8"
+    )
+    (tmp_path / "REU_REQUIREMENTS.md").write_text(
+        "# REU Requirements\n\n## RREU-1. Product\n", encoding="utf-8"
+    )
+    (tmp_path / "DESIGN2.md").write_text("# Design\n", encoding="utf-8")
+    (tmp_path / "implementation.py").write_text("\n", encoding="utf-8")
+    trace = {
+        "requirement_sources": ["REQUIREMENTS.md", "REU_REQUIREMENTS.md"],
+        "records": [
+            {
+                "id": "R2",
+                "ears": "The system shall provide the product.",
+                "source_section": "REQUIREMENTS.md#2",
+                "design_section": "DESIGN2.md",
+                "implementation": "implementation.py",
+                "tests": ["test_product"],
+                "status": "planned",
+            }
+        ],
+    }
+    (tmp_path / "traceability.json").write_text(json.dumps(trace), encoding="utf-8")
+    (tmp_path / "requirements_matrix.json").write_text(json.dumps({}), encoding="utf-8")
+
+    errors = validate_build.validate_traceability(
+        "traceability.json",
+        "requirements_matrix.json",
+        project_root=str(tmp_path),
+    )
+
+    assert any("RREU-1" in error for error in errors)
 
 
 class TestValidateManifests:
@@ -108,6 +145,42 @@ class TestComputeFingerprint:
         fp1 = validate_build.compute_build_fingerprint()
         fp2 = validate_build.compute_build_fingerprint()
         assert fp1 == fp2
+
+
+class TestBuildManifest:
+    """Tests for final toolchain and artifact provenance records."""
+
+    def test_records_tool_versions_and_generated_reference_hashes(
+        self, tmp_path: Path
+    ) -> None:
+        """Manifest data binds actual tools to both generated references."""
+        api = tmp_path / "API.md"
+        memory_map = tmp_path / "MAP.md"
+        api.write_text("api\n", encoding="utf-8")
+        memory_map.write_text("map\n", encoding="utf-8")
+        versions = {"ca65": "ca65 V2.19", "ld65": "ld65 V2.19"}
+
+        manifest = validate_build.build_manifest_data(tmp_path, tool_versions=versions)
+
+        assert manifest["toolchain"]["ca65"]["version"] == "ca65 V2.19"
+        assert manifest["toolchain"]["ld65"]["version"] == "ld65 V2.19"
+        assert manifest["artifacts"]["API.md"] == {
+            "size": len(api.read_bytes()),
+            "sha256": hashlib.sha256(api.read_bytes()).hexdigest(),
+        }
+        assert manifest["artifacts"]["MAP.md"] == {
+            "size": len(memory_map.read_bytes()),
+            "sha256": hashlib.sha256(memory_map.read_bytes()).hexdigest(),
+        }
+
+    def test_missing_generated_reference_is_rejected(self, tmp_path: Path) -> None:
+        """A final manifest cannot omit either generated reference."""
+        (tmp_path / "API.md").write_text("api\n", encoding="utf-8")
+        with pytest.raises(FileNotFoundError, match="MAP.md"):
+            validate_build.build_manifest_data(
+                tmp_path,
+                tool_versions={"ca65": "ca65 V2.19", "ld65": "ld65 V2.19"},
+            )
 
 
 class TestCrossArtifactValidators:

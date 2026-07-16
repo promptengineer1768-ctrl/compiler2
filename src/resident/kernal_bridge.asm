@@ -1,26 +1,44 @@
 ; src/resident/kernal_bridge.asm
-; Minimal bank-safe KERNAL bridge helpers.
+; Bank-safe public KERNAL jump-table bridges.
 
 .include "common/zp.inc"
 .include "common/constants.asm"
 
-.segment "RESIDENT"
-
 KERNAL_IO_PORT = $36
 
-; Bridge-local state.  The tests inspect the visible zero-page writes, so the
-; bridge preserves the incoming mapping and interrupt enable state around each
-; call while keeping the implementation intentionally small.
+KERNAL_SCNKEY  = $FF9F
+KERNAL_READST  = $FFB7
+KERNAL_SETLFS  = $FFBA
+KERNAL_SETNAM  = $FFBD
+KERNAL_OPEN    = $FFC0
+KERNAL_CLOSE   = $FFC3
+KERNAL_CHKIN   = $FFC6
+KERNAL_CHKOUT  = $FFC9
+KERNAL_CLRCHN  = $FFCC
+KERNAL_CHRIN   = $FFCF
+KERNAL_CHROUT  = $FFD2
+KERNAL_LOAD    = $FFD5
+KERNAL_SAVE    = $FFD8
+KERNAL_SETTIM  = $FFDB
+KERNAL_RDTIM   = $FFDE
+KERNAL_STOP    = $FFE1
+KERNAL_GETIN   = $FFE4
+KERNAL_UDTIM   = $FFEA
+
 .segment "BSS"
-kernal_saved_port:   .res 1
-kernal_saved_dir:    .res 1
-kernal_saved_p:      .res 1
-kernal_input_byte:   .res 1
-kernal_output_byte:  .res 1
-kernal_return_a:     .res 1
-kernal_return_x:     .res 1
-kernal_return_y:     .res 1
-kernal_return_p:     .res 1
+kernal_saved_a:       .res 1
+kernal_saved_port:    .res 1
+kernal_saved_dir:     .res 1
+kernal_saved_p:       .res 1
+kernal_return_a:      .res 1
+kernal_return_x:      .res 1
+kernal_return_y:      .res 1
+kernal_return_p:      .res 1
+kernal_packed_ptr:    .res 2
+kernal_packed_index:  .res 1
+kernal_packed_byte:   .res 1
+.export kernal_output_byte
+kernal_output_byte:   .res 1
 
 .segment "RESIDENT"
 
@@ -42,280 +60,170 @@ kernal_return_p:     .res 1
 .export kernal_getin
 .export kernal_udtim
 .export kernal_scnkey
-.export kernal_input_byte
-.export kernal_output_byte
 .export kernal_print_packed
 
+.macro bridge_call vector
+    jsr kernal_begin
+    jsr vector
+    jmp kernal_end
+.endmacro
+
+; Enter a public KERNAL call. A is preserved for the KERNAL ABI, X/Y remain
+; untouched, and only the port transition itself runs with IRQ masked.
 kernal_begin:
-    pha
+    sta kernal_saved_a
     php
     pla
     sta kernal_saved_p
+    sei
     lda $00
     sta kernal_saved_dir
     lda $01
     sta kernal_saved_port
-    lda #CPU_PORT_ALL_RAM
+    lda #KERNAL_IO_PORT
     sta $01
     cld
-    pla
+    lda kernal_saved_p
+    and #$04
+    bne @restore_a
+    cli
+@restore_a:
+    lda kernal_saved_a
     rts
 
+; Return from a KERNAL call. Preserve the KERNAL result registers and flags,
+; but restore the caller's interrupt-enable state while atomically restoring
+; the CPU-port mapping.
 kernal_end:
+    sta kernal_return_a
+    stx kernal_return_x
+    sty kernal_return_y
     php
     pla
     sta kernal_return_p
-    lda kernal_saved_port
-    sta $01
+    sei
     lda kernal_saved_dir
     sta $00
-    lda kernal_saved_p
-    and #$04
-    beq @restore_irq_clear
-    lda kernal_return_p
-    ora #$04
-    pha
-    plp
-    rts
-@restore_irq_clear:
+    lda kernal_saved_port
+    sta $01
     lda kernal_return_p
     and #$FB
+    sta kernal_return_p
+    lda kernal_saved_p
+    and #$04
+    beq @flags_ready
+    lda kernal_return_p
+    ora #$04
+    sta kernal_return_p
+@flags_ready:
+    lda kernal_return_p
     pha
-    plp
-    rts
-
-; READST bridge.
-kernal_readst:
-    jsr kernal_begin
-    lda a:zp_status
-    sta kernal_return_a
-    jsr kernal_end
-    lda kernal_return_a
-    rts
-
-; SETLFS bridge.
-kernal_setlfs:
-    jsr kernal_begin
-    sta a:zp_la
-    stx a:zp_fa
-    sty a:zp_sa
-    lda #$00
-    sta a:zp_status
-    clc
-    jmp kernal_end
-
-; SETNAM bridge.
-kernal_setnam:
-    jsr kernal_begin
-    sta a:zp_fnlen
-    stx a:zp_fnadr
-    sty a:zp_fnadr+1
-    lda #$00
-    sta a:zp_status
-    clc
-    jmp kernal_end
-
-; OPEN bridge.
-kernal_open:
-    jsr kernal_begin
-    lda a:zp_fnlen
-    bne @open
-    ; The disk command/error channel is valid with an empty filename.
-    lda a:zp_la
-    cmp #15
-    bne @fail
-@open:
-    lda #$00
-    sta a:zp_status
-    clc
-    jmp kernal_end
-@fail:
-    lda #ERR_FILE_OPEN
-    sta a:zp_status
-    sec
-    jmp kernal_end
-
-; CLOSE bridge.
-kernal_close:
-    jsr kernal_begin
-    lda #$00
-    sta a:zp_status
-    clc
-    jmp kernal_end
-
-; CHKIN bridge.
-kernal_chkin:
-    jsr kernal_begin
-    txa
-    sta a:zp_status
-    clc
-    jmp kernal_end
-
-; CHKOUT bridge.
-kernal_chkout:
-    jsr kernal_begin
-    txa
-    sta a:zp_status
-    clc
-    jmp kernal_end
-
-; CLRCHN bridge.
-kernal_clrchn:
-    jsr kernal_begin
-    lda #$00
-    sta a:zp_status
-    clc
-    jmp kernal_end
-
-; CHRIN bridge.
-kernal_chrin:
-    jsr kernal_begin
-    lda kernal_input_byte
-    pha
-    lda #$00
-    sta kernal_input_byte
-    pla
-    sta kernal_return_a
-    jsr kernal_end
-    lda kernal_return_a
-    rts
-
-; CHROUT bridge.
-kernal_chrout:
-    jsr kernal_begin
-    sta kernal_output_byte
-    lda #$00
-    clc
-    jmp kernal_end
-
-; Print one static packed string. X/Y points to bytes whose final character has
-; bit 7 set; the marker is masked before output. Empty static strings are not a
-; valid representation.
-kernal_print_packed:
-    stx zp_src
-    sty zp_src+1
-    ldy #0
-@next:
-    lda (zp_src), y
-    pha
-    and #$7f
-    sta kernal_output_byte
-    jsr kernal_chrout
-    pla
-    bmi @done
-    iny
-    bne @next
-@done:
-    clc
-    rts
-
-; LOAD bridge.
-kernal_load:
-    jsr kernal_begin
-    stx a:zp_eal
-    sty a:zp_eal+1
-    lda #$00
-    clc
-    jmp kernal_end
-
-; SAVE bridge.
-kernal_save:
-    jsr kernal_begin
-    sta zp_tmptr
-    lda #$00
-    sta zp_tmptr+1
-    stx a:zp_eal
-    sty a:zp_eal+1
-    ldy #$00
-    lda (zp_tmptr),y
-    sta a:zp_sal
-    iny
-    lda (zp_tmptr),y
-    sta a:zp_sal+1
-    lda #$00
-    clc
-    jmp kernal_end
-
-; SETTIM bridge.
-kernal_settim:
-    jsr kernal_begin
-    sta a:zp_time+2
-    stx a:zp_time+1
-    sty a:zp_time
-    lda #$00
-    clc
-    jmp kernal_end
-
-; RDTIM bridge.
-kernal_rdtim:
-    jsr kernal_begin
-    lda a:zp_time+2
-    sta kernal_return_a
-    ldx a:zp_time+1
-    stx kernal_return_x
-    ldy a:zp_time
-    sty kernal_return_y
-    jsr kernal_end
     lda kernal_return_a
     ldx kernal_return_x
     ldy kernal_return_y
+    plp
     rts
 
-; STOP bridge.
-kernal_stop:
-    jsr kernal_begin
-    lda a:zp_stkey
-    jmp kernal_end
+; READST bridge. Output: A=status; KERNAL result flags.
+kernal_readst:
+    bridge_call KERNAL_READST
 
-; GETIN bridge.
-kernal_getin:
-    jsr kernal_begin
-    lda kernal_input_byte
-    pha
-    lda #$00
-    sta kernal_input_byte
-    pla
-    sta kernal_return_a
-    jsr kernal_end
-    lda kernal_return_a
-    rts
+; SETLFS bridge. Inputs: A=logical file, X=device, Y=secondary.
+kernal_setlfs:
+    bridge_call KERNAL_SETLFS
 
-; UDTIM bridge.
-kernal_udtim:
-    jsr kernal_begin
-    inc a:zp_time+2
-    bne @rollover
-    inc a:zp_time+1
-    bne @rollover
-    inc a:zp_time
-@rollover:
-    lda a:zp_time
-    cmp #$4F
-    bcc @done
-    bne @reset
-    lda a:zp_time+1
-    cmp #$1A
-    bcc @done
-    bne @reset
-    lda a:zp_time+2
-    cmp #$01
-    bcc @done
-@reset:
+; SETNAM bridge. Inputs: A=name length, X/Y=name pointer.
+kernal_setnam:
+    bridge_call KERNAL_SETNAM
+
+; OPEN bridge. Inputs: prior SETLFS/SETNAM state. Output: C=KERNAL error.
+kernal_open:
+    bridge_call KERNAL_OPEN
+
+; CLOSE bridge. Input: A=logical file. Output: C=KERNAL error.
+kernal_close:
+    bridge_call KERNAL_CLOSE
+
+; CHKIN bridge. Input: X=logical file. Output: C=KERNAL error.
+kernal_chkin:
+    bridge_call KERNAL_CHKIN
+
+; CHKOUT bridge. Input: X=logical file. Output: C=KERNAL error.
+kernal_chkout:
+    bridge_call KERNAL_CHKOUT
+
+; CLRCHN bridge. Output: KERNAL result flags.
+kernal_clrchn:
+    bridge_call KERNAL_CLRCHN
+
+; CHRIN bridge. Output: A=input byte; KERNAL result flags.
+kernal_chrin:
+    bridge_call KERNAL_CHRIN
+
+; CHROUT bridge. Input: A=output byte. Output: C=KERNAL error.
+kernal_chrout:
+    sta kernal_output_byte
+    bridge_call KERNAL_CHROUT
+
+; Print a packed static string at X/Y. The final character carries bit 7;
+; the bridge masks that marker before handing the byte to CHROUT.
+kernal_print_packed:
+    stx kernal_packed_ptr
+    sty kernal_packed_ptr+1
     lda #0
-    sta a:zp_time
-    sta a:zp_time+1
-    sta a:zp_time+2
+    sta kernal_packed_index
+@next:
+    lda kernal_packed_ptr
+    sta zp_tmptr
+    lda kernal_packed_ptr+1
+    sta zp_tmptr+1
+    ldy kernal_packed_index
+    lda (zp_tmptr),y
+    sta kernal_packed_byte
+    and #$7F
+    jsr kernal_chrout
+    bcs @error
+    lda kernal_packed_byte
+    bmi @done
+    inc kernal_packed_index
+    bne @next
+@error:
+    sec
+    rts
 @done:
-    lda #$00
     clc
-    jmp kernal_end
+    rts
 
-; SCNKEY bridge.
+; LOAD bridge. Inputs: A=load/verify, X/Y=alternate address.
+; Outputs: C=KERNAL error, X/Y=end address.
+kernal_load:
+    bridge_call KERNAL_LOAD
+
+; SAVE bridge. Inputs: A=zero-page pointer to start address, X/Y=exclusive end.
+; Output: C=KERNAL error.
+kernal_save:
+    bridge_call KERNAL_SAVE
+
+; SETTIM bridge. Inputs: A=low, X=middle, Y=high jiffy byte.
+kernal_settim:
+    bridge_call KERNAL_SETTIM
+
+; RDTIM bridge. Outputs: A=low, X=middle, Y=high jiffy byte.
+kernal_rdtim:
+    bridge_call KERNAL_RDTIM
+
+; STOP bridge. Output: KERNAL Z flag reports STOP state.
+kernal_stop:
+    bridge_call KERNAL_STOP
+
+; GETIN bridge. Output: A=queued byte or zero.
+kernal_getin:
+    bridge_call KERNAL_GETIN
+
+; UDTIM bridge. Advances the KERNAL jiffy clock.
+kernal_udtim:
+    bridge_call KERNAL_UDTIM
+
+; SCNKEY bridge. Scans the KERNAL keyboard matrix and queue.
 kernal_scnkey:
-    jsr kernal_begin
-    lda a:zp_crsr_x
-    sta a:zp_lstx
-    inc a:zp_ndx
-    lda #$00
-    clc
-    jmp kernal_end
+    bridge_call KERNAL_SCNKEY

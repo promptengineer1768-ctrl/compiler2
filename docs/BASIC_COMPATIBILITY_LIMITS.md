@@ -12,11 +12,15 @@ Use this source order when a limit is unclear:
 1. Published Commodore references and widely mirrored user/programmer manuals.
 2. The local rebuildable C64 ROM source at
    `C:\Users\me\Documents\Coding Projects\c64rom`.
-3. VICE C64 or Plus/4 observation, once the project has a VICE harness.
+3. Versioned VICE C64 or Plus/4 observations captured by the project harness.
 
-VICE validation is deferred for this document because Compiler 2 does not yet
-have the required harness. Every deferred case must have a test placeholder and
-must be resolved before the related behavior is marked implemented.
+The project has immutable stock fixture corpora for general BASIC V2 and BASIC
+V3.5 semantics. The 48 edge cases reserved specifically by
+`tests/e2e/cases/basicv2_limits.yaml` remain source-derived and carry
+`vice_pending: true`; that flag must be cleared only when each named case gains
+its authoritative VICE fixture. This pending state does not weaken the limit
+manifest's coverage contract and does not claim that the related production
+behavior is implemented.
 
 Useful public references consulted for this contract include the Commodore 64
 User's Guide variable-name description, C64-Wiki BASIC and command references,
@@ -84,6 +88,6 @@ basicv2-immediate-open-too_many_files
 basicv2-immediate-load-device_0-illegal_device
 ```
 
-VICE-derived assertions are deferred until the harness exists. Until then,
-tests may encode source-derived expectations from `c64rom`, but must be marked
-as needing VICE fixture confirmation before release acceptance.
+Source-derived limit assertions may remain pending while their named VICE
+observations are absent, but must retain `vice_pending: true` and cannot be used
+as release-acceptance evidence for the related production behavior.

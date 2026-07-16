@@ -270,10 +270,11 @@ _PENDING_SCENARIOS = SCENARIOS[3:]
 @pytest.mark.smoke
 @pytest.mark.parametrize("scenario", _FIXTURE_SCENARIOS)
 def test_function_catalog_scaffold(scenario: dict[str, object]) -> None:
-    """The BASIC V3.5 function matrix is represented before fixture capture."""
+    """The smoke modes resolve to captured Plus/4 observations."""
     assert scenario["profile"] == "basicv35"
     assert scenario["mode"] in {"immediate", "program", "compile"}
     assert scenario["vice_pending"] is False
+    assert_fixture_backed(scenario)
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS)

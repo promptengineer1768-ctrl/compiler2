@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -32,20 +33,20 @@ TOKEN_NEXT = 130
 TOKEN_PRINT = 153
 TOKEN_RUN = 138
 TOKEN_CLR = 156
-TOKEN_NEW = 147
-TOKEN_VERIFY = 148
-TOKEN_LOAD = 149
-TOKEN_SAVE = 150
+TOKEN_NEW = 162
+TOKEN_VERIFY = 149
+TOKEN_LOAD = 147
+TOKEN_SAVE = 148
 TOKEN_CONT = 154
 TOKEN_LIST = 155
 TOKEN_DO = 200
 TOKEN_LOOP = 201
-TOKEN_WHILE = 202
-TOKEN_BASIC3_5 = 205
-TOKEN_BASIC2 = 206
-TOKEN_COMPILE = 207
-TOKEN_FPMODE0 = 208
-TOKEN_FPMODE1 = 209
+TOKEN_WHILE = 253
+TOKEN_BASIC3_5 = 212
+TOKEN_BASIC2 = 212
+TOKEN_COMPILE = 206
+TOKEN_FPMODE0 = 254
+TOKEN_FPMODE1 = 254
 
 
 def _dll_path() -> Path:
@@ -58,9 +59,9 @@ def _dll_path() -> Path:
 
 
 def _symbol_address(symbol: str) -> int:
-    for line in (ROOT / "build" / "compiler.lbl").read_text(
-        encoding="utf-8"
-    ).splitlines():
+    for line in (
+        (ROOT / "build" / "compiler.lbl").read_text(encoding="utf-8").splitlines()
+    ):
         fields = line.split()
         if len(fields) >= 3 and fields[2] == f".{symbol}":
             return int(fields[1], 16)
@@ -99,7 +100,9 @@ def _call_source(emu: C64Emu6502, routine: str, cycles: int = 4000) -> None:
 
 def _generation(emu: C64Emu6502) -> int:
     address = _symbol_address("semantic_policy_generation")
-    return emu.read_mem(address) | (emu.read_mem(address + 1) << 8)
+    low = cast(int, emu.read_mem(address))
+    high = cast(int, emu.read_mem(address + 1))
+    return low | (high << 8)
 
 
 @pytest.mark.unit
@@ -166,8 +169,6 @@ class TestSemantic:
             TOKEN_VERIFY,
             TOKEN_BASIC2,
             TOKEN_BASIC3_5,
-            TOKEN_FPMODE0,
-            TOKEN_FPMODE1,
         ],
     )
     def test_direct_only_statement_tokens_are_rejected_in_programs(

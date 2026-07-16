@@ -19,6 +19,11 @@
 .import str_export_bytes, str_from_bytes
 
 .segment "BSS"
+; reu_xip_active - Nonzero while REU primary XIP miss slot ($CE00) is live.
+; Default 0: REU XIP module not present yet; set by that module when active.
+; system_poke protects $CE00-$CEFF only while this flag is nonzero.
+.export reu_xip_active
+reu_xip_active: .res 1
 system_ti_string:
     .export system_ti_string
     .res 7
@@ -43,7 +48,9 @@ system_ti_request: .res 7
 system_zp_protected_ranges:
     emit_compiler_zp_protected_ranges
 
-.segment "CODE"
+; HIBASIC ($E000+): system primitives share the edit/compile RAM bank with
+; math helpers; normal runtime banking ($01=$35) maps this region.
+.segment "HIBASIC"
 
 ; system_peek - Return the byte at the requested address.
 .export system_peek
@@ -55,20 +62,19 @@ system_peek:
     rts
 
 ; system_poke - Store a byte at the requested address.
-; SKELETON (design audit 2026-07-09): previous policy blanked $0801-$D000 as
-; protected, which violates the narrow control-plane rule (DESIGN2 §3.1).
-; Re-implement: protect only vectors/gates/profile mirrors/compiler ZP, and
-; $CE00 while REU XIP is active; do not blanket-protect $C800-$CDFF hot slots
-; or ordinary program/variable RAM.
+; Narrow control-plane protection (DESIGN2 §3.1 / docs/SYSTEM_PRIMITIVES.md):
+;   - compiler-owned zero-page ranges from zp_protected_ranges.inc
+;   - $FFF9-$FFFF high guard / hardware vectors
+;   - $CE00-$CEFF while reu_xip_active is nonzero (REU primary XIP miss slot)
+; Hot slots $C800-$CDFF and ordinary program/variable/image RAM $0801-$CFFF
+; are intentionally writable (stock-like self-corruption is allowed).
 .export system_poke
 system_poke:
     stx zp_tmp1
     sty zp_tmp1+1
     sta system_poke_value
-    ; Temporary minimal guard only: high hardware guard + compiler ZP.
-    ; Full narrow control-plane list is not yet generated for current design.
     cpy #0
-    bne @high_guard
+    bne @not_zp
     ldx #0
 @zp_range_loop:
     cpx #(compiler_zp_protected_range_count * 2)
@@ -85,6 +91,14 @@ system_poke:
     inx
     inx
     bne @zp_range_loop
+@not_zp:
+    ; $CE00-$CEFF only while REU XIP is live.
+    cpy #$CE
+    bne @high_guard
+    lda reu_xip_active
+    beq @store
+    sec
+    rts
 @high_guard:
     cpy #>compiler_high_guard_start
     bne @store

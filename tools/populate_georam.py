@@ -81,8 +81,12 @@ def _overlay_directory_routines(
     load_address: int,
     labels_path: Path,
     routine_directory_path: Path,
+    hibasic: bytes = b"",
 ) -> int:
     """Overlay linked routine bytes at their generated geoRAM placements.
+
+    Linked labels may live in the normal-RAM compiler PRG ($0801+) or in the
+    HIBASIC image ($E000+) when cold segments are placed in RAM_HIGH.
 
     Returns:
         Highest exclusive payload offset written by an overlay.
@@ -108,13 +112,25 @@ def _overlay_directory_routines(
                 f"geoRAM placement outside 512 KiB budget for {name}: "
                 f"offset {destination}"
             )
-        source = 2 + labels[name] - load_address
-        if source < 2 or source >= len(compiler):
-            raise ValueError(f"linked label for {name} falls outside compiler image")
+        address = labels[name]
+        if address >= 0xE000:
+            source = address - 0xE000
+            if source < 0 or source >= len(hibasic):
+                raise ValueError(
+                    f"linked label for {name} falls outside hibasic image"
+                )
+            source_image = hibasic
+        else:
+            source = 2 + address - load_address
+            if source < 2 or source >= len(compiler):
+                raise ValueError(
+                    f"linked label for {name} falls outside compiler image"
+                )
+            source_image = compiler
         length = min(
             256 - offset,
             GEORAM_MAX_PAYLOAD_SIZE - destination,
-            len(compiler) - source,
+            len(source_image) - source,
         )
         end = destination + length
         if end > len(payload):
@@ -122,7 +138,9 @@ def _overlay_directory_routines(
                 f"geoRAM placement for {name} exceeds allocated payload "
                 f"({end} > {len(payload)})"
             )
-        payload[destination : destination + length] = compiler[source : source + length]
+        payload[destination : destination + length] = source_image[
+            source : source + length
+        ]
         max_end = max(max_end, end)
     return max_end
 
@@ -169,7 +187,9 @@ def populate(
     linked = bytearray()
     for name in COLD_SEGMENTS:
         start, size = matches[name]
-        if name == "HIBASIC":
+        # Segments linked into RAM_HIGH ($E000+) are materialized in hibasic.bin
+        # (HIBASIC, and cold EDITOR/WEDGE/COMPRESSOR/GRAPHICS when placed there).
+        if start >= 0xE000 or name == "HIBASIC":
             first = start - 0xE000
             last = first + size
             if first < 0 or last > len(hibasic):
@@ -215,7 +235,12 @@ def populate(
     payload[: len(linked)] = linked
     if labels_path is not None and routine_directory_path is not None:
         _overlay_directory_routines(
-            payload, compiler, load_address, labels_path, routine_directory_path
+            payload,
+            compiler,
+            load_address,
+            labels_path,
+            routine_directory_path,
+            hibasic=hibasic,
         )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_bytes(GEORAM_LOAD_ADDRESS + payload)

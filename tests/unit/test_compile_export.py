@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.kernal_stubs import install_kernal_stubs
+
 ROOT = Path(__file__).resolve().parents[2]
 _TOOLS_CANDIDATES = (
     ROOT.parent / "tools",
@@ -52,6 +54,7 @@ def _emulator() -> C64Emu6502:
     emu.write_mem_range(load, payload[2:])
     emu.write_mem(0x0000, 0x2F)
     emu.write_mem(0x0001, 0x35)
+    install_kernal_stubs(emu)
     emu._compiler2_real_bytes_only = True
     return emu
 
@@ -388,7 +391,9 @@ def test_export_write_prg_validates_record_and_uses_kernal_save_abi() -> None:
 
     payload = (ROOT / "build" / "compiler.bin").read_bytes()
     load = payload[0] | (payload[1] << 8)
-    start = _symbol("export_write_prg") - load + 2
+    # The public page-bounded entry is a trampoline; inspect the linked
+    # implementation body for the resident KERNAL calls.
+    start = _symbol("export_write_prg_impl") - load + 2
     body = payload[start : start + 240]
     for callee in ("kernal_setnam", "kernal_setlfs"):
         address = _symbol(callee)

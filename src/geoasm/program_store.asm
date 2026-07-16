@@ -907,6 +907,104 @@ program_store_found:        .res 1
     rts
 .endproc
 
+; Complete a validated line insertion after program_store_find_dst_line has
+; published the insertion point and replacement extent. Keeping this internal
+; tail separate ensures the public overlay entry remains within one 256-byte
+; geoRAM execution page without enlarging the production ABI.
+.proc program_store_put_finish
+    ; new_length = old_length - old_total + new_total.
+    lda program_store_dst_length
+    sec
+    sbc program_store_old_total
+    sta program_store_new_length
+    lda program_store_dst_length+1
+    sbc program_store_old_total+1
+    sta program_store_new_length+1
+    lda program_store_new_length
+    clc
+    adc program_store_new_total
+    sta program_store_new_length
+    lda program_store_new_length+1
+    adc program_store_new_total+1
+    sta program_store_new_length+1
+    jcs @oom
+    lda program_store_new_length+1
+    cmp #STAGING_MAX_PAGES
+    bcc @size_ok
+    jne @oom
+    lda program_store_new_length
+    jne @oom
+@size_ok:
+    ; Shift the tail according to replacement-size delta.
+    lda program_store_new_total+1
+    cmp program_store_old_total+1
+    bcc @shift_left
+    bne @shift_right
+    lda program_store_new_total
+    cmp program_store_old_total
+    bcc @shift_left
+    beq @copy_line
+@shift_right:
+    lda program_store_new_total
+    sec
+    sbc program_store_old_total
+    sta program_store_delta
+    lda program_store_new_total+1
+    sbc program_store_old_total+1
+    sta program_store_delta+1
+    jsr program_store_shift_right
+    jcs @error
+    jmp @copy_line
+@shift_left:
+    jsr program_store_shift_left
+    jcs @error
+@copy_line:
+    ; Re-probe the line PS because find/shift use source cursor workspace.
+    ldx program_store_line_ptr
+    ldy program_store_line_ptr+1
+    jsr program_store_probe_src
+    jcs @error
+    lda #$00
+    sta program_store_src_index
+    sta program_store_src_index+1
+    lda program_store_insert_at
+    sta program_store_dst_index
+    lda program_store_insert_at+1
+    sta program_store_dst_index+1
+@copy_byte:
+    lda program_store_src_index+1
+    cmp program_store_new_total+1
+    bne @copy
+    lda program_store_src_index
+    cmp program_store_new_total
+    beq @publish
+@copy:
+    jsr program_store_read_src
+    jcs @error
+    sta program_store_value
+    jsr program_store_write_dst
+    jcs @error
+    jsr program_store_inc_src
+    jsr program_store_inc_dst
+    jmp @copy_byte
+@publish:
+    lda program_store_new_length
+    sta program_store_dst_length
+    lda program_store_new_length+1
+    sta program_store_dst_length+1
+    jsr program_store_publish_dst_length
+    clc
+    rts
+@oom:
+    lda #ERR_ILLEGAL_QUANTITY
+    sec
+    rts
+@error:
+    lda #ERR_ILLEGAL_QUANTITY
+    sec
+    rts
+.endproc
+
 ; program_tx_begin
 ; Purpose: begin one isolated whole-program edit transaction.
 ; Inputs: none.
@@ -1041,93 +1139,7 @@ program_tx_put_line:
     sta program_store_requested_line+1
     jsr program_store_find_dst_line
     jcs @error
-    ; new_length = old_length - old_total + new_total.
-    lda program_store_dst_length
-    sec
-    sbc program_store_old_total
-    sta program_store_new_length
-    lda program_store_dst_length+1
-    sbc program_store_old_total+1
-    sta program_store_new_length+1
-    lda program_store_new_length
-    clc
-    adc program_store_new_total
-    sta program_store_new_length
-    lda program_store_new_length+1
-    adc program_store_new_total+1
-    sta program_store_new_length+1
-    jcs @oom
-    lda program_store_new_length+1
-    cmp #STAGING_MAX_PAGES
-    bcc @size_ok
-    jne @oom
-    lda program_store_new_length
-    jne @oom
-@size_ok:
-    ; Shift the tail according to replacement-size delta.
-    lda program_store_new_total+1
-    cmp program_store_old_total+1
-    bcc @shift_left
-    bne @shift_right
-    lda program_store_new_total
-    cmp program_store_old_total
-    bcc @shift_left
-    beq @copy_line
-@shift_right:
-    lda program_store_new_total
-    sec
-    sbc program_store_old_total
-    sta program_store_delta
-    lda program_store_new_total+1
-    sbc program_store_old_total+1
-    sta program_store_delta+1
-    jsr program_store_shift_right
-    jcs @error
-    jmp @copy_line
-@shift_left:
-    jsr program_store_shift_left
-    jcs @error
-@copy_line:
-    ; Re-probe the line PS because find/shift use source cursor workspace.
-    ldx program_store_line_ptr
-    ldy program_store_line_ptr+1
-    jsr program_store_probe_src
-    jcs @error
-    lda #$00
-    sta program_store_src_index
-    sta program_store_src_index+1
-    lda program_store_insert_at
-    sta program_store_dst_index
-    lda program_store_insert_at+1
-    sta program_store_dst_index+1
-@copy_byte:
-    lda program_store_src_index+1
-    cmp program_store_new_total+1
-    bne @copy
-    lda program_store_src_index
-    cmp program_store_new_total
-    beq @publish
-@copy:
-    jsr program_store_read_src
-    jcs @error
-    sta program_store_value
-    jsr program_store_write_dst
-    jcs @error
-    jsr program_store_inc_src
-    jsr program_store_inc_dst
-    jmp @copy_byte
-@publish:
-    lda program_store_new_length
-    sta program_store_dst_length
-    lda program_store_new_length+1
-    sta program_store_dst_length+1
-    jsr program_store_publish_dst_length
-    clc
-    rts
-@oom:
-    lda #ERR_ILLEGAL_QUANTITY
-    sec
-    rts
+    jmp program_store_put_finish
 @error:
     lda #ERR_ILLEGAL_QUANTITY
     sec

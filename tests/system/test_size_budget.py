@@ -58,9 +58,9 @@ class TestGeoRamBudget:
             pytest.skip("build/size_report.json not found")
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        # Check if geoRAM pages are within reasonable limit
+        # The dual-device design permits the complete 512 KiB canonical image.
         if "georam_pages" in data:
-            assert data["georam_pages"] < 256  # 256 pages max (16KB)
+            assert data["georam_pages"] <= 2048  # 512 KiB at 256 bytes/page
 
 
 @pytest.mark.system

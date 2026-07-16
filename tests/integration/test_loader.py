@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,11 @@ ROOT = Path(__file__).resolve().parents[2]
 TOOLS_ROOT = ROOT.parent / "tools"
 if str(TOOLS_ROOT) not in sys.path:
     sys.path.insert(0, str(TOOLS_ROOT))
+TESTS_ROOT = ROOT / "tests"
+if str(TESTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(TESTS_ROOT))
+
+from tests.kernal_stubs import install_kernal_stubs
 
 try:
     from emu6502_c64_bindings import C64Emu6502
@@ -23,12 +29,23 @@ except ImportError:
 def _address(symbol: str) -> int:
     """Resolve a linked routine or exported loader-state address."""
     data = json.loads((ROOT / "build" / "routine_directory.json").read_text())
-    value = data["routines"][symbol]["address"]
-    assert value != "dynamic"
-    return int(value.removeprefix("$"), 16)
+    routines = data.get("routines", {})
+    if symbol in routines:
+        value = routines[symbol]["address"]
+        assert value != "dynamic"
+        return int(value.removeprefix("$"), 16)
+    lbl_path = ROOT / "build" / "compiler.lbl"
+    match = re.search(
+        rf"^al\s+([0-9A-Fa-f]{{6}})\s+\.{re.escape(symbol)}$",
+        lbl_path.read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+    if match:
+        return int(match.group(1), 16)
+    pytest.fail(f"Symbol {symbol!r} not found")
 
 
-def _emulator() -> Any:
+def _emulator(*, georam: bool = True, reu: bool = False) -> Any:
     """Load the production compiler image into the local emulator."""
     if C64Emu6502 is None:
         pytest.skip("Emulator binding unavailable")
@@ -42,16 +59,21 @@ def _emulator() -> Any:
     )
     if dll is None:
         pytest.skip("Emulator DLL not found in tools folder.")
-    emu = C64Emu6502(lib_path=dll, georam=True)
+    emu = C64Emu6502(lib_path=dll, georam=georam)
     payload = (ROOT / "build" / "compiler.bin").read_bytes()
     load_addr = payload[0] | (payload[1] << 8)
     emu.write_mem_range(load_addr, payload[2:])
+    emu.write_mem(0x0001, 0x35)
+    emu.set_georam_enabled(georam)
+    emu.set_reu_enabled(reu)
+    if reu:
+        emu.load_reu(b"\x00" * (512 * 1024))
     return emu
 
 
-def _run(emu: Any, symbol: str) -> Any:
+def _run(emu: Any, symbol: str, cycles: int = 20_000) -> Any:
     """Execute one loader stage."""
-    emu.execute(_address(symbol), 20_000)
+    emu.execute(_address(symbol), cycles)
     return emu.get_state()
 
 
@@ -120,7 +142,6 @@ def test_install_reads_payload_after_prg_header() -> None:
         assert installed == expected, f"page {page} installed wrong source bytes"
 
 
-
 @pytest.mark.integration
 @pytest.mark.local
 def test_loader_rejects_missing_georam_image() -> None:
@@ -129,3 +150,46 @@ def test_loader_rejects_missing_georam_image() -> None:
     emu.write_mem_range(_address("georam_stage_page_count"), b"\x00")
     assert (_run(emu, "georam_load_georam_file").p & 1) == 1
     assert (_run(emu, "georam_install_pages").p & 1) == 1
+
+
+@pytest.mark.integration
+@pytest.mark.local
+def test_dual_detect_prefers_georam_when_both_present() -> None:
+    """loader_detect_georam selects geoRAM store and marks REU assist."""
+    emu = _emulator(georam=True, reu=True)
+    state = _run(emu, "loader_detect_georam", 200_000)
+    assert (state.p & 1) == 0
+    assert emu.read_mem(_address("expansion_store")) == 1
+    assert emu.read_mem(_address("expansion_reu_assist")) == 1
+    assert emu.read_mem(_address("expansion_capacity_georam")) == 0x20
+    assert emu.read_mem(_address("expansion_capacity_reu")) == 8
+
+
+@pytest.mark.integration
+@pytest.mark.local
+def test_dual_detect_reu_only_selects_reu_store() -> None:
+    """With only REU present the wrapper publishes REU store."""
+    emu = _emulator(georam=False, reu=True)
+    state = _run(emu, "loader_detect_georam", 200_000)
+    assert (state.p & 1) == 0
+    assert emu.read_mem(_address("expansion_store")) == 2
+    assert emu.read_mem(_address("expansion_reu_assist")) == 0
+    assert emu.read_mem(_address("expansion_capacity_reu")) == 8
+
+
+@pytest.mark.integration
+@pytest.mark.local
+def test_loader_entry_fails_clean_without_devices() -> None:
+    """loader_entry must not enter the shell when neither device validates."""
+    emu = _emulator(georam=False, reu=False)
+    # Undersized geoRAM keeps mapping visible while dual probe still fails.
+    emu.set_georam_enabled(True)
+    emu.load_georam(b"\x00" * (64 * 1024))
+    emu.set_reu_enabled(False)
+    install_kernal_stubs(emu)
+    emu.write_mem(0x0001, 0x35)
+    state = _run(emu, "loader_entry", 300_000)
+    assert (state.p & 1) == 1
+    assert state.a == 0x1D  # ERR_LOAD
+    assert emu.read_mem(_address("loader_sequence_phase")) == 0xFF
+    assert emu.read_mem(_address("expansion_store")) == 0
