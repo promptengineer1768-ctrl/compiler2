@@ -223,19 +223,28 @@ pytest tests\ -v -m "static or georam"
 fc /b build\segments\georam_payload.bin build\georam_check\georam.bin
 ```
 
-3. Verify the D64 contains the compressed GEORAM file:
+3. Verify the D64 contains the compressed GEORAM file with an optional,
+explicitly configured external disk utility:
 ```powershell
-& "C:\Users\me\Documents\Coding Projects\tools\vice-mcp\dist\HeadlessVICE-windows-x86_64\c1541.exe" `
+& $env:VICE_C1541 `
   -attach build\compiler.d64 -list
 ```
 
-### Loader Size Budget
-
-The loader must fit within the `INSTALL_LOADER` segment budget. The
-`georam_stream_reader.asm` adds approximately 300 bytes to the loader.
-Verify the total loader size after including the decompressor:
+Without `VICE_C1541`, use the project's deterministic D64 validator:
 
 ```powershell
-# Check loader size in the linker map
-Select-String -Path build\compiler.map -Pattern "INSTALL_LOADER"
+& $PYTHON -m pytest tests\system\test_binary_artifacts.py -v
+```
+
+### Loader Layout
+
+The loader has no independent 256-byte size limit. It starts at `$0801`, with
+machine-code entry at `$080D`, and may use as much of the loadable normal-RAM
+image as required provided it remains within the RAM area and does not overlap
+the following resident segment. Verify its linked extent after including the
+stream reader and decompressor:
+
+```powershell
+# Check loader extent and the following resident segment in the linker map
+Select-String -Path build\compiler.map -Pattern "LOADER|RESIDENT"
 ```

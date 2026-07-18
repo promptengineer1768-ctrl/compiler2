@@ -341,9 +341,7 @@ def generate_format_tables(formats_path: str, output_dir: str) -> None:
     inc_lines.append(f"STOCK_BASICV35_LOAD_ADDR = {basic35_load}")
     inc_lines.append(f"STOCK_BASICV35_LOAD_LO = {int(basic35_bytes[0])}")
     inc_lines.append(f"STOCK_BASICV35_LOAD_HI = {int(basic35_bytes[1])}")
-    inc_lines.append(
-        f"STOCK_BASICV35_MAX_LINE = {basic35.get('max_line_length', 80)}"
-    )
+    inc_lines.append(f"STOCK_BASICV35_MAX_LINE = {basic35.get('max_line_length', 80)}")
 
     save_ids = data.get("save_format_ids", {})
     inc_lines.append(f"SAVE_FORMAT_V2 = {int(save_ids.get('v2', 0))}")

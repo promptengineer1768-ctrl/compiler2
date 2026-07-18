@@ -6,6 +6,7 @@ Tests verify D64 contents, PRG headers, and binary artifact sizes.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -13,22 +14,22 @@ from pathlib import Path
 import pytest
 
 from package_d64 import (
+    _d64_offset,
     validate_d64,
     validate_dual_d64_release,
     validate_prg_header,
     validate_reu_patch,
+    resolve_c1541,
 )
 from populate_georam import COLD_SEGMENTS
 
 ROOT = Path(__file__).resolve().parents[2]
-C1541 = (
-    ROOT.parent
-    / "tools"
-    / "vice-mcp"
-    / "dist"
-    / "HeadlessVICE-windows-x86_64"
-    / "c1541.exe"
-)
+
+
+def _configured_c1541() -> Path | None:
+    """Return the optional explicitly configured vice-next disk utility."""
+    selected = os.environ.get("VICE_C1541")
+    return Path(selected) if selected else None
 
 
 @pytest.mark.system
@@ -82,13 +83,15 @@ class TestD64Contents:
 
     def test_d64_georam_is_exact_packaged_sidecar(self, tmp_path: Path) -> None:
         """The D64 georam file exactly matches the selected build sidecar."""
-        if not C1541.is_file():
-            pytest.skip("c1541 is not installed")
+        c1541 = _configured_c1541()
+        if c1541 is None:
+            pytest.skip("optional VICE_C1541 is not configured")
+        assert c1541.is_file(), "configured VICE_C1541 must be a real file"
         disk = ROOT / "build" / "compiler.d64"
         extracted = tmp_path / "georam.prg"
         subprocess.run(
             [
-                str(C1541),
+                str(c1541),
                 "-attach",
                 str(disk),
                 "-read",
@@ -114,6 +117,37 @@ class TestD64Contents:
         else:
             assert actual[:2] == b"\x00\xde"
             assert len(actual) == 65538
+
+
+def test_c1541_resolution_uses_only_explicit_vice_next_configuration(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Packaging chooses direct D64 output unless VICE_C1541 names a file."""
+    monkeypatch.delenv("VICE_C1541", raising=False)
+    assert resolve_c1541() == ""
+    configured = tmp_path / "c1541.exe"
+    configured.write_bytes(b"tool")
+    monkeypatch.setenv("VICE_C1541", str(configured))
+    assert resolve_c1541() == str(configured)
+    monkeypatch.setenv("VICE_C1541", str(tmp_path / "missing.exe"))
+    with pytest.raises(FileNotFoundError, match="VICE_C1541"):
+        resolve_c1541()
+
+
+def test_direct_d64_builder_preserves_free_bam_sectors_for_device_writes() -> None:
+    """Release D64 must advertise free sectors so KERNAL SAVE can persist."""
+    disk = ROOT / "build" / "compiler.d64"
+    if not disk.exists():
+        pytest.skip("build/compiler.d64 not found")
+    data = disk.read_bytes()
+    bam = _d64_offset(18, 0)
+    # Track 35 is unused by the release payload and must be writable.  The
+    # BAM's first byte for that track is its available-sector count; its next
+    # three bytes are the low-bit-first free-sector bitmap.
+    track_35_bam = bam + 4 + (35 - 1) * 4
+    track_35_free_count = data[track_35_bam]
+    assert track_35_free_count == 17
+    assert data[track_35_bam + 1 : track_35_bam + 4] == b"\xff\xff\x01"
 
 
 @pytest.mark.system
@@ -159,6 +193,13 @@ class TestPrgHeader:
                 0x00,
             ]
         )
+
+    def test_basicv3_prg_contains_post_init_ready_banner(self) -> None:
+        """Cold-init status text must ship in the resident loader PRG."""
+        path = ROOT / "build" / "basicv3.prg"
+        if not path.exists():
+            pytest.skip("build/basicv3.prg not found")
+        assert b"BASIC V3 READY\x8d" in path.read_bytes()
 
     def test_georam_bin_exists(self) -> None:
         """build/georam.bin must exist."""

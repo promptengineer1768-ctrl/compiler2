@@ -48,7 +48,7 @@ production path and acceptance tests.
 | Source-free `COMPILE` export and its restricted shell | `geoasm/compile_export.asm`, `runtime/inspection.asm`, standalone linker profile |
 | DOS wedge before BASIC tokenization | `geoasm/dos_wedge.asm`, `runtime/wedge.asm`, resident input dispatch |
 | Graphics ownership and one exit path | `runtime/graphics.asm`, generated memory policy |
-| Dual-device expansion profile and fatal integrity handling | `arena/georam_detect.asm` (geoRAM half), REU detect/gate (**missing**), `resident/fatal.asm`, expansion dispatcher (**missing**) |
+| Dual-device expansion profile and fatal integrity handling | `arena/georam_detect.asm`, `arena/reu_detect.asm`, `resident/expansion_profile.asm`, `resident/georam_gate.asm`, `arena/overlay_dispatch.asm` (geoRAM XIP), `resident/fatal.asm`; full REU-native dual dispatcher / XIP miss path remains REU-phase work (`reu_xip_active` exists, default 0) |
 | Generated ABI, arena, ZP, placement, test-entry, and traceability contracts | structured manifests and `tools/` generators |
 | Current-build API and memory-map references | `tools/generate_reference.py`, `build/API.md`, `build/MAP.md` |
 
@@ -643,7 +643,7 @@ and registers.
 |---|---|---|---|---|---|
 | `irq_entry` | hardware IRQ frame (CPU has pushed PC/P; A/X/Y are live) | interrupted A/X/Y/P/PC and mapping restored | internal IRQ save set | Advances jiffy clock, updates keyboard state, blinks cursor | Pinned entry: save A/X/Y/mapping, UDTIM, cursor, SCNKEY, CIA ack, restore, RTI |
 | `irq_update_jiffy` | IRQ-private call | — | A X Y, declared flags | Calls KERNAL `UDTIM` directly while IRQ entry owns `$01=$36` | Called only from `irq_entry` |
-| `irq_cursor_blink` | — | — | A | Toggles cursor visibility state in `zp_crsr_vis` | Bounded resident cursor service; no geoRAM dependency |
+| `irq_cursor_blink` | — | — | A X Y | Reverse-videos the screen cell at `zp_crsr_x`/`zp_crsr_y` when `zp_crsr_vis` is set | Bounded resident cursor service; no geoRAM dependency |
 | `irq_scan_keyboard` | IRQ-private call | — | A X Y, declared flags | Calls KERNAL `SCNKEY` directly after cursor service | Called only from `irq_entry` |
 | `irq_restore_mapping` | saved interrupted `$01`/P | exact interrupted mapping/P restored | A | Does not touch geoRAM selection | Called before `RTI` |
 
@@ -1262,8 +1262,9 @@ Resident editor loop and boundary assertions. It drains the KERNAL queue with
 
 | Routine | In | Out | Clob | Side | Purpose |
 |---|---|---|---|---|---|
-| `resident_main` | initialized environment | does not return | A X Y | Captures editor input and dispatches complete lines | READY/editor loop |
+| `resident_main` | initialized environment | does not return | A X Y | Polls GETIN, dispatches keys, submits on Return | READY/editor loop |
 | `resident_poll_input` | mailbox handle in X/Y | A=byte or zero | A X Y | Calls foreground `GETIN` bridge only | Nonblocking input drain |
+| `resident_handle_key` | A=PETSCII key | — | A X Y | Echoes printables, moves cursor, submits on CR | Foreground key dispatch |
 | `resident_submit_line` | X/Y=line mailbox handle | C=error | A X Y | Calls direct-prefix dispatch or geoRAM editor service | Transactional handoff |
 | `resident_assert_boundary` | public-boundary ID | C=error in debug | A, flags | Checks `$01=$35`, D clear, gate mirror, stack watermark | Common debug assertion |
 

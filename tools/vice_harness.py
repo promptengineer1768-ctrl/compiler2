@@ -1,23 +1,32 @@
-"""Shared client and process harness for stock VICE reference observations."""
+"""Shared supervised VICE-next harness for stock reference observations."""
 
 from __future__ import annotations
 
-import base64
 import json
-import subprocess
+import os
+import struct
+import sys
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
-from urllib.error import URLError
-from urllib.request import Request, urlopen
 
 ROOT: Final = Path(__file__).resolve().parents[1]
-VICE_ROOT: Final = (
-    ROOT.parent / "tools" / "vice-mcp" / "dist" / "HeadlessVICE-windows-x86_64"
+VICE_NEXT_ROOT: Final = ROOT.parent / "tools" / "vice-next-mcp"
+VICE_NEXT_SRC: Final = VICE_NEXT_ROOT / "src"
+if str(VICE_NEXT_SRC) not in sys.path:
+    sys.path.insert(0, str(VICE_NEXT_SRC))
+
+from vice_next_mcp.monitor import BinaryMonitorTransport  # noqa: E402,F401
+from vice_next_mcp.monitor_sync import BinaryMonitor  # noqa: E402
+from vice_next_mcp.supervisor import Instance, Supervisor  # noqa: E402
+
+_DEFAULT_RUNTIME: Final = (
+    ROOT.parent / "builds" / "vice-instrumentation-windows" / "extracted" / "src"
 )
+VICE_ROOT: Final = Path(os.environ.get("VICE_NEXT_RUNTIME", _DEFAULT_RUNTIME)).resolve()
 
 
 @dataclass(frozen=True)
@@ -68,15 +77,65 @@ MACHINES: Final = {
 
 
 class ViceMCPError(RuntimeError):
-    """Raised when a VICE MCP request fails."""
+    """Raised when a supervised VICE-next operation fails."""
 
 
 class ViceMCP:
-    """Small JSON-RPC client for the HTTP MCP endpoint embedded in VICE."""
+    """Compatibility facade over one supervised binary-monitor instance."""
 
-    def __init__(self, endpoint: str) -> None:
-        """Initialize the client with an endpoint including the ``/mcp`` path."""
-        self.endpoint = endpoint.rstrip("/") + "/mcp"
+    def __init__(self, endpoint: str = "vice-next://unbound") -> None:
+        """Create an unbound facade for compatibility/introspection tests."""
+        self.endpoint = endpoint
+        self._instance: Instance | None = None
+        self._supervisor: Supervisor | None = None
+        self.artifact_dir: Path | None = None
+        self._paused = False
+
+    @classmethod
+    def connected(
+        cls, supervisor: Supervisor, instance: Instance, artifact_dir: Path
+    ) -> "ViceMCP":
+        """Bind a facade to a supervised instance."""
+        item = cls(f"vice-next://{instance.id}")
+        item._supervisor = supervisor
+        item._instance = instance
+        item.artifact_dir = artifact_dir
+        return item
+
+    @property
+    def monitor_port(self) -> int:
+        """Return the supervisor-assigned ephemeral monitor port."""
+        if self._instance is None or self._instance.monitor is None:
+            raise ViceMCPError("VICE-next client is not connected")
+        return int(self._instance.monitor.socket.getpeername()[1])
+
+    @property
+    def capabilities(self) -> frozenset[str]:
+        """Return native and instrumented capabilities for this instance."""
+        return frozenset(self._bound().capabilities)
+
+    @property
+    def process_id(self) -> int:
+        """Return the supervised emulator process ID."""
+        process = self._bound().process
+        if process is None:
+            raise ViceMCPError("VICE-next process is unavailable")
+        return int(process.pid)
+
+    @property
+    def is_running(self) -> bool:
+        """Return whether the supervised emulator process is alive."""
+        process = self._bound().process
+        return process is not None and process.poll() is None
+
+    def _bound(self) -> Instance:
+        if self._instance is None or self._instance.monitor is None:
+            raise ViceMCPError("VICE-next client is not connected")
+        return self._instance
+
+    @staticmethod
+    def _text_result(value: dict[str, object]) -> dict[str, object]:
+        return {"content": [{"type": "text", "text": json.dumps(value)}]}
 
     def call(
         self,
@@ -86,57 +145,92 @@ class ViceMCP:
         timeout: float = 10.0,
         retries: int = 2,
     ) -> object:
-        """Invoke one VICE MCP tool, retrying transient transport failures."""
-        payload = {
-            "jsonrpc": "2.0",
-            "id": time.time_ns(),
-            "method": "tools/call",
-            "params": {"name": name, "arguments": arguments or {}},
-        }
-        request = Request(
-            self.endpoint,
-            data=json.dumps(payload).encode(),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        last_error: Exception | None = None
-        for attempt in range(retries + 1):
-            try:
-                with urlopen(request, timeout=timeout) as response:
-                    decoded = json.loads(response.read())
-                break
-            except (OSError, TimeoutError, URLError) as exc:
-                last_error = exc
-                if attempt < retries:
-                    time.sleep(0.15)
-        else:
-            raise ViceMCPError(f"VICE MCP call failed: {name}") from last_error
-        if "error" in decoded:
-            raise ViceMCPError(f"VICE MCP error for {name}: {decoded['error']}")
-        return decoded.get("result", {})
+        """Translate the legacy call surface to native monitor operations."""
+        del timeout, retries
+        args = arguments or {}
+        instance = self._bound()
+        monitor = instance.monitor
+        assert monitor is not None
+        try:
+            if name == "vice.ping":
+                version, revision = _vice_info(monitor.call(0x85).body)
+                return self._text_result(
+                    {
+                        "version": ".".join(str(item) for item in version),
+                        "revision": revision,
+                        "instance_id": instance.id,
+                        "generation": instance.generation,
+                        "monitor_port": self.monitor_port,
+                    }
+                )
+            if name == "vice.execution.pause":
+                monitor.ping()
+                self._paused = True
+                return self._text_result({"execution_state": "paused"})
+            if name == "vice.execution.run":
+                monitor.resume()
+                self._paused = False
+                return self._text_result({"execution_state": "running"})
+            if name == "vice.memory.read":
+                address = _address(args["address"])
+                data = monitor.memory(address, int(args["size"]))
+                if not self._paused:
+                    monitor.resume()
+                return self._text_result({"data": list(data)})
+            if name == "vice.memory.write":
+                monitor.memory_write(_address(args["address"]), bytes(args["data"]))
+                return self._text_result({"written": len(args["data"])})
+            if name == "vice.keyboard.type":
+                monitor.keyboard_feed(_petscii(str(args["text"])))
+                return self._text_result({"accepted": len(str(args["text"]))})
+            if name == "vice.keyboard.restore":
+                self.restore_key(str(args.get("action", "press")))
+                return self._text_result({"physical_restore": True})
+            if name == "vice.keyboard.key_press":
+                self.press_key(str(args["key"]))
+                return self._text_result({"accepted": 1})
+            if name == "vice.disk.attach":
+                _autostart(monitor, Path(str(args["path"])), run=False)
+                return self._text_result({"unit": int(args.get("unit", 8))})
+            if name == "vice.autostart":
+                _autostart(
+                    monitor,
+                    Path(str(args["path"])),
+                    run=bool(args.get("run", True)),
+                )
+                return self._text_result({"path": str(args["path"])})
+            if name == "vice.snapshot.save":
+                if self.artifact_dir is None:
+                    raise ViceMCPError("snapshot requires an artifact directory")
+                snapshot = self.artifact_dir / f"{args['name']}.vsf"
+                monitor.dump(snapshot)
+                return self._text_result({"path": str(snapshot), "name": args["name"]})
+        except Exception as exc:  # noqa: BLE001
+            raise ViceMCPError(f"VICE-next operation failed: {name}") from exc
+        raise ViceMCPError(f"unsupported VICE-next compatibility operation: {name}")
 
     def memory_read(self, address: int, length: int) -> bytes:
-        """Read bytes through the machine's current CPU-visible memory map."""
-        result = self.call(
-            "vice.memory.read",
-            {"address": f"0x{address:04X}", "size": length},
-        )
-        return _extract_bytes(result)
+        """Read bytes through the current CPU-visible map."""
+        monitor = self._bound().monitor
+        assert monitor is not None
+        data = monitor.memory(address, length)
+        if not self._paused:
+            monitor.resume()
+        return data
 
     def memory_write(self, address: int, data: bytes) -> None:
-        """Write bytes through the machine's current CPU-visible memory map."""
-        self.call(
-            "vice.memory.write",
-            {"address": f"0x{address:04X}", "data": list(data)},
-        )
+        """Write bytes through the current CPU-visible map."""
+        monitor = self._bound().monitor
+        assert monitor is not None
+        monitor.memory_write(address, data)
 
     def type_text(self, text: str) -> None:
-        """Submit text through VICE's keyboard path."""
-        for char in text:
-            self.call("vice.keyboard.type", {"text": char})
-            time.sleep(0.12)
-            if char in "\r\n":
-                time.sleep(1.0)
+        """Feed a complete PETSCII sequence through monitor command ``0x72``."""
+        monitor = self._bound().monitor
+        assert monitor is not None
+        monitor.keyboard_feed(_petscii(text))
+        if any(char in "\r\n" for char in text):
+            time.sleep(0.1)
 
     def press_key(
         self,
@@ -145,17 +239,30 @@ class ViceMCP:
         hold_frames: int | None = None,
         hold_ms: int | None = None,
     ) -> None:
-        """Press one key through VICE's keyboard matrix."""
-        arguments: dict[str, object] = {"key": key}
-        if hold_frames is not None:
-            arguments["hold_frames"] = hold_frames
-        if hold_ms is not None:
-            arguments["hold_ms"] = hold_ms
-        self.call("vice.keyboard.key_press", arguments)
+        """Press a feed key, or use the instrumented RESTORE extension."""
+        del hold_frames, hold_ms
+        if key.upper() == "RESTORE":
+            self.restore_key("press")
+            self.restore_key("release")
+            return
+        names = {"RETURN": "\r", "ENTER": "\r", "SPACE": " "}
+        self.type_text(names.get(key.upper(), key))
+
+    def restore_key(self, action: str = "press") -> None:
+        """Drive the physical RESTORE line through instrumented command ``0x74``."""
+        if "vice.keyboard.restore" not in self.capabilities:
+            raise ViceMCPError("instrumented RESTORE capability is unavailable")
+        if action not in {"press", "release"}:
+            raise ValueError("RESTORE action must be press or release")
+        monitor = self._bound().monitor
+        assert monitor is not None
+        monitor.keyboard_matrix(-3, 0, action == "press")
 
     def autostart(self, path: Path, *, run: bool = True) -> None:
-        """Load a PRG or disk image through VICE autostart."""
-        self.call("vice.autostart", {"path": str(path), "run": run}, timeout=20.0)
+        """Load a PRG or disk image through native autostart."""
+        monitor = self._bound().monitor
+        assert monitor is not None
+        _autostart(monitor, path, run=run)
 
     def submit_command(
         self,
@@ -164,23 +271,20 @@ class ViceMCP:
         *,
         timeout: float = 20.0,
     ) -> str:
-        """Type one command and wait for the machine to return to READY."""
+        """Feed one command and wait for a new READY prompt."""
         before = self.screen_text(machine)
-        self.type_text(command.rstrip("\r\n") + "\n")
-        self.call("vice.execution.run", timeout=1.0)
-        # Keyboard events need a few frames before MCP memory polling resumes.
-        time.sleep(0.5)
+        self.type_text(command.rstrip("\r\n") + "\r")
+        monitor = self._bound().monitor
+        assert monitor is not None
+        monitor.resume()
         deadline = time.monotonic() + timeout
         last_screen = before
         while time.monotonic() < deadline:
-            try:
-                last_screen = self.screen_text(machine)
-            except ViceMCPError:
-                time.sleep(0.15)
-                continue
+            last_screen = self.screen_text(machine)
             if _command_completed(before, last_screen):
                 return last_screen
-            time.sleep(0.15)
+            monitor.resume()
+            time.sleep(0.05)
         raise TimeoutError(
             f"VICE did not return to READY after {command!r}\n{last_screen}"
         )
@@ -208,12 +312,10 @@ class ViceMCP:
         deadline = time.monotonic() + timeout
         last_screen = ""
         stable_reads = 0
+        monitor = self._bound().monitor
+        assert monitor is not None
         while time.monotonic() < deadline:
-            try:
-                screen = self.screen_text(machine)
-            except ViceMCPError:
-                time.sleep(0.15)
-                continue
+            screen = self.screen_text(machine)
             lines = [
                 line.strip().upper() for line in screen.splitlines() if line.strip()
             ]
@@ -225,7 +327,8 @@ class ViceMCP:
             else:
                 stable_reads = 0
             last_screen = screen
-            time.sleep(0.25)
+            monitor.resume()
+            time.sleep(0.05)
         raise TimeoutError(f"VICE did not reach a stable READY prompt\n{last_screen}")
 
 
@@ -233,87 +336,61 @@ class ViceMCP:
 def running_vice(
     machine: ViceMachine,
     *,
-    port: int = 6510,
+    port: int | None = None,
     startup_timeout: float = 15.0,
     extra_args: tuple[str, ...] = (),
 ) -> Iterator[ViceMCP]:
-    """Start an isolated VICE process and yield its connected MCP client."""
+    """Start an isolated instrumented VICE instance on an ephemeral port."""
+    del port  # Legacy caller ports are intentionally replaced by ephemeral leases.
     executable = VICE_ROOT / machine.executable
     if not executable.is_file():
         raise FileNotFoundError(executable)
-    debug = ROOT / "debug"
-    debug.mkdir(exist_ok=True)
-    stdout_path = debug / f"{machine.profile}_vice_stdout.log"
-    stderr_path = debug / f"{machine.profile}_vice_stderr.log"
-    with stdout_path.open("w", encoding="utf-8") as stdout:
-        with stderr_path.open("w", encoding="utf-8") as stderr:
-            process = subprocess.Popen(
-                [
-                    str(executable),
-                    "-default",
-                    "-mcpserver",
-                    "-mcpserverport",
-                    str(port),
-                    "-warp",
-                    "-sounddev",
-                    "dummy",
-                    *extra_args,
-                ],
-                cwd=VICE_ROOT,
-                stdout=stdout,
-                stderr=stderr,
-                text=True,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-            client = ViceMCP(f"http://127.0.0.1:{port}")
-            deadline = time.monotonic() + startup_timeout
-            while time.monotonic() < deadline:
-                if process.poll() is not None:
-                    raise RuntimeError(
-                        f"{machine.executable} exited with {process.returncode}; "
-                        f"see {stderr_path}"
-                    )
-                try:
-                    client.call("vice.ping", timeout=1.0)
-                    client.call("vice.execution.run", timeout=1.0)
-                    break
-                except ViceMCPError:
-                    time.sleep(0.1)
-            else:
-                process.terminate()
-                process.wait(timeout=5)
-                raise TimeoutError(f"VICE MCP did not start; see {stderr_path}")
-            try:
-                yield client
-            finally:
-                process.terminate()
-                try:
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait(timeout=5)
+    artifacts = ROOT / "debug" / "vice-next"
+    artifacts.mkdir(parents=True, exist_ok=True)
+    supervisor = Supervisor(
+        executable=str(executable),
+        monitor_port=0,
+        startup_timeout=startup_timeout,
+        workdir=str(VICE_ROOT),
+        headless=True,
+    )
+    os.environ.setdefault("VICE_MCP_INSTRUMENTED", "1")
+    instance = supervisor.create(
+        machine=machine.executable.removesuffix(".exe"),
+        extra_args=("-warp", "-sounddev", "dummy", *extra_args),
+    )
+    client = ViceMCP.connected(supervisor, instance, artifacts)
+    try:
+        instance.monitor.resume()
+        yield client
+    finally:
+        supervisor.close()
 
 
-def _extract_bytes(result: object) -> bytes:
-    """Extract bytes from the MCP protocol's nested content representation."""
-    if isinstance(result, dict):
-        content = result.get("content")
-        if isinstance(content, list) and content:
-            item = content[0]
-            if isinstance(item, dict) and isinstance(item.get("text"), str):
-                return _extract_bytes(json.loads(item["text"]))
-        for key in ("data", "bytes", "memory"):
-            value = result.get(key)
-            if isinstance(value, list):
-                return bytes(
-                    int(item, 16) if isinstance(item, str) else item for item in value
-                )
-            if isinstance(value, str):
-                try:
-                    return bytes.fromhex(value)
-                except ValueError:
-                    return base64.b64decode(value)
-    raise TypeError(f"Unexpected VICE memory response: {result!r}")
+def _address(value: object) -> int:
+    if isinstance(value, int):
+        return value
+    return int(str(value).replace("$", "0x"), 0)
+
+
+def _petscii(text: str) -> bytes:
+    return bytes(0x0D if char in "\r\n" else ord(char) & 0x7F for char in text)
+
+
+def _autostart(monitor: BinaryMonitor, path: Path, *, run: bool) -> None:
+    """Issue VICE binary-monitor autostart command ``0xDD``."""
+    encoded = str(path).encode("utf-8")
+    if len(encoded) > 0xFF:
+        raise ValueError("VICE autostart path exceeds the protocol's 255-byte limit")
+    monitor.call(0xDD, struct.pack("<BHB", int(run), 0, len(encoded)) + encoded)
+
+
+def _vice_info(body: bytes) -> tuple[tuple[int, ...], str]:
+    version_length = body[0]
+    version = tuple(body[1 : 1 + version_length])
+    revision_length = body[1 + version_length]
+    revision = body[2 + version_length : 2 + version_length + revision_length]
+    return version, revision.decode("utf-8")
 
 
 def _screen_code_to_ascii(value: int) -> str:

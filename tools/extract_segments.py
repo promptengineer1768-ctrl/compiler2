@@ -9,16 +9,18 @@ import re
 import sys
 from typing import Any, Dict, List
 
+# Segments that live only on expansion (or RAM_HIGH) and must not be folded
+# into the low-RAM compile.bin span. RUNTIME/GEOASM/CODE/RODATA are
+# intentionally *not* listed: they are linked at absolute low-RAM addresses
+# and must be present in the installed PRG so absolute JSRs from the resident
+# editor and from geoRAM XIP entry stubs reach the real compile/print/wedge
+# graph. Pure expansion-only cold packs (EDITOR/HIBASIC/etc.) stay excluded.
 GEORAM_BACKED_SEGMENTS = {
     "COMPILER",
     "EDITOR",
     "COMPRESSOR",
     "GRAPHICS",
-    "RUNTIME",
-    "GEOASM",
     "HIBASIC",
-    "CODE",
-    "RODATA",
 }
 
 # Segments placed in RAM_HIGH ($E000+, hibasic.bin) must not be folded into the

@@ -30,8 +30,10 @@ pipeline_failure_code:
 .export pipeline_failure_line
 pipeline_failure_line:
     .res 2
+.export pipeline_source_lo
 pipeline_source_lo:
     .res 1
+.export pipeline_source_hi
 pipeline_source_hi:
     .res 1
 pipeline_boundary_id:

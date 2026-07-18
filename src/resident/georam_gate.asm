@@ -19,6 +19,10 @@
 .exportzp GEORAM_DIRECTORY_CRC32_1
 .exportzp GEORAM_DIRECTORY_CRC32_2
 .exportzp GEORAM_DIRECTORY_CRC32_3
+; Re-export generated routine IDs so resident callers never hardcode stale values.
+.export GEORAM_ROUTINE_ID_EDITOR_SUBMIT_LINE
+.export GEORAM_ROUTINE_ID_PIPELINE_COMPILE_LINE
+.export GEORAM_ROUTINE_ID_DIRECT_EXECUTE_TEMPORARY
 
 .import ctx_push
 .import ctx_pop

@@ -68,8 +68,13 @@ kernal_output_byte:   .res 1
     jmp kernal_end
 .endmacro
 
-; Enter a public KERNAL call. A is preserved for the KERNAL ABI, X/Y remain
-; untouched, and only the port transition itself runs with IRQ masked.
+; Enter a public KERNAL call. A is preserved for the KERNAL ABI; X/Y remain
+; untouched.
+;
+; Always map KERNAL+I/O ($01=$36) and CLI for the call itself. Serial disk,
+; GETIN, and timer/keyboard service need a live IRQ path while KERNAL is
+; visible. The dangerous state is CLI with KERNAL banked out ($01=$35); that
+; is prevented in kernal_end, not by refusing CLI here.
 kernal_begin:
     sta kernal_saved_a
     php
@@ -83,17 +88,13 @@ kernal_begin:
     lda #KERNAL_IO_PORT
     sta $01
     cld
-    lda kernal_saved_p
-    and #$04
-    bne @restore_a
     cli
-@restore_a:
     lda kernal_saved_a
     rts
 
-; Return from a KERNAL call. Preserve the KERNAL result registers and flags,
-; but restore the caller's interrupt-enable state while atomically restoring
-; the CPU-port mapping.
+; Return from a KERNAL call. Preserve KERNAL result A/X/Y and non-I flags.
+; Always SEI before restoring the caller's CPU port, then restore the caller's
+; interrupt-enable state together with the KERNAL result flags.
 kernal_end:
     sta kernal_return_a
     stx kernal_return_x
@@ -167,11 +168,21 @@ kernal_chrout:
 
 ; Print a packed static string at X/Y. The final character carries bit 7;
 ; the bridge masks that marker before handing the byte to CHROUT.
+;
+; Hold KERNAL+I/O ($01=$36) for the whole string under SEI. Per-character
+; begin/end would restore $01=$35 with IRQs enabled between chars and vector
+; into open RAM at $FFFE (loader bootstrap runs with ROM banked out).
 kernal_print_packed:
     stx kernal_packed_ptr
     sty kernal_packed_ptr+1
     lda #0
     sta kernal_packed_index
+    php
+    sei
+    lda $01
+    sta kernal_saved_port
+    lda #KERNAL_IO_PORT
+    sta $01
 @next:
     lda kernal_packed_ptr
     sta zp_tmptr
@@ -181,16 +192,23 @@ kernal_print_packed:
     lda (zp_tmptr),y
     sta kernal_packed_byte
     and #$7F
-    jsr kernal_chrout
+    sta kernal_output_byte
+    jsr KERNAL_CHROUT
     bcs @error
     lda kernal_packed_byte
     bmi @done
     inc kernal_packed_index
     bne @next
 @error:
+    lda kernal_saved_port
+    sta $01
+    plp
     sec
     rts
 @done:
+    lda kernal_saved_port
+    sta $01
+    plp
     clc
     rts
 

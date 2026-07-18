@@ -22,7 +22,9 @@ gsrc_chunks_lo = gsrc_state + 12
 gsrc_chunks_hi = gsrc_state + 13
 gsrc_byte      = gsrc_state + 14
 
-.segment "CODE"
+; Must ship in the bootstrap PRG (basicv3): CODE is geoRAM-backed and is not
+; present until after CGS1/raw install completes.
+.segment "LOADER"
 gsrc_state:
     .res 15
 .export georam_stream_device
@@ -49,6 +51,8 @@ gsrc_chunk_unpacked_hi:
 ; Zero page: reads/writes all 15 bytes of generated zp_georam_stream.
 .export georam_stream_load
 georam_stream_load:
+    ; Caller must map KERNAL ($01=$36) and CLI before entry so bridge restores
+    ; leave IRQs + KERNAL safe between CHRIN calls.
     jsr kernal_setnam
     lda #2
     ldx georam_stream_device

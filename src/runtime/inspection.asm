@@ -674,7 +674,11 @@ inspect_run:
     ora inspect_program_entry+1
     beq @missing_entry
     jsr inspect_clr
-    jmp (inspect_program_entry)
+    lda inspect_program_entry
+    sta zp_tmptr
+    lda inspect_program_entry+1
+    sta zp_tmptr+1
+    jmp (zp_tmptr)
 @missing_entry:
     sec
     rts

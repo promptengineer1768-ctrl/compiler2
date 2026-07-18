@@ -20,7 +20,7 @@ if str(TOOLS_ROOT) not in sys.path:
 try:
     from emu6502_c64_bindings import C64Emu6502
 except ImportError:  # pragma: no cover
-    C64Emu6502 = None  # type: ignore[misc, assignment]
+    C64Emu6502 = None
 
 
 def _dll_path() -> Path:

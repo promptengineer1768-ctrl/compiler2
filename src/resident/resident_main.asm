@@ -9,18 +9,30 @@
 .include "common/constants.asm"
 
 .import screen_line_input
+.import screen_put_petscii
+.import screen_putchar
+.import screen_cursor_on
+.import screen_cursor_off
+.import screen_cursor_left
+.import screen_cursor_right
+.import screen_cursor_up
+.import screen_cursor_down
+.import screen_cursor_hide
+.import screen_sync_from_kernal
+.import resident_line_capture
 .import kernal_getin
+.import kernal_chrout
 .import georam_call_group_n
 .import georam_verify_mirror
 .import vectors_prior_irq
 .import vectors_prior_nmi
 .import vectors_installed
 .import nmi_invalidate_cont
-
-; Low-byte group-1 index for editor_submit_line. Must match
-; build/georam_pages.inc GEORAM_ROUTINE_ID_EDITOR_SUBMIT_LINE (tables live in
-; georam_gate.asm; do not re-include that file here — it would duplicate CODE).
-GEORAM_ROUTINE_ID_EDITOR_SUBMIT_LINE = 322
+.import pipeline_compile_line
+.import codegen_buffer
+.import wedge_dispatch_development
+; Generated low-byte group-1 index; tables live in georam_gate.asm.
+.import GEORAM_ROUTINE_ID_EDITOR_SUBMIT_LINE
 
 ; Stock BASIC map pointers (BASIC_ZP / c64rom declare.s).
 BASIC_TEMPPT = $16
@@ -58,10 +70,14 @@ resident_quit_done:       .res 1
 .export resident_input_byte
 .export resident_enter_degraded
 .export resident_show_expansion_error
+.export resident_handle_key
 .export quit_to_stock
 .export quit_explicit_clr
 .export vectors_restore
 
+; resident_main - READY/editor loop.
+; Foreground drains GETIN and dispatches keys. IRQ owns SCNKEY/UDTIM/cursor.
+; Return submits the current screen line through the expansion editor service.
 resident_main:
     lda resident_degraded
     bne resident_minimal_editor
@@ -69,7 +85,7 @@ resident_main:
     jsr resident_poll_input
     beq @loop
     sta resident_last_key
-    jsr resident_submit_line
+    jsr resident_handle_key
     jmp resident_main
 
 ; resident_enter_degraded - Enter minimal no-store editor (error + QUIT only).
@@ -82,13 +98,20 @@ resident_enter_degraded:
 
 resident_minimal_editor:
     jsr resident_show_expansion_error
+    ; Type on the line below the error banner.
+    lda #0
+    sta zp_crsr_x
+    lda #1
+    sta zp_crsr_y
+    jsr screen_cursor_on
 @loop:
     jsr resident_poll_input
     beq @loop
     sta resident_last_key
-    jsr resident_submit_degraded
-    ; Non-QUIT paths re-display the error; QUIT never returns.
-    jmp resident_minimal_editor
+    jsr resident_handle_key
+    ; QUIT leaves degraded (never returns). Rejected submits re-show the
+    ; banner inside resident_handle_key; keep draining keys here.
+    jmp @loop
 
 ; resident_show_expansion_error - Print the expansion-memory failure banner.
 ; Input: none. Output: C=0. Clobbers: A, X, Y.
@@ -159,24 +182,362 @@ resident_poll_input:
     pla
     rts
 
+; resident_handle_key - Dispatch one GETIN PETSCII byte.
+; CR submits the current screen line; DEL erases left; cursor keys move;
+; printable bytes are echoed into screen RAM at the project cursor.
+; Input: A = key. Output: none. Clobbers: A, X, Y.
+resident_handle_key:
+    cmp #$0D
+    beq @return
+    cmp #$14
+    beq @delete
+    cmp #$1D
+    beq @right
+    cmp #$9D
+    beq @left
+    cmp #$11
+    beq @down
+    cmp #$91
+    beq @up
+    ; Ignore remaining controls; echo printable PETSCII.
+    cmp #$20
+    bcc @done
+    jmp screen_put_petscii
+@right:
+    jmp screen_cursor_right
+@left:
+    jmp screen_cursor_left
+@down:
+    jmp screen_cursor_down
+@up:
+    jmp screen_cursor_up
+@delete:
+    ; Minimal DEL: move left and blank the cell under the cursor.
+    lda zp_crsr_x
+    bne @del_go
+    lda zp_crsr_y
+    beq @done
+@del_go:
+    jsr screen_cursor_left
+    jsr screen_cursor_hide
+    lda zp_crsr_y
+    ; Write space without advancing: reuse putchar path carefully.
+    pha
+    lda zp_crsr_x
+    pha
+    lda #$20
+    jsr screen_putchar
+    pla
+    sta zp_crsr_x
+    pla
+    sta zp_crsr_y
+    jsr screen_cursor_on
+@done:
+    rts
+@return:
+    jsr screen_cursor_off
+    lda resident_degraded
+    bne @degraded_submit
+    jsr resident_submit_line
+    bcs @submit_failed
+    ; Direct execution may have printed through CHROUT; adopt the KERNAL
+    ; cursor so the next edit line follows the output.
+    jsr screen_sync_from_kernal
+    jsr screen_cursor_on
+    rts
+@submit_failed:
+    ; Keep the typed line visible; move to the next physical row for retry.
+    lda #0
+    sta zp_crsr_x
+    jsr screen_cursor_down
+    jsr screen_cursor_on
+    rts
+@degraded_submit:
+    jsr resident_submit_degraded
+    bcs @reject_degraded
+    jsr screen_sync_from_kernal
+    jsr screen_cursor_on
+    rts
+@reject_degraded:
+    ; Wrong command in degraded mode: re-show error and re-enable typing.
+    jsr resident_show_expansion_error
+    lda #0
+    sta zp_crsr_x
+    lda #1
+    sta zp_crsr_y
+    jsr screen_cursor_on
+    rts
+
 resident_submit_line:
     lda resident_degraded
     bne @degraded
+    ; GETIN bridges briefly select $01=$36. Force the canonical map and clear
+    ; decimal mode so submit is not rejected by a mid-bridge pause state.
+    cld
+    lda #CPU_PORT_CANONICAL
+    sta $01
+    ; Re-arm the capture pointer every submit. zp_linebuf may share a fragile
+    ; ZP slot that KERNAL bridges can clobber across GETIN/CHROUT windows.
+    lda #<resident_line_capture
+    sta zp_linebuf
+    lda #>resident_line_capture
+    sta zp_linebuf+1
+    jsr screen_line_input
+    lda zp_line_len
+    beq @empty
+    ; DOS wedge prefixes are recognized ahead of tokenization.
+    jsr resident_try_wedge
+    bcc @done
+    ; Numbered program lines still go through the expansion editor service.
+    jsr resident_line_is_numbered
+    bcs @program_line
+    ; Direct mode: compile the PETSCII line through the always-mapped pipeline
+    ; and execute the scratch native buffer (PRINT, expressions, wedge handled
+    ; above). Position the KERNAL cursor under the command line first so CHROUT
+    ; does not overwrite the typed statement.
+    ldx zp_linebuf
+    ldy zp_linebuf+1
+    jsr pipeline_compile_line
+    bcs @fail
+    jsr resident_kernal_cursor_below
+    jsr codegen_buffer
+    ; Restore editor map/IRQs after compiled code (may have used KERNAL bridges).
+    cld
+    lda #CPU_PORT_CANONICAL
+    sta $01
+    cli
+    jmp @done
+@program_line:
     jsr resident_assert_boundary
     bcs @fail
-    jsr screen_line_input
     ldx #<GEORAM_ROUTINE_ID_EDITOR_SUBMIT_LINE
     jsr georam_call_group_n
     bcs @fail
+@done:
     lda zp_line_len
     sta resident_last_submit_len
     inc resident_submit_count
+    clc
+    rts
+@empty:
     clc
     rts
 @degraded:
     jmp resident_submit_degraded
 @fail:
     sec
+    rts
+
+; resident_try_wedge - If the line starts with $ @ / !, run the wedge core.
+; Output: C clear when handled; C set when the line is not a wedge command.
+.export resident_try_wedge
+resident_try_wedge:
+    ldy #0
+@skip:
+    cpy zp_line_len
+    bcs @no
+    lda (zp_linebuf), y
+    cmp #' '
+    bne @kind
+    iny
+    bne @skip
+@kind:
+    cmp #'$'
+    bne @at
+    lda #0
+    jmp @run
+@at:
+    cmp #'@'
+    bne @slash
+    lda #1
+    jmp @run
+@slash:
+    cmp #'/'
+    bne @bang
+    lda #2
+    jmp @run
+@bang:
+    cmp #'!'
+    bne @no
+    lda #3
+@run:
+    ; A=kind; X/Y = full line pointer (wedge parsers skip the prefix).
+    pha
+    ; Directory/status stream through CHROUT; park the KERNAL cursor under the
+    ; typed wedge line first so the listing does not overwrite the command.
+    jsr resident_kernal_cursor_below
+    pla
+    ldx zp_linebuf
+    ldy zp_linebuf+1
+    jsr wedge_dispatch_development
+    ; Restore canonical map after disk/KERNAL bridges.
+    cld
+    lda #CPU_PORT_CANONICAL
+    sta $01
+    cli
+    ; Treat success and reported errors as "handled" so we do not also compile.
+    clc
+    rts
+@no:
+    sec
+    rts
+
+; Carry set when the PETSCII capture starts with a digit (optional spaces).
+resident_line_is_numbered:
+    ldy #0
+@skip:
+    cpy zp_line_len
+    bcs @no
+    lda (zp_linebuf), y
+    cmp #' '
+    bne @check
+    iny
+    bne @skip
+@check:
+    cmp #'0'
+    bcc @no
+    cmp #'9'+1
+    bcs @no
+    sec
+    rts
+@no:
+    clc
+    rts
+
+; resident_direct_print - Execute PRINT "text" from zp_linebuf without geoRAM.
+; Input:  zp_linebuf/zp_line_len filled by screen_line_input.
+; Output: C clear when this form was recognized and printed; C set to decline.
+; Clobbers: A, X, Y.
+.export resident_direct_print
+resident_direct_print:
+    ldy #0
+@skip_sp:
+    cpy zp_line_len
+    bcs @decline
+    lda (zp_linebuf), y
+    cmp #' '
+    bne @match_print
+    iny
+    bne @skip_sp
+@match_print:
+    ; Require the five letters P R I N T (case-insensitive PETSCII).
+    jsr resident_fold_letter
+    cmp #'P'
+    bne @decline
+    iny
+    jsr resident_fold_letter
+    cmp #'R'
+    bne @decline
+    iny
+    jsr resident_fold_letter
+    cmp #'I'
+    bne @decline
+    iny
+    jsr resident_fold_letter
+    cmp #'N'
+    bne @decline
+    iny
+    jsr resident_fold_letter
+    cmp #'T'
+    bne @decline
+    iny
+@skip_sp2:
+    cpy zp_line_len
+    bcs @decline
+    lda (zp_linebuf), y
+    cmp #' '
+    bne @open_quote
+    iny
+    bne @skip_sp2
+@open_quote:
+    cmp #'"'
+    bne @decline
+    iny
+    ; Editor writes screen RAM without updating KERNAL PNTR/TBLX. Point
+    ; CHROUT at the row under the command so output does not overwrite it.
+    jsr resident_kernal_cursor_below
+@emit:
+    cpy zp_line_len
+    bcs @decline
+    lda (zp_linebuf), y
+    cmp #'"'
+    beq @close
+    jsr kernal_chrout
+    iny
+    bne @emit
+@close:
+    iny
+@trail:
+    cpy zp_line_len
+    bcs @cr
+    lda (zp_linebuf), y
+    cmp #' '
+    bne @decline
+    iny
+    bne @trail
+@cr:
+    lda #$0D
+    jsr kernal_chrout
+    clc
+    rts
+@decline:
+    sec
+    rts
+
+; Place the stock KERNAL editor cursor on the line below zp_crsr_y.
+; Set TBLX/PNT/PNTR for the command row, then CHROUT CR to advance one line
+; using the ROM path (keeps all KERNAL line state consistent).
+resident_kernal_cursor_below:
+    lda zp_crsr_y
+    sta $D6                 ; TBLX = command row
+    ; PNT = $0400 + TBLX * 40
+    tax
+    lda #0
+    sta $D1
+    sta $D2
+    cpx #0
+    beq @base
+@mul:
+    lda $D1
+    clc
+    adc #40
+    sta $D1
+    bcc @nx
+    inc $D2
+@nx:
+    dex
+    bne @mul
+@base:
+    lda $D1
+    clc
+    adc #<$0400
+    sta $D1
+    lda $D2
+    adc #>$0400
+    sta $D2
+    lda #0
+    sta $D3                 ; PNTR
+    lda #$0D
+    jmp kernal_chrout
+
+; resident_fold_letter - Load (zp_linebuf),Y as uppercase A-Z, else A=0.
+resident_fold_letter:
+    cpy zp_line_len
+    bcs @bad
+    lda (zp_linebuf), y
+    cmp #'a'
+    bcc @up
+    cmp #'z'+1
+    bcs @up
+    and #$DF
+@up:
+    cmp #'A'
+    bcc @bad
+    cmp #'Z'+1
+    bcs @bad
+    rts
+@bad:
+    lda #0
     rts
 
 resident_assert_boundary:

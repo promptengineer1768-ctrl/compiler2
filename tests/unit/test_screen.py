@@ -252,8 +252,25 @@ class TestScreen:
         assert emu.read_mem_range(0x0400, 0x0400 + 39) == b"b" * 40
         assert emu.read_mem_range(0x0400 + 24 * 40, 0x0400 + 25 * 40 - 1) == (b" " * 40)
 
+    def test_put_petscii_maps_letter_a_to_screen_code_01(self) -> None:
+        """PETSCII 'A' ($41) must store screen code $01, not raw $41 graphics."""
+        dll = _dll_path()
+        emu = Emu6502(lib_path=dll)
+        _load_binary(emu)
+
+        zp_crsr_x = _load_zp_address("zp_crsr_x")
+        zp_crsr_y = _load_zp_address("zp_crsr_y")
+        emu.write_mem(zp_crsr_x, 0x00)
+        emu.write_mem(zp_crsr_y, 0x00)
+        emu.set_a(ord("A"))
+        assert emu.execute(_load_symbol_address("screen_put_petscii"), 10_000) == (
+            StopCondition.RTS
+        )
+        assert emu.read_mem(0x0400) == 0x01
+        assert emu.read_mem(zp_crsr_x) == 0x01
+
     def test_line_input_trims_or_keeps_spaces_by_quote_mode(self) -> None:
-        """screen_line_input should trim trailing spaces unless quote mode is set."""
+        """screen_line_input converts screen codes to PETSCII and trims spaces."""
         dll = _dll_path()
         emu = Emu6502(lib_path=dll)
         _load_binary(emu)
@@ -270,7 +287,10 @@ class TestScreen:
         emu.write_mem(zp_crsr_x, 0x00)
         emu.write_mem(zp_crsr_y, 0x00)
         emu.write_mem(zp_quotemode, 0x00)
-        emu.write_mem_range(0x0400, b"HELLO" + b" " * 35)
+        # Screen codes for HELLO (H=$08 E=$05 L=$0C L=$0C O=$0F).
+        emu.write_mem_range(
+            0x0400, bytes([0x08, 0x05, 0x0C, 0x0C, 0x0F]) + b" " * 35
+        )
 
         assert emu.execute(_load_symbol_address("screen_line_input"), 10_000) == (
             StopCondition.RTS

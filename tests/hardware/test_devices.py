@@ -43,13 +43,10 @@ def test_device_save_and_load_round_trip() -> None:
     shutil.copy(source_disk, writable_disk)
 
     machine = MACHINES["basicv2"]
-    with running_vice(machine, port=6543) as vice:
+    with running_vice(
+        machine, port=6543, extra_args=("-8", str(writable_disk))
+    ) as vice:
         vice.wait_for_ready_screen(machine, timeout=20.0, settle_reads=1)
-        vice.call(
-            "vice.disk.attach",
-            {"unit": 8, "path": str(writable_disk)},
-            timeout=10.0,
-        )
         vice.call("vice.execution.run", timeout=1.0)
         time.sleep(0.5)
         vice.submit_command(machine, "NEW", timeout=20.0)

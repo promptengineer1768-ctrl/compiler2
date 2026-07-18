@@ -1735,7 +1735,7 @@ The analyzer fails if a range is unclassified, violates a hard rule, crosses an 
 
 Generated for build `14-dirty` on 2026-05-07 UTC.
 
-This table compares selected live benchmarks across stock Commodore BASIC V2 and BASIC V3 modes. Stock benchmarks run a small stored program with 30 loop iterations. Stock BASIC V2 is measured through VICE MCP using the cycle stopwatch. BASIC V3 benchmarks call each numeric runtime entrypoint 30 times in the local 6502 emulator through numeric runtime entrypoints, using median cycles over 3 rounds.
+This table compares selected live benchmarks across stock Commodore BASIC V2 and BASIC V3 modes. Stock benchmarks run a small stored program with 30 loop iterations. Stock BASIC V2 is measured through VICE Next using the cycle stopwatch. BASIC V3 benchmarks call each numeric runtime entrypoint 30 times in the local 6502 emulator through numeric runtime entrypoints, using median cycles over 3 rounds.
 
 `-` means the operation or mode was not implemented or could not be measured by the harness.
 

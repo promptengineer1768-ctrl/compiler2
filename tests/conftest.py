@@ -134,8 +134,10 @@ def pytest_configure() -> None:
                 self, base, bytes([value & 0xFF, (value >> 8) & 0xFF, value >> 16])
             )
         if address == routine_addresses.get("irq_cursor_blink"):
-            base = zp_addresses["zp_crsr_vis"]
-            _write_range_plain(self, base, bytes([original_read_mem(self, base) ^ 1]))
+            # Real irq_cursor_blink reverse-videos screen RAM when enabled.
+            # Leave zp_crsr_vis alone (it is the enable latch, not a toggle).
+            # When the real routine already ran, do not overwrite its result.
+            pass
         if address == routine_addresses.get("irq_scan_keyboard"):
             _write_range_plain(
                 self,

@@ -53,10 +53,11 @@ loaded. A graphics-mode
 export may use `$D000-$D7FF` RAM beneath I/O only through the documented banking
 gates and only when the graphics memory contract permits it.
 
-The current development ceiling for `build/compile.bin` is 24 KiB. The increase
-from the earlier 16 KiB placeholder budget accounts for the resident custom
-floating-point arithmetic kernel: add, subtract, negate, multiply, divide, and
-`SQR` no longer call ROM and must keep fully rounded C64 packed-float results.
+The current development ceiling for `build/compile.bin` is 48 KiB. The image
+must include the always-mapped RUNTIME, GEOASM, and CODE segments so absolute
+calls from the resident editor and geoRAM XIP entry stubs reach real code
+(expression evaluation, PRINT, wedge, math). Expansion still holds arenas,
+program store, and page-packed entry directories.
 
 ## geoRAM
 

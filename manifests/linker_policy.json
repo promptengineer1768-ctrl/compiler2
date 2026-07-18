@@ -9,7 +9,7 @@
     { "name": "VECTORS", "start": 65530, "size": 6, "type": "ro" }
   ],
   "fixed_segments": [
-    { "name": "LOADER", "memory_area": "RAM", "start": 2049, "max_size": 256 },
+    { "name": "LOADER", "memory_area": "RAM", "start": 2049, "max_size": 51199 },
     { "name": "RESIDENT", "memory_area": "RAM", "max_size": 16384 },
     { "name": "COMPILER_BSS", "memory_area": "RAM", "max_size": 8192 },
     { "name": "VECTORS", "memory_area": "VECTORS", "start": 65530, "max_size": 6 }

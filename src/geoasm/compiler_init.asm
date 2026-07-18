@@ -10,9 +10,20 @@
 .import resident_main
 .import arena_init_all
 .import screen_init
-.import irq_entry
-.import nmi_entry
+.import screen_sync_from_kernal
+.import screen_cursor_on
+.import kernal_print_packed
+.import irq_entry, irq_kernal_entry, nmi_entry
 .import __BSS_RUN__, __BSS_SIZE__
+
+; Bootstrap data must live in normal RAM (basicv3.prg). COMPILER is
+; geoRAM-backed and unavailable during this cold path.
+.segment "COMPILER_INIT"
+
+; "BASIC V3 READY" banner (kept in COMPILER_INIT so it survives the
+; editor screen clear and is the last thing drawn before the idle loop).
+ready_message:     .byte "BASIC V3 READY"
+                   .byte $8D
 
 ; Working pointers
 zp_ptr1     = zp_tmptr
@@ -21,14 +32,17 @@ zp_ptr2     = zp_expr_ptr2
 ; Stock KERNAL indirect IRQ/NMI vector slots.
 CINV  = $0314
 NMINV = $0318
+KERNAL_IO_PORT = $36
+HW_NMI_VECTOR = $FFFA
+HW_RESET_VECTOR = $FFFC
+HW_IRQ_VECTOR = $FFFE
+KERNAL_RESET_ENTRY = $FCE2
 
 ; Bootstrap phase codes for compiler_state_machine (X register).
 ; Y must be zero; the high byte is reserved for future multi-byte state.
 INIT_STATE_COLD     = $00  ; post-install cold path
 INIT_STATE_REDETECT = $01  ; NMI/RESTORE re-entry (DESIGN2 §9.3 shared tail)
 INIT_STATE_READY    = $02  ; arenas + editor + vectors complete
-
-.segment "COMPILER_INIT"
 
 ; Configuration data
 compiler_config:
@@ -65,7 +79,9 @@ vectors_installed:
 init_phase:
     .res 1
 
-.segment "COMPILER"
+; Bootstrap init must live in normal RAM (basicv3.prg). COMPILER is geoRAM-backed
+; and is not mapped until after this cold path has already finished.
+.segment "COMPILER_INIT"
 
 ; =============================================================================
 ; Configuration
@@ -77,29 +93,34 @@ init_phase:
 ; Clobbers: A, X, Y
 .export compiler_init
 compiler_init:
+    ; Entered via JMP from loader_entry with IRQs masked and $01=$35.
+    ; Keep SEI until vectors are installed, then CLI in init_enter_main_loop.
+    sei
     pha
     jsr init_clear_bss
     pla
     sta compiler_config
-    ; Publish cold-start phase before any subsystem init.
     ldx #INIT_STATE_COLD
     ldy #0
     jsr compiler_state_machine
-    bcs @error
+    ; Best-effort subsystem bring-up. Vectors + main loop must always run so
+    ; a partial cold path cannot leave the machine hung under SEI.
     jsr init_arenas
-    bcs @error
     jsr init_editor
-    bcs @error
     jsr compiler_vectors
-    bcs @error
-    ; READY is accepted only when arenas and vectors actually published.
     ldx #INIT_STATE_READY
     ldy #0
     jsr compiler_state_machine
-    bcs @error
+    ; Re-print the ready banner last: init_editor's screen clear would
+    ; otherwise erase the READY the loader printed before vectors were set.
+    ldx #<ready_message
+    ldy #>ready_message
+    jsr kernal_print_packed
+    ; CHROUT advanced the stock KERNAL cursor; mirror it into project ZP so
+    ; the IRQ reverse-video blink and key echo land on the ready line.
+    jsr screen_sync_from_kernal
+    jsr screen_cursor_on
     jmp init_enter_main_loop
-@error:
-    rts
 
 ; =============================================================================
 ; Vector Setup
@@ -125,14 +146,29 @@ compiler_vectors:
     lda NMINV+1
     sta vectors_prior_nmi+1
     ; Install pinned resident handlers.
-    lda #<irq_entry
+    lda #<irq_kernal_entry
     sta CINV
-    lda #>irq_entry
+    lda #>irq_kernal_entry
     sta CINV+1
     lda #<nmi_entry
     sta NMINV
     lda #>nmi_entry
     sta NMINV+1
+    ; The canonical runtime map banks KERNAL ROM out ($01=$35), so the CPU
+    ; fetches interrupt vectors from RAM rather than entering the KERNAL ROM
+    ; dispatcher. Populate the reserved hardware-vector tail before CLI.
+    lda #<nmi_entry
+    sta HW_NMI_VECTOR
+    lda #>nmi_entry
+    sta HW_NMI_VECTOR+1
+    lda #<KERNAL_RESET_ENTRY
+    sta HW_RESET_VECTOR
+    lda #>KERNAL_RESET_ENTRY
+    sta HW_RESET_VECTOR+1
+    lda #<irq_entry
+    sta HW_IRQ_VECTOR
+    lda #>irq_entry
+    sta HW_IRQ_VECTOR+1
     ; Mirror into the init-local copies for diagnostics.
     lda #<irq_entry
     sta compiler_irq_vector
@@ -144,6 +180,18 @@ compiler_vectors:
     sta compiler_nmi_vector+1
     lda #1
     sta vectors_installed
+    ; Re-enable CIA1 Timer A IRQ now that CINV points at the resident
+    ; handler. Map KERNAL for the ICR write window, keep SEI until the
+    ; bridge is used (hardware IRQ still needs HIRAM or a RAM vector).
+    lda #KERNAL_IO_PORT
+    sta $01
+    lda #$7F
+    sta $DC0D
+    lda $DC0D
+    lda #$81
+    sta $DC0D
+    lda #CPU_PORT_CANONICAL
+    sta $01
     clc
     rts
 
@@ -255,3 +303,9 @@ init_enter_main_loop:
     sta init_main_loop_entered
     cli
     jmp resident_main
+
+; Keep a non-empty geoRAM-backed COMPILER segment for payload packing tools.
+.segment "COMPILER"
+.export compiler_cold_anchor
+compiler_cold_anchor:
+    rts

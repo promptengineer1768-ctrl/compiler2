@@ -10,7 +10,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -26,7 +26,7 @@ for _tools in TOOLS_CANDIDATES:
 try:
     from emu6502_c64_bindings import C64Emu6502
 except ImportError:  # pragma: no cover - environment-specific
-    C64Emu6502 = None  # type: ignore[misc, assignment]
+    C64Emu6502 = None
 
 
 def _dll_path() -> Path:
@@ -38,10 +38,10 @@ def _dll_path() -> Path:
     pytest.skip("Emulator DLL not found in tools folder.")
 
 
-def _require_emu() -> type:
+def _require_emu() -> type[Any]:
     if C64Emu6502 is None:
         pytest.skip("Emulator binding unavailable")
-    return C64Emu6502
+    return cast(type[Any], C64Emu6502)
 
 
 def _load_symbol_address(symbol_name: str) -> int:
@@ -110,9 +110,7 @@ def _cgs1_rle(unpacked: bytes) -> bytes:
         value = unpacked[i]
         count = 1
         while (
-            i + count < len(unpacked)
-            and unpacked[i + count] == value
-            and count < 255
+            i + count < len(unpacked) and unpacked[i + count] == value and count < 255
         ):
             count += 1
         body.append(count)

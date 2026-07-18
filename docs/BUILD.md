@@ -30,15 +30,20 @@ The compressor provides:
 The compressor version is recorded in `build_manifest.json` alongside the
 cc65 toolchain versions.
 
-VICE packaging and reference tools are installed under:
+VICE Next supplies the supervised emulator runtime. Configure its executables
+explicitly (for example ``VICE_X64SC`` and ``VICE_XPLUS4``). The instrumented
+runtime currently available to this project is:
 
 ```text
-C:\Users\me\Documents\Coding Projects\tools\vice-mcp\dist\HeadlessVICE-windows-x86_64
+C:\Users\me\Documents\Coding Projects\builds\vice-instrumentation-windows\extracted\src
 ```
 
-Important programs include `c1541.exe`, `x64sc.exe`, and `xplus4.exe`.
-`petcat.exe` is used to inspect stock tokenized BASIC programs. Exact D64 and
-PETCAT command recipes are in `docs/VICE_TOOLS.md`.
+The runtime provides `x64sc.exe` and `xplus4.exe`. Packaging uses its
+deterministic built-in D64 writer unless an existing `c1541.exe` is explicitly
+configured through `VICE_C1541`; it never probes retired embedded-runtime paths
+or PATH. `petcat.exe`, when needed for reference capture, must likewise be
+provided by the configured VICE Next runtime. Exact D64 and PETCAT command
+recipes are in `docs/VICE_TOOLS.md`.
 
 Python host tools use the configured Python installation documented in
 `AGENTS.md`. Host tools may generate and validate artifacts, but all C64

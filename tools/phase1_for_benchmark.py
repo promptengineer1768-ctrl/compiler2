@@ -276,7 +276,7 @@ def measure_native_fixture(
 
     Args:
         prg_path: Path where the generated PRG should be written.
-        port: VICE MCP port.
+        port: Isolated VICE Next instance port.
         timeout: READY wait timeout.
 
     Returns:
@@ -323,7 +323,7 @@ def main() -> int:
         "--vice-port",
         type=int,
         default=VICE_PORT,
-        help="VICE MCP port used by --measure-native-fixture.",
+        help="VICE Next port used by --measure-native-fixture.",
     )
     parser.add_argument(
         "--require-measured",

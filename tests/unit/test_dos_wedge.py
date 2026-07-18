@@ -24,12 +24,9 @@ if str(ROOT) not in sys.path:
 try:
     from emu6502_c64_bindings import C64Emu6502
 except ImportError:
-    C64Emu6502 = None  # type: ignore[misc, assignment]
+    C64Emu6502 = None
 
-from tests.kernal_stubs import (  # noqa: E402
-    KERNAL_STUB_INPUT,
-    install_kernal_stubs,
-)
+from tests.kernal_stubs import install_kernal_stubs  # noqa: E402
 
 # Keep command text out of:
 # - screen RAM ($0400), where NULs are not stable under the local emu
@@ -148,9 +145,7 @@ class TestWedgeParse:
         """wedge_parse classifies each development prefix form."""
         emu = _new_emu()
         _write_command(emu, text)
-        state = _call(
-            emu, "wedge_parse", x=RECORD_ADDR & 0xFF, y=RECORD_ADDR >> 8
-        )
+        state = _call(emu, "wedge_parse", x=RECORD_ADDR & 0xFF, y=RECORD_ADDR >> 8)
         assert not _carry_set(emu)
         assert state.a == kind
 

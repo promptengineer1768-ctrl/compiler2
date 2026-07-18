@@ -141,6 +141,7 @@ class TestCompilerVectors:
         """compiler_vectors saves priors and installs irq_entry/nmi_entry."""
         emu = _new_emulator()
         irq_entry = _load_symbol_address("irq_entry")
+        irq_kernal_entry = _load_symbol_address("irq_kernal_entry")
         nmi_entry = _load_symbol_address("nmi_entry")
         # Seed stock-like priors.
         emu.write_mem(0x0314, 0x31)
@@ -150,10 +151,16 @@ class TestCompilerVectors:
         emu.execute(_load_symbol_address("compiler_vectors"), 10_000)
         state = emu.get_state()
         assert not (int(state.p) & 0x01)
-        assert emu.read_mem(0x0314) == (irq_entry & 0xFF)
-        assert emu.read_mem(0x0315) == (irq_entry >> 8)
+        assert emu.read_mem(0x0314) == (irq_kernal_entry & 0xFF)
+        assert emu.read_mem(0x0315) == (irq_kernal_entry >> 8)
         assert emu.read_mem(0x0318) == (nmi_entry & 0xFF)
         assert emu.read_mem(0x0319) == (nmi_entry >> 8)
+        assert emu.read_mem(0xFFFA) == (nmi_entry & 0xFF)
+        assert emu.read_mem(0xFFFB) == (nmi_entry >> 8)
+        assert emu.read_mem(0xFFFC) == 0xE2
+        assert emu.read_mem(0xFFFD) == 0xFC
+        assert emu.read_mem(0xFFFE) == (irq_entry & 0xFF)
+        assert emu.read_mem(0xFFFF) == (irq_entry >> 8)
         assert emu.read_mem(_load_symbol_address("vectors_prior_irq")) == 0x31
         assert emu.read_mem(_load_symbol_address("vectors_prior_irq") + 1) == 0xEA
         assert emu.read_mem(_load_symbol_address("vectors_prior_nmi")) == 0x47

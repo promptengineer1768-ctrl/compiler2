@@ -71,16 +71,6 @@ SIN_COEFF:
     .byte $76,$38,$93,$16
     .byte $82,$38,$aa,$3b,$20
 
-; ATN polynomial coefficients (Remez-7)
-ATN_COEFF:
-    .byte $0B,$76,$38,$93,$16
-    .byte $82,$38,$AA,$3B,$20
-    .byte $83,$49,$0F,$DB,$82
-    .byte $05,$12,$03,$4F,$A0
-    .byte $83,$80,$00,$00,$00
-    .byte $03,$38,$AA,$3B,$59
-    .byte $81,$00,$00,$00,$00
-
 ; =============================================================================
 ; SIN Function
 ; =============================================================================
@@ -237,31 +227,6 @@ math_atn:
     lda #TYPE_FLOAT
     sta math_fac_type
     jmp basic_atn
-.if 0
-    ; Save sign
-    lda FACSGN
-    sta ARISGN
-    
-    ; Get absolute value
-    jsr SIGN
-    beq @done          ; atan(0) = 0
-    
-    ; Check if |x| >= 1
-    ; If so, use identity: atan(x) = pi/2 - atan(1/x)
-    ; For now, use polynomial approximation directly
-    
-    ; Evaluate polynomial
-    lda #<ATN_COEFF
-    ldy #>ATN_COEFF
-    jsr POLYX
-    
-    ; Restore sign
-    lda ARISGN
-    sta FACSGN
-    
-@done:
-    rts
-.endif
 
 ; =============================================================================
 ; ACS Function (arccosine)

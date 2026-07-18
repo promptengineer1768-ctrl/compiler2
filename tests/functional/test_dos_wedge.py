@@ -19,7 +19,7 @@ if str(ROOT) not in sys.path:
 try:
     from emu6502_c64_bindings import C64Emu6502
 except ImportError:
-    C64Emu6502 = None  # type: ignore[misc, assignment]
+    C64Emu6502 = None
 
 from tests.kernal_stubs import install_kernal_stubs  # noqa: E402
 

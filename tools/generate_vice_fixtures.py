@@ -1,4 +1,4 @@
-"""Generate immutable stock BASIC semantic observations with VICE MCP."""
+"""Generate immutable stock BASIC semantic observations with VICE Next."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import importlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -143,6 +144,30 @@ def _petcat_version(profile: str) -> str:
     return "2" if profile == "basicv2" else "3"
 
 
+def _petcat_executable() -> Path:
+    """Return the explicitly configured VICE Next PETCAT executable.
+
+    The instrumented runtime supplies emulators but does not bundle PETCAT.
+    Fixture generation therefore requires an explicit, auditable tool path
+    instead of probing the retired runtime or host PATH.
+
+    Returns:
+        Existing PETCAT executable path.
+
+    Raises:
+        FileNotFoundError: If ``VICE_PETCAT`` is unset or names no file.
+    """
+    configured = os.environ.get("VICE_PETCAT")
+    if not configured:
+        raise FileNotFoundError(
+            "VICE_PETCAT must name the PETCAT executable for fixture generation"
+        )
+    executable = Path(configured)
+    if not executable.is_file():
+        raise FileNotFoundError(f"configured VICE_PETCAT does not exist: {executable}")
+    return executable
+
+
 def _source_for_autostart(case: FixtureCase) -> tuple[str, ...]:
     """Return numbered BASIC source lines suitable for PRG autostart."""
     if case.reference_mode == "program":
@@ -173,11 +198,12 @@ def _write_reference_prg(case: FixtureCase) -> Path:
     DEBUG_ROOT.mkdir(parents=True, exist_ok=True)
     source_path = DEBUG_ROOT / f"{case.case_id}.bas"
     prg_path = DEBUG_ROOT / f"{case.case_id}.prg"
+    petcat = _petcat_executable()
     source = "\n".join(_source_for_autostart(case)) + "\n"
     source_path.write_text(source, encoding="ascii")
     subprocess.run(
         [
-            str(VICE_ROOT / "petcat.exe"),
+            str(petcat),
             f"-w{_petcat_version(case.profile)}",
             "-f",
             "-o",
@@ -186,7 +212,7 @@ def _write_reference_prg(case: FixtureCase) -> Path:
             str(source_path),
         ],
         check=True,
-        cwd=VICE_ROOT,
+        cwd=petcat.parent,
     )
     return prg_path
 

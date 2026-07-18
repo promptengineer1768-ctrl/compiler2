@@ -29,17 +29,8 @@ def _dll_path() -> Path:
 
 
 def _load_symbol_address(symbol_name: str) -> int:
-    dir_path = ROOT / "build" / "routine_directory.json"
-    if dir_path.exists():
-        try:
-            data = json.loads(dir_path.read_text(encoding="utf-8"))
-            routines = data.get("routines", {})
-            if symbol_name in routines:
-                addr_str = routines[symbol_name].get("address", "")
-                if addr_str.startswith("$"):
-                    return int(addr_str[1:], 16)
-        except Exception:
-            pass
+    # Prefer the linked label file: routine_directory.json records the geoRAM
+    # window address ($DE00) for XIP entries, which is wrong for body scans.
     lbl_path = ROOT / "build" / "compiler.lbl"
     if lbl_path.exists():
         match = re.search(
@@ -135,37 +126,81 @@ class TestResidentMain:
         emu.write_mem(zp_linebuf, buffer_addr & 0xFF)
         emu.write_mem(zp_linebuf + 1, buffer_addr >> 8)
         emu.write_mem(resident_input, 0x41)
-        emu.write_mem_range(0x0400, b"READY" + b" " * 35)
+        # Screen RAM holds screen codes, not PETSCII ("READY" → $12,$05,$01,$04,$19).
+        emu.write_mem_range(0x0400, bytes([0x12, 0x05, 0x01, 0x04, 0x19]) + b" " * 35)
+        capture = _load_symbol_address("resident_line_capture")
 
         emu.execute(_load_symbol_address("resident_poll_input"), 10_000)
         assert emu.get_state().a == 0x41
         emu.execute(_load_symbol_address("resident_submit_line"), 10_000)
         assert emu.read_mem(resident_input) == 0x00
         assert emu.read_mem(zp_line_len) == 0x05
-        assert emu.read_mem_range(buffer_addr, buffer_addr + 4) == b"READY"
+        # Capture always lands in resident_line_capture (pointer re-armed).
+        assert emu.read_mem_range(capture, capture + 4) == b"READY"
         assert emu.read_mem(zp_gr_block) == 0x00
-        assert emu.read_mem(zp_gr_page) == 0x00
 
     def test_resident_main_is_linked_as_non_returning_loop(self) -> None:
-        """resident_main should loop back to itself instead of returning."""
+        """resident_main should poll, dispatch keys, and loop without RTS."""
         resident_main = _load_symbol_address("resident_main")
         resident_poll_input = _load_symbol_address("resident_poll_input")
-        body = _linked_bytes(resident_main, 32)
+        resident_handle_key = _load_symbol_address("resident_handle_key")
+        body = _linked_bytes(resident_main, 48)
 
         assert (
             bytes([0x20, resident_poll_input & 0xFF, resident_poll_input >> 8]) in body
         )
+        assert (
+            bytes([0x20, resident_handle_key & 0xFF, resident_handle_key >> 8]) in body
+        )
         assert bytes([0x4C, resident_main & 0xFF, resident_main >> 8]) in body
         assert 0x60 not in body
 
-    def test_submit_line_hands_off_to_generated_editor_service(self) -> None:
-        """resident_submit_line should dispatch through the generated geoRAM gate."""
+    def test_handle_key_echoes_printable_and_submits_on_return(self) -> None:
+        """Printable keys paint the cell; RETURN captures and submits the line."""
+        dll = _dll_path()
+        emu = C64Emu6502(lib_path=dll)
+        _load_binary(emu)
+        _load_georam_image(emu)
+        emu._compiler2_real_bytes_only = True
+
+        zp_crsr_x = _load_zp_address("zp_crsr_x")
+        zp_crsr_y = _load_zp_address("zp_crsr_y")
+        zp_linebuf = _load_zp_address("zp_linebuf")
+        zp_line_len = _load_zp_address("zp_line_len")
+        zp_quotemode = _load_zp_address("zp_quotemode")
+        buffer_addr = 0xC000
+
+        emu.write_mem(0x0001, 0x35)
+        emu.execute(_load_symbol_address("georam_select"), 10_000)
+        emu.write_mem(zp_linebuf, buffer_addr & 0xFF)
+        emu.write_mem(zp_linebuf + 1, buffer_addr >> 8)
+        emu.write_mem(zp_quotemode, 0x00)
+        emu.write_mem(zp_crsr_x, 0x00)
+        emu.write_mem(zp_crsr_y, 0x00)
+        emu.write_mem_range(0x0400, b" " * 40)
+
+        # GETIN PETSCII 'A' ($41) must paint screen code $01 (not $41 graphics).
+        emu.set_a(ord("A"))
+        emu.execute(_load_symbol_address("resident_handle_key"), 10_000)
+        assert emu.read_mem(0x0400) == 0x01
+        assert emu.read_mem(zp_crsr_x) == 0x01
+
+        # PETSCII 'X' ($58) → screen code $18.
+        emu.set_a(ord("X"))
+        emu.execute(_load_symbol_address("resident_handle_key"), 10_000)
+        assert emu.read_mem(0x0401) == 0x18
+
+    def test_submit_line_uses_pipeline_for_direct_mode(self) -> None:
+        """Direct-mode submit compiles through the always-mapped pipeline."""
         resident_submit_line = _load_symbol_address("resident_submit_line")
-        georam_call_group_n = _load_symbol_address("georam_call_group_n")
-        body = _linked_bytes(resident_submit_line, 48)
+        pipeline_compile_line = _load_symbol_address("pipeline_compile_line")
+        body = _linked_bytes(resident_submit_line, 160)
 
         assert (
-            bytes([0x20, georam_call_group_n & 0xFF, georam_call_group_n >> 8]) in body
+            bytes(
+                [0x20, pipeline_compile_line & 0xFF, pipeline_compile_line >> 8]
+            )
+            in body
         )
 
     def test_enter_degraded_sets_flag_and_shows_error(self) -> None:

@@ -8,6 +8,7 @@
 .include "common/constants.asm"
 
 .import ctrl_reset, kernal_chrout, kernal_print_packed, pipeline_compile_line
+.import codegen_get_code_ptr
 .import keyword_name_lo, keyword_name_hi, keyword_length, keyword_token
 .import keyword_count_value
 
@@ -273,24 +274,77 @@ editor_extract_line:
 ; =============================================================================
 
 ; editor_submit_line - Transactional line submission
-; Input:  X/Y = captured-line handle (unused, reads from screen)
+; Prefer the resident capture (zp_linebuf / zp_line_len) filled by
+; screen_line_input. Fall back to screen extract only when the resident
+; length is zero and a painted logical line is still present.
+;
+; Direct-mode lines (no leading line number) compile then execute the
+; scratch native buffer. Numbered lines compile only (program publication
+; is a separate store path).
+; Input:  X/Y = optional handle (ignored when zp_line_len is set)
 ; Output: C = error, A = error code
 ; Clobbers: A, X, Y
 .export editor_submit_line
 editor_submit_line:
     jsr ctrl_reset
+    lda zp_line_len
+    bne @from_resident
     jsr editor_extract_line
     lda editor_accepted_length
     beq @ready
     ldx #<editor_accepted_line
     ldy #>editor_accepted_line
+    jmp @have_line
+@from_resident:
+    lda zp_line_len
+    beq @ready
+    ldx zp_linebuf
+    ldy zp_linebuf+1
+@have_line:
+    stx zp_ptr1
+    sty zp_ptr1+1
+    jsr _editor_line_is_numbered
+    php
+    ldx zp_ptr1
+    ldy zp_ptr1+1
     jsr pipeline_compile_line
-    bcs @error
+    bcs @compile_fail
+    plp
+    bcs @ready
+    ; Direct mode: run the compiled scratch subroutine.
+    jsr codegen_get_code_ptr
+    stx @exec+1
+    sty @exec+2
+@exec:
+    jsr $FFFF
 @ready:
     clc
     lda #ERR_OK
     rts
+@compile_fail:
+    plp
 @error:
+    sec
+    rts
+
+; Carry set when the PETSCII line starts with a digit (optional spaces).
+_editor_line_is_numbered:
+    ldy #0
+@skip:
+    lda (zp_ptr1), y
+    cmp #' '
+    bne @check
+    iny
+    bne @skip
+@check:
+    cmp #'0'
+    bcc @no
+    cmp #'9'+1
+    bcs @no
+    sec
+    rts
+@no:
+    clc
     rts
 
 ; =============================================================================

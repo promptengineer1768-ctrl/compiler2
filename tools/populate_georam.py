@@ -116,9 +116,7 @@ def _overlay_directory_routines(
         if address >= 0xE000:
             source = address - 0xE000
             if source < 0 or source >= len(hibasic):
-                raise ValueError(
-                    f"linked label for {name} falls outside hibasic image"
-                )
+                raise ValueError(f"linked label for {name} falls outside hibasic image")
             source_image = hibasic
         else:
             source = 2 + address - load_address

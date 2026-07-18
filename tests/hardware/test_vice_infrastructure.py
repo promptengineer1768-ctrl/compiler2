@@ -12,10 +12,15 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 
 from generate_vice_fixtures import normalize_screen, rom_checksums  # noqa: E402
-from vice_harness import MACHINES, ViceMCP, _command_completed  # noqa: E402
+from vice_harness import (  # noqa: E402
+    MACHINES,
+    VICE_NEXT_ROOT,
+    VICE_ROOT,
+    ViceMCP,
+    _command_completed,
+    running_vice,
+)
 from vice_snapshot import inject_editor_mailbox, snapshot_fingerprint  # noqa: E402
-
-VICE_ROOT = ROOT.parent / "tools" / "vice-mcp" / "dist" / "HeadlessVICE-windows-x86_64"
 
 
 def _vice_exe(name: str) -> Path:
@@ -46,9 +51,34 @@ def test_xplus4_version_is_reported() -> None:
 
 @pytest.mark.hardware
 @pytest.mark.vice
-def test_mcp_endpoint_uses_documented_path() -> None:
-    """Clients must target the endpoint served by the bundled VICE build."""
-    assert ViceMCP("http://127.0.0.1:6510").endpoint.endswith("/mcp")
+def test_harness_targets_vice_next_runtime() -> None:
+    """The compatibility facade must target VICE-next, not embedded HTTP MCP."""
+    assert VICE_NEXT_ROOT.name == "vice-next-mcp"
+    assert "vice-mcp\\dist" not in str(VICE_ROOT)
+    assert ViceMCP().endpoint.startswith("vice-next://")
+
+
+@pytest.mark.hardware
+@pytest.mark.vice
+def test_supervisor_assigns_ephemeral_ports_and_reaps_processes() -> None:
+    """Parallel leases receive distinct ports and both process trees are reaped."""
+    machine = MACHINES["basicv2"]
+    with running_vice(machine) as first:
+        with running_vice(machine) as second:
+            assert first.monitor_port != second.monitor_port
+            assert first.is_running and second.is_running
+        assert not second.is_running
+    assert not first.is_running
+
+
+@pytest.mark.hardware
+@pytest.mark.vice
+def test_instrumented_runtime_advertises_and_accepts_restore() -> None:
+    """The instrumented runtime exposes physical RESTORE press/release."""
+    with running_vice(MACHINES["basicv2"]) as vice:
+        assert "vice.keyboard.restore" in vice.capabilities
+        vice.restore_key("press")
+        vice.restore_key("release")
 
 
 @pytest.mark.hardware

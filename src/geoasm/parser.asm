@@ -303,9 +303,10 @@ _parse_statement_current:
     jsr _parse_advance
     jcs @bad
     lda parse_token
-    beq @bad
+    beq @print_bare
     jsr _parse_comparison_current
     bcs @bad
+@print_bare:
     lda #STMT_PRINT
     sta parse_last_stmt
     lda #STMT_PRINT

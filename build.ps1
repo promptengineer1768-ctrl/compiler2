@@ -192,7 +192,52 @@ $PreferenceRecord = Join-Path $Root "$OutDir/expansion_preference.json"
     note = "Preference never removes detectors, gates, or D64 sidecars."
 } | ConvertTo-Json | Set-Content -Path $PreferenceRecord -Encoding utf8
 
-& $Python tools/package_d64.py "auto" "$OutDir/basicv3.prg" $PackageGeoram "$OutDir/compiler.d64" $ReuPath
+# Resolve the VICE c1541 packaging tool. Search deterministic, known
+# locations only (no PATH probing, per package_d64.resolve_c1541 policy):
+#   1. explicit VICE_C1541 env override
+#   2. this project's own tools/vice-mcp dist (if present)
+#   3. the active vice-next runtime dir that ships the machine executables
+#   4. a sibling project's tools/vice-mcp dist under the parent directory
+#   5. any extracted vice-instrumentation runtime under builds/
+# Fall back to "auto" (deterministic built-in D64 writer) when none exist.
+function Find-C1541 {
+    # Preferred: standard VICE distribution c1541 (the tools/vice-mcp/dist
+    # build), which is a plain executable. Instrumented recorder/instrumentation
+    # c1541 builds have crashed (access violation) and are only used as a last
+    # resort. No PATH probing (per package_d64.resolve_c1541 policy).
+    $primary = @()
+    if ($env:VICE_C1541) { $primary += $env:VICE_C1541 }
+    $primary += Join-Path $Root "tools/vice-mcp/dist/HeadlessVICE-windows-x86_64/c1541.exe"
+
+    $parent = Split-Path -Path $Root -Parent
+    $siblings = @()
+    if ($parent -and (Test-Path -LiteralPath $parent)) {
+        $siblings = Get-ChildItem -Path $parent -Recurse -Filter "c1541.exe" -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -notmatch 'vice-instrumentation' } |
+            Select-Object -ExpandProperty FullName
+    }
+
+    $instrumented = @()
+    if ($parent -and (Test-Path -LiteralPath $parent)) {
+        $instrumented = Get-ChildItem -Path $parent -Recurse -Filter "c1541.exe" -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match 'vice-instrumentation' } |
+            Select-Object -ExpandProperty FullName
+    }
+
+    foreach ($candidate in ($primary + $siblings + $instrumented)) {
+        if ($candidate -and (Test-Path -LiteralPath $candidate)) {
+            return $candidate
+        }
+    }
+    return $null
+}
+$C1541Path = Find-C1541
+if ($C1541Path) {
+    Write-Host "Using c1541: $C1541Path" -ForegroundColor Green
+    & $Python tools/package_d64.py $C1541Path "$OutDir/basicv3.prg" $PackageGeoram "$OutDir/compiler.d64" $ReuPath
+} else {
+    & $Python tools/package_d64.py "auto" "$OutDir/basicv3.prg" $PackageGeoram "$OutDir/compiler.d64" $ReuPath
+}
 if ($LASTEXITCODE -ne 0) { throw "D64 packaging failed." }
 
 & $Python tools/phase1_for_benchmark.py --json-out "$OutDir/phase1_for_benchmark.json"

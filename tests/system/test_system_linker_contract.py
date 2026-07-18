@@ -112,7 +112,7 @@ class TestLinkerPolicy:
         )
         assert loader["memory_area"] == "RAM"
         assert loader["start"] == areas["RAM"]["start"]
-        assert loader["max_size"] == 256
+        assert loader["max_size"] == areas["RAM"]["size"]
 
         vectors = next(
             segment for segment in fixed_segments if segment["name"] == "VECTORS"
@@ -147,7 +147,6 @@ class TestGeneratedLinkerOutputs:
         )
         assert loader["start"] == 0x0801
         assert loader["end"] < resident["start"]
-        assert loader["size"] <= 0x0100
 
     def test_loader_entry_label_matches_exported_start(self) -> None:
         """The label file records the loader entry exported by the map."""

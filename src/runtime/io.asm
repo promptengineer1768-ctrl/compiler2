@@ -286,6 +286,27 @@ io_print_value:
     sec
     rts
 
+; io_print_cstr - Emit a NUL-terminated PETSCII string at X/Y.
+; Input:  X/Y = pointer to text. Output: C=0 on success, C=1 on overflow.
+; Clobbers: A, X, Y. Side effects: CHROUT via _emit_byte.
+.export io_print_cstr
+io_print_cstr:
+    stx zp_src
+    sty zp_src+1
+    ldy #0
+@loop:
+    lda (zp_src), y
+    beq @done
+    jsr _emit_byte
+    bcs @error
+    iny
+    bne @loop
+@done:
+    clc
+    rts
+@error:
+    rts
+
 ; io_print_newline - Emit a carriage return.
 .export io_print_newline
 io_print_newline:

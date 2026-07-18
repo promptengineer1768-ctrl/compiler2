@@ -498,14 +498,15 @@ Expected E2E semantics are generated from clean stock VICE machines:
 | BASIC V3.5 | `xplus4.exe` | Plus/4 BASIC V3.5 |
 | IEEE extensions | stock profile where inherited behavior applies, plus IEEE oracle | no stock extension equivalent |
 
-The installed executables are under:
+The configured VICE Next runtime executables are under:
 
-`C:\Users\me\Documents\Coding Projects\tools\vice-mcp\dist\HeadlessVICE-windows-x86_64`
+`C:\Users\me\Documents\Coding Projects\builds\vice-instrumentation-windows\extracted\src`
 
-Reference generation starts each machine with its stock ROMs and clean default
-state. It tokenizes the stock BASIC source with `petcat.exe`, autostarts the
-resulting PRG through VICE, captures raw screen/error/state observations, and
-writes versioned fixtures under `tests/fixtures/reference/`.
+Reference generation starts each isolated VICE Next machine with its stock ROMs
+and clean default state. It tokenizes the stock BASIC source with explicitly
+configured `petcat.exe`, autostarts the resulting PRG, captures raw
+screen/error/state observations, and writes versioned fixtures under
+`tests/fixtures/reference/`.
 
 `petcat.exe` requires lowercase BASIC program text outside quoted strings when
 creating stock PRGs. Keep string literals byte-for-byte, but lowercase

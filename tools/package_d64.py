@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import struct
 import subprocess
 import zlib
@@ -24,6 +25,32 @@ REU_PATCH_MAGIC = b"C2RP"
 REU_PATCH_FORMAT_VERSION = 1
 REU_PATCH_ABI_VERSION = 1
 REU_MIN_CAPACITY_KIB = 512
+
+
+def resolve_c1541(explicit_path: str | None = None) -> str:
+    """Resolve an explicitly configured vice-next ``c1541`` executable.
+
+    The vice-next runtime owns emulator discovery.  Its instrumented runtime
+    currently supplies machine executables but not ``c1541``, so packaging is
+    deliberately deterministic: use a validated explicit executable or the
+    built-in D64 writer.  Legacy bundled-VICE and PATH probing are forbidden.
+
+    Args:
+        explicit_path: CLI-selected executable path, if any.
+
+    Returns:
+        A filesystem path for ``c1541``, or an empty string for direct build.
+
+    Raises:
+        FileNotFoundError: If an explicitly selected executable does not exist.
+    """
+    selected = explicit_path or os.environ.get("VICE_C1541")
+    if not selected:
+        return ""
+    path = Path(selected)
+    if not path.is_file():
+        raise FileNotFoundError(f"configured VICE_C1541 does not exist: {path}")
+    return str(path)
 
 
 def build_reu_patch(
@@ -229,6 +256,9 @@ def _build_direct(
     d64_data[bam_offset] = 0x12
     d64_data[bam_offset + 1] = 0x01
     d64_data[bam_offset + 2] = 0x41
+    _initialize_bam(d64_data)
+    _mark_sector_used(d64_data, 18, 0)
+    _mark_sector_used(d64_data, 18, 1)
     # PETSCII $41-$5A renders as lowercase in a shifted directory listing.
     disk_name = b"COMPILER2"
     d64_data[bam_offset + 0x90 : bam_offset + 0xA0] = disk_name + b"\xa0" * (
@@ -282,6 +312,49 @@ def _d64_offset(track: int, sector: int) -> int:
     return (sum(sectors_by_track[: track - 1]) + sector) * 256
 
 
+def _sectors_on_track(track: int) -> int:
+    """Return the sector count for one standard 35-track D64 track."""
+    if not 1 <= track <= 35:
+        raise ValueError(f"Invalid D64 track: {track}")
+    if track <= 17:
+        return 21
+    if track <= 24:
+        return 19
+    if track <= 30:
+        return 18
+    return 17
+
+
+def _initialize_bam(d64: bytearray) -> None:
+    """Mark every standard D64 data sector free in the BAM.
+
+    The direct writer must produce a writable disk, not merely a directory
+    that VICE can read.  Each track's BAM entry contains the free-sector count
+    followed by a low-bit-first 24-bit sector bitmap.
+    """
+    bam = _d64_offset(18, 0)
+    for track in range(1, 36):
+        sectors = _sectors_on_track(track)
+        offset = bam + 4 + (track - 1) * 4
+        d64[offset] = sectors
+        for sector in range(sectors):
+            d64[offset + 1 + sector // 8] |= 1 << (sector % 8)
+
+
+def _mark_sector_used(d64: bytearray, track: int, sector: int) -> None:
+    """Reserve a sector in the BAM, rejecting duplicate allocation."""
+    if not 0 <= sector < _sectors_on_track(track):
+        raise ValueError(f"Invalid D64 sector {sector} for track {track}")
+    bam = _d64_offset(18, 0)
+    offset = bam + 4 + (track - 1) * 4
+    mask = 1 << (sector % 8)
+    bitmap_offset = offset + 1 + sector // 8
+    if not d64[bitmap_offset] & mask:
+        raise ValueError(f"D64 sector {track}/{sector} is already allocated")
+    d64[bitmap_offset] &= ~mask
+    d64[offset] -= 1
+
+
 def _next_data_sector(track: int, sector: int) -> tuple[int, int]:
     """Return the next usable data sector, skipping the directory track."""
     sectors_by_track = [21] * 17 + [19] * 7 + [18] * 6 + [17] * 5
@@ -309,6 +382,7 @@ def _write_prg_data(
     current_track, current_sector = track, sector
     for index, chunk in enumerate(chunks):
         offset = _d64_offset(current_track, current_sector)
+        _mark_sector_used(d64, current_track, current_sector)
         if index == len(chunks) - 1:
             d64[offset] = 0
             d64[offset + 1] = len(chunk) + 1
@@ -343,9 +417,10 @@ def _add_entry(
 
 # Dual-device release directory contract (DESIGN2 §2 / REQUIREMENTS §8).
 REQUIRED_D64_FILES: tuple[str, ...] = ("basicv3", "georam", "reu")
-# Sector bounds: basicv3 loader+payload, georam ≤64KiB PRG, small REU patch.
+# Sector bounds: basicv3 carries always-mapped RUNTIME/GEOASM/CODE so absolute
+# compile/print/wedge calls resolve; georam ≤64KiB PRG; small REU patch.
 D64_SECTOR_BOUNDS: dict[str, tuple[int, int]] = {
-    "basicv3": (1, 100),
+    "basicv3": (1, 250),
     "georam": (8, 259),
     "reu": (1, 16),
 }
@@ -405,9 +480,7 @@ def validate_d64(d64_path: str) -> dict[str, Any]:
     }
 
 
-def validate_d64_contents(
-    disk_title: str, files: list[dict[str, Any]]
-) -> list[str]:
+def validate_d64_contents(disk_title: str, files: list[dict[str, Any]]) -> list[str]:
     """Return dual-device directory contract errors (empty when valid).
 
     Args:
@@ -422,9 +495,7 @@ def validate_d64_contents(
         errors.append(f"D64 disk title must be 'compiler2', got {disk_title!r}")
     names = [entry.get("name") for entry in files]
     if names != list(REQUIRED_D64_FILES):
-        errors.append(
-            f"D64 directory must be {list(REQUIRED_D64_FILES)}, got {names}"
-        )
+        errors.append(f"D64 directory must be {list(REQUIRED_D64_FILES)}, got {names}")
     for entry in files:
         name = str(entry.get("name", ""))
         file_type = entry.get("type")
@@ -481,13 +552,9 @@ def validate_dual_d64_release(
             elif raw[2:6] == b"CGS1":
                 # Compressed CGS1 install stream (UseCompressor / GEORAM_compressed.prg)
                 if len(raw) < 2 + 28:
-                    errors.append(
-                        f"CGS1 geoRAM sidecar too small: {len(raw)} bytes"
-                    )
+                    errors.append(f"CGS1 geoRAM sidecar too small: {len(raw)} bytes")
             elif len(raw) < 65538:
-                errors.append(
-                    f"georam.bin too small: {len(raw)} bytes (need >= 65538)"
-                )
+                errors.append(f"georam.bin too small: {len(raw)} bytes (need >= 65538)")
     if reu_path is not None:
         errors.extend(validate_reu_patch(reu_path))
 
@@ -594,36 +661,12 @@ def main() -> None:
     )
     reu_path = Path(args.reu_path) if args.reu_path else build_dir / "reu.bin"
 
-    # Find c1541
-    c1541_path = (
+    explicit_c1541 = (
         None
         if args.c1541_path in (None, "", "null", "$null", "auto")
         else args.c1541_path
     )
-    if c1541_path is None:
-        for search in [
-            ROOT.parent
-            / "tools"
-            / "vice-mcp"
-            / "dist"
-            / "HeadlessVICE-windows-x86_64"
-            / "c1541.exe",
-            ROOT.parent
-            / "tools"
-            / "vice-mcp"
-            / "dist"
-            / "HeadlessVICE-windows_x86_64"
-            / "c1541.exe",
-            Path("C:/Program Files/VICE/tools/c1541.exe"),
-            Path("C:/Program Files (x86)/VICE/tools/c1541.exe"),
-            Path("C:/Users/me/tools/c1541.exe"),
-        ]:
-            if search.exists():
-                c1541_path = str(search)
-                break
-
-    if c1541_path is None:
-        c1541_path = "c1541"
+    c1541_path = resolve_c1541(explicit_c1541)
 
     # Packaging must consume real production artifacts.  Synthesizing missing
     # sidecars would produce an apparently valid disk that cannot install the
@@ -638,22 +681,13 @@ def main() -> None:
         build_reu_patch(georam_path, reu_path)
 
     print(f"Building dual D64: {output_path}")
-    try:
-        build_d64(
-            c1541_path,
-            str(basicv3_path),
-            str(georam_path),
-            str(output_path),
-            str(reu_path),
-        )
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
-        print(f"c1541 failed, using direct build: {e}")
-        _build_direct(
-            str(basicv3_path),
-            str(georam_path),
-            str(output_path),
-            str(reu_path),
-        )
+    build_d64(
+        c1541_path,
+        str(basicv3_path),
+        str(georam_path),
+        str(output_path),
+        str(reu_path),
+    )
 
     # Validate dual-device directory, PRG header, georam header, and REU envelope.
     release_errors = validate_dual_d64_release(

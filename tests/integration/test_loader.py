@@ -18,7 +18,7 @@ TESTS_ROOT = ROOT / "tests"
 if str(TESTS_ROOT) not in sys.path:
     sys.path.insert(0, str(TESTS_ROOT))
 
-from tests.kernal_stubs import install_kernal_stubs
+from tests.kernal_stubs import install_kernal_stubs  # noqa: E402
 
 try:
     from emu6502_c64_bindings import C64Emu6502

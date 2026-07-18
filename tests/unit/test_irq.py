@@ -120,33 +120,48 @@ class TestIrq:
     """IRQ entry and helper tests."""
 
     def test_irq_helpers_update_visible_state(self) -> None:
-        """IRQ helper routines should advance clock and cursor state."""
+        """IRQ helpers advance the jiffy clock (harness) and reverse the cell."""
         dll = _dll_path()
         emu = C64Emu6502(lib_path=dll)
         _load_binary(emu)
 
         zp_time = _load_zp_address("zp_time")
         zp_crsr_vis = _load_zp_address("zp_crsr_vis")
-        zp_ndx = _load_zp_address("zp_ndx")
-        zp_lstx = _load_zp_address("zp_lstx")
         zp_crsr_x = _load_zp_address("zp_crsr_x")
+        zp_crsr_y = _load_zp_address("zp_crsr_y")
+        cursor_count = _load_symbol_address("cursor_count")
+        cursor_drawn = _load_symbol_address("cursor_drawn")
+        cursor_saved = _load_symbol_address("cursor_saved")
 
         emu.write_mem(zp_time, 0xFE)
         emu.write_mem(zp_time + 1, 0x00)
         emu.write_mem(zp_time + 2, 0x00)
-        emu.write_mem(zp_crsr_vis, 0x00)
-        emu.write_mem(zp_ndx, 0x03)
-        emu.write_mem(zp_crsr_x, 0x44)
-
         emu.execute(_load_symbol_address("irq_update_jiffy"), 10_000)
         assert emu.read_mem(zp_time) == 0xFF
 
-        emu.execute(_load_symbol_address("irq_cursor_blink"), 10_000)
-        assert emu.read_mem(zp_crsr_vis) == 0x01
+        # Real reverse-video paint needs sticky RAM (geoRAM-enabled map).
+        emu.set_georam_enabled(True)
+        emu._compiler2_real_bytes_only = True
+        emu.write_mem(0x0001, 0x35)
+        emu.write_mem(zp_crsr_vis, 0x01)
+        emu.write_mem(zp_crsr_x, 0x03)
+        emu.write_mem(zp_crsr_y, 0x02)
+        emu.write_mem(cursor_count, 0x01)
+        emu.write_mem(cursor_drawn, 0x00)
+        emu.write_mem(0x0400 + 2 * 40 + 3, 0x20)
 
-        emu.execute(_load_symbol_address("irq_scan_keyboard"), 10_000)
-        assert emu.read_mem(zp_lstx) == 0x44
-        assert emu.read_mem(zp_ndx) == 0x04
+        emu.execute(_load_symbol_address("irq_cursor_blink"), 10_000)
+        # Enable latch stays set; the cell is reverse-video painted.
+        assert emu.read_mem(zp_crsr_vis) == 0x01
+        assert emu.read_mem(cursor_drawn) == 0x01
+        assert emu.read_mem(cursor_saved) == 0x20
+        assert emu.read_mem(0x0400 + 2 * 40 + 3) == 0xA0
+
+        # Second period restores the original cell.
+        emu.write_mem(cursor_count, 0x01)
+        emu.execute(_load_symbol_address("irq_cursor_blink"), 10_000)
+        assert emu.read_mem(cursor_drawn) == 0x00
+        assert emu.read_mem(0x0400 + 2 * 40 + 3) == 0x20
 
     def test_irq_restore_mapping_writes_saved_port(self) -> None:
         """irq_restore_mapping should write the supplied mapping byte to $01."""
@@ -173,7 +188,7 @@ class TestIrq:
 
         emu.write_mem(0x0001, 0x35)
         emu.write_mem(zp_time, 0x00)
-        emu.write_mem(zp_crsr_vis, 0x00)
+        emu.write_mem(zp_crsr_vis, 0x01)
         emu.write_mem(zp_ndx, 0x00)
         emu.write_mem(zp_crsr_x, 0x21)
         state = emu.get_state()
@@ -181,6 +196,7 @@ class TestIrq:
 
         emu.execute(_load_symbol_address("irq_entry"), 10_000)
         assert emu.read_mem(0x0001) == 0x35
+        # Enable latch preserved; harness still models SCNKEY/UDTIM side effects.
         assert emu.read_mem(zp_crsr_vis) == 0x01
         assert emu.read_mem(zp_ndx) == 0x01
         assert emu.read_mem(zp_lstx) == 0x21
@@ -192,8 +208,17 @@ class TestIrq:
         rti_offset = body.find(b"\x40")
 
         assert b"\xa9\x36\x85\x01" in body, "irq_entry must select $01=$36"
+        assert b"\xad\x0d\xdc" in body, "irq_entry must acknowledge CIA1 ICR"
         assert rti_offset >= 0, "irq_entry must return with RTI"
         assert b"\x60" not in body[: rti_offset + 1], "RTS is not valid for IRQ entry"
+
+    def test_kernal_irq_entry_uses_rom_frame_return_contract(self) -> None:
+        """CINV entry must return through KERNAL's saved-register tail."""
+        body = _linked_bytes(_load_symbol_address("irq_kernal_entry"), 32)
+
+        assert b"\xad\x0d\xdc" in body, "CINV entry must acknowledge CIA1 ICR"
+        assert b"\x4c\x7e\xea" in body, "CINV entry must use KERNAL $EA7E tail"
+        assert b"\x40" not in body, "CINV entry must not RTI over KERNAL's frame"
 
     def test_irq_kernal_helpers_call_rom_vectors_directly(self) -> None:
         """IRQ helpers must not enter the serialized foreground KERNAL bridge."""

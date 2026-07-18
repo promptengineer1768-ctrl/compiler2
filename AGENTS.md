@@ -121,44 +121,36 @@ $PYTHON = "C:\Users\me\AppData\Local\Programs\Python\Python313\python.exe"
 $env:Path += ";C:\Users\me\AppData\Local\Programs\Python\Python313\Scripts"
 ```
 
-### VICE MCP
+### VICE Next
 
-E2E and hardware tests drive a real emulator through VICE MCP (an MCP server
-embedded in the VICE binaries). The tooling lives at:
-
-```
-C:\Users\me\Documents\Coding Projects\tools\vice-mcp
-```
-
-The Windows headless binaries are prebuilt and used directly by the test
-harness — no build step is required:
+E2E and hardware tests drive a real emulator through the VICE Next supervised
+native-monitor transport. The tooling lives at:
 
 ```
-C:\Users\me\Documents\Coding Projects\tools\vice-mcp\dist\HeadlessVICE-windows-x86_64\
+C:\Users\me\Documents\Coding Projects\tools\vice-next-mcp
+```
+
+Configure the instrumented executables explicitly; the shared harness creates
+isolated VICE Next processes and owns their native-monitor ports:
+
+```
+C:\Users\me\Documents\Coding Projects\builds\vice-instrumentation-windows\extracted\src\
     x64sc.exe     # C64  (BASIC V2)
     xplus4.exe    # Plus/4 (BASIC V3.5)
-    x128.exe      # C128
-    ...
 ```
 
-**Manual start (for inspecting or driving VICE yourself):** run the machine
-binary with `-mcpserver`. It listens on `localhost:6510` by default; the port is
-configurable with `-mcpserverport <port>` (and `-mcpserverhost <host>`).
+**Runtime configuration:**
 
 ```powershell
-& "C:\Users\me\Documents\Coding Projects\tools\vice-mcp\dist\HeadlessVICE-windows-x86_64\x64sc.exe" -mcpserver
-& "C:\Users\me\Documents\Coding Projects\tools\vice-mcp\dist\HeadlessVICE-windows-x86_64\xplus4.exe" -mcpserver -mcpserverport 6511
+$env:VICE_X64SC = "C:\Users\me\Documents\Coding Projects\builds\vice-instrumentation-windows\extracted\src\x64sc.exe"
+$env:VICE_XPLUS4 = "C:\Users\me\Documents\Coding Projects\builds\vice-instrumentation-windows\extracted\src\xplus4.exe"
 ```
 
-The MCP endpoint is `http://localhost:<port>/mcp` (JSON-RPC 2.0).
-
 **For the test suite:** VICE is launched automatically by the harness in
-`tools/vice_harness.py` via `running_vice(machine, port=6510)`, which points at
-the `dist/HeadlessVICE-windows-x86_64` binaries above and runs
-`<exe> -mcpserver -mcpserverport <port>`. E2E/hardware tests marked `@pytest.mark.vice`
-are gated on this; without a runnable VICE they are expected to be skipped or to
-time out, not to be edited to pass. The `VICE_ROOT` constant in
-`tools/vice_harness.py` is the single source of truth for the binary path.
+`tools/vice_harness.py` via isolated VICE Next instances. E2E/hardware tests
+marked `@pytest.mark.vice` are gated on a runnable configured runtime; do not
+replace unavailable hardware execution with mocks or synthetic state. Use the
+shared harness runtime-discovery API rather than hard-coded paths.
 
 ```powershell
 # Run the VICE-backed E2E/hardware suite (requires the binaries above)

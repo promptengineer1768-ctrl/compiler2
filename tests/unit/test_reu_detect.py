@@ -18,7 +18,7 @@ if str(TOOLS_ROOT) not in sys.path:
 try:
     from emu6502_c64_bindings import C64Emu6502
 except ImportError:  # pragma: no cover - environment-specific
-    C64Emu6502 = None  # type: ignore[misc, assignment]
+    C64Emu6502 = None
 
 
 def _dll_path() -> Path:
@@ -157,9 +157,7 @@ class TestReuDetect:
 
     def test_source_is_real_rec_probe_not_de00_fake(self) -> None:
         """REU detect must exercise REC DMA, not a geoRAM $DE00 fake."""
-        source = (ROOT / "src" / "arena" / "reu_detect.asm").read_text(
-            encoding="utf-8"
-        )
+        source = (ROOT / "src" / "arena" / "reu_detect.asm").read_text(encoding="utf-8")
         assert "REU_STATUS" in source or "$DF00" in source
         assert "REU_CMD_TO_REU" in source or "$80" in source
         assert "REU_CMD_FROM_REU" in source or "$81" in source

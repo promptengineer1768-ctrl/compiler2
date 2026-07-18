@@ -1,22 +1,24 @@
-# VICE File Tools
+# VICE Next File Tools
 
 ## Tool Location
 
-The project uses the VICE command-line tools installed at:
+The project uses the VICE Next supervised runtime. Configure machine tools
+explicitly; the current instrumented runtime is:
 
 ```text
-C:\Users\me\Documents\Coding Projects\tools\vice-mcp\dist\HeadlessVICE-windows-x86_64
+C:\Users\me\Documents\Coding Projects\builds\vice-instrumentation-windows\extracted\src
 ```
 
 In PowerShell:
 
 ```powershell
-$ViceTools = "C:\Users\me\Documents\Coding Projects\tools\vice-mcp\dist\HeadlessVICE-windows-x86_64"
+$env:VICE_X64SC = "C:\Users\me\Documents\Coding Projects\builds\vice-instrumentation-windows\extracted\src\x64sc.exe"
+$env:VICE_XPLUS4 = "C:\Users\me\Documents\Coding Projects\builds\vice-instrumentation-windows\extracted\src\xplus4.exe"
 ```
 
 ## Generating Stock Semantic Fixtures
 
-The shared MCP process/client implementation is `tools/vice_harness.py`.
+The shared VICE Next supervisor/client implementation is `tools/vice_harness.py`.
 Generate the checked-in C64 BASIC V2 and Plus/4 BASIC 3.5 observations with:
 
 ```powershell
@@ -25,16 +27,15 @@ python tools/generate_vice_fixtures.py --profile basicv2
 python tools/generate_vice_fixtures.py --case basicv35-program-WHILE
 ```
 
-The harness starts a fresh emulator for every case, uses the documented
-`/mcp` endpoint, tokenizes stock BASIC source with `petcat.exe`, autostarts the
+The harness starts a fresh supervised emulator for every case, tokenizes stock
+BASIC source with an explicitly configured `petcat.exe`, autostarts the
 resulting PRG, and records the VICE version and SHA-256 identities of the
 available machine ROMs. C64 screen observations use `$0400`; Plus/4
 observations use `$0C00`.
 
-Do not use keyboard injection for broad fixture generation. It is useful for
-focused keyboard-path tests, but rapid MCP screen polling can race with Return
-processing. For stock BASIC semantic fixtures, prefer tokenized PRG autostart
-and wait for the final stable `READY.` prompt.
+For stock BASIC semantic fixtures, prefer tokenized PRG autostart and wait for
+the final stable `READY.` predicate. Preserve the fixture's profile, ROM
+checksums, source, input sequence, raw screen, and normalization metadata.
 
 Regeneration logs and emulator diagnostics are written under `debug/`.
 Checked-in observations are written under `tests/fixtures/reference/`.
@@ -42,19 +43,23 @@ Checked-in observations are written under `tests/fixtures/reference/`.
 Temporary images, extracted files, listings, and diagnostic output belong
 under `debug/`. Release D64 images are generated under `build/`.
 
-## Creating a D64 Test Image with c1541
+## Creating a D64 Test Image
+
+The project packager uses its deterministic direct D64 writer by default. Use
+an external disk utility only when `VICE_C1541` is explicitly set to an
+existing file; the instrumented runtime does not currently ship `c1541.exe`.
 
 Create and format a fresh 35-track D64 image:
 
 ```powershell
-& "$ViceTools\c1541.exe" `
+& $env:VICE_C1541 `
   -format "COMPILER2 TESTS,00" d64 ".\debug\compiler2_tests.d64"
 ```
 
 Write a host PRG into the image using an explicit Commodore disk filename:
 
 ```powershell
-& "$ViceTools\c1541.exe" `
+& $env:VICE_C1541 `
   -attach ".\debug\compiler2_tests.d64" `
   -write ".\build\basicv3.prg" "BASICV3"
 ```
@@ -62,7 +67,7 @@ Write a host PRG into the image using an explicit Commodore disk filename:
 Write each additional test program with a separate checked invocation:
 
 ```powershell
-& "$ViceTools\c1541.exe" `
+& $env:VICE_C1541 `
   -attach ".\debug\compiler2_tests.d64" `
   -write ".\debug\graphics_test.prg" "GFXTEST"
 ```
@@ -75,7 +80,7 @@ followed by its payload.
 List and validate the resulting directory:
 
 ```powershell
-& "$ViceTools\c1541.exe" `
+& $env:VICE_C1541 `
   -attach ".\debug\compiler2_tests.d64" `
   -list
 ```
@@ -89,20 +94,20 @@ on a nonzero exit status and must not silently reuse a stale image.
 List a tokenized C64 BASIC V2 PRG on standard output:
 
 ```powershell
-& "$ViceTools\petcat.exe" -2 -- ".\debug\program.prg"
+& $env:VICE_PETCAT -2 -- ".\debug\program.prg"
 ```
 
 Write the detokenized listing to a text file:
 
 ```powershell
-& "$ViceTools\petcat.exe" -2 -o ".\debug\program.bas" -- `
+& $env:VICE_PETCAT -2 -o ".\debug\program.bas" -- `
   ".\debug\program.prg"
 ```
 
 Use BASIC 3.5 keyword decoding for a stock Plus/4 program:
 
 ```powershell
-& "$ViceTools\petcat.exe" -3 -- ".\debug\plus4_program.prg"
+& $env:VICE_PETCAT -3 -- ".\debug\plus4_program.prg"
 ```
 
 The `--` terminates PETCAT options. Use `-2` for stock C64 BASIC V2 and `-3`
@@ -113,7 +118,7 @@ programs must be listed with the project's own tested detokenizer.
 PETCAT can also create a stock tokenized fixture from an ASCII listing:
 
 ```powershell
-& "$ViceTools\petcat.exe" -w2 -o ".\debug\program.prg" -- `
+& $env:VICE_PETCAT -w2 -o ".\debug\program.prg" -- `
   ".\debug\program.bas"
 ```
 

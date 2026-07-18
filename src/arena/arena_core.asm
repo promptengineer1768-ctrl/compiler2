@@ -56,7 +56,9 @@ arena_default_capacity_hi:
     .byte >ARENA_MIN_PAGES_SCRATCH
     .byte >ARENA_MIN_PAGES_PROGRAM_STAGING
 
-.segment "GEOASM"
+; Arena core runs during post-install compiler_init before geoRAM call gates
+; are used for general cold code — keep it in always-mapped RAM.
+.segment "RESIDENT"
 
 ; __arena_core_init
 ; Inputs: none. Outputs: C=0. Clobbers: A, X, Y.

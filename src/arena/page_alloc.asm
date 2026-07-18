@@ -48,7 +48,8 @@ page_ready:                  .res 1
 page_bit_masks:
     .byte $01, $02, $04, $08, $10, $20, $40, $80
 
-.segment "CODE"
+; Page allocator is required by arena_init_all during bootstrap in normal RAM.
+.segment "RESIDENT"
 
 ; page_alloc_init
 ; Inputs: none. Outputs: C=0. Clobbers: A, X, Y.

@@ -14,6 +14,7 @@
 .import ctrl_sp
 .import incremental_dirty_mask
 .import incremental_published_valid
+.import screen_cursor_irq_service
 
 .segment "RESIDENT"
 
@@ -22,6 +23,7 @@ KERNAL_UDTIM = $FFEA
 KERNAL_SCNKEY = $FF9F
 CIA1_ICR = $DC0D
 CIA2_ICR = $DD0D
+KERNAL_IRQ_RETURN = $EA7E
 
 .segment "BSS"
 irq_saved_port: .res 1
@@ -36,6 +38,21 @@ irq_saved_port: .res 1
 .export irq_restore_mapping
 .export nmi_invalidate_cont
 .export nmi_mark_compile_dirty
+.export irq_kernal_entry
+
+; irq_kernal_entry - KERNAL CINV-compatible IRQ entry.
+; The ROM preamble at $FF48 has already saved A/X/Y before jumping through
+; $0314. Service the project IRQ without another frame, then use the stock
+; $EA7E tail to pop those registers and RTI. This entry is distinct from the
+; raw RAM hardware-vector irq_entry below.
+irq_kernal_entry:
+    lda #KERNAL_IO_PORT
+    sta $01
+    lda CIA1_ICR
+    jsr irq_update_jiffy
+    jsr irq_cursor_blink
+    jsr irq_scan_keyboard
+    jmp KERNAL_IRQ_RETURN
 
 ; nmi_entry - RESTORE key / NMI distrust path
 ; Does not resume interrupted code. Invalidates CONT and continuation frames,
@@ -100,6 +117,11 @@ irq_entry:
     pha
     lda #KERNAL_IO_PORT
     sta $01
+    ; RAM hardware vectors bypass the KERNAL IRQ dispatcher while $01=$35,
+    ; so acknowledge the CIA source here before servicing it. Without this
+    ; read, Timer A remains asserted and the CPU immediately re-enters IRQ,
+    ; starving the resident foreground loop.
+    lda CIA1_ICR
     jsr irq_update_jiffy
     jsr irq_cursor_blink
     jsr irq_scan_keyboard
@@ -117,11 +139,12 @@ irq_update_jiffy:
     jsr KERNAL_UDTIM
     rts
 
+; irq_cursor_blink - Reverse-video blink at the project cursor cell.
+; Does not toggle zp_crsr_vis (that flag is the enable latch). Screen paint
+; and saved-character restore live in screen_cursor_irq_service.
+; Clobbers: A, X, Y.
 irq_cursor_blink:
-    lda zp_crsr_vis
-    eor #$01
-    sta zp_crsr_vis
-    rts
+    jmp screen_cursor_irq_service
 
 irq_scan_keyboard:
     jsr KERNAL_SCNKEY

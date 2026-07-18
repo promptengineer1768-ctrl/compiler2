@@ -10,6 +10,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -105,16 +106,14 @@ def _load_binary(emu: C64Emu6502) -> None:
 def _run(emu: C64Emu6502, symbol: str, cycles: int = 200_000) -> int:
     rc = emu.execute(_load_symbol_address(symbol), cycles)
     assert rc == StopCondition.RTS, f"{symbol} did not RTS (rc={rc})"
-    return rc
+    return cast(int, rc)
 
 
 def _write_plan(emu: C64Emu6502, mode: int) -> None:
     emu.write_mem(PLAN_ADDR, mode & 0xFF)
 
 
-def _write_transfer(
-    emu: C64Emu6502, src: int, dest: int, length: int
-) -> None:
+def _write_transfer(emu: C64Emu6502, src: int, dest: int, length: int) -> None:
     emu.write_mem(RECORD_ADDR + 0, src & 0xFF)
     emu.write_mem(RECORD_ADDR + 1, (src >> 8) & 0xFF)
     emu.write_mem(RECORD_ADDR + 2, dest & 0xFF)
@@ -123,9 +122,7 @@ def _write_transfer(
     emu.write_mem(RECORD_ADDR + 5, (length >> 8) & 0xFF)
 
 
-def _write_descriptor(
-    emu: C64Emu6502, kind: int, x: int, y: int
-) -> None:
+def _write_descriptor(emu: C64Emu6502, kind: int, x: int, y: int) -> None:
     emu.write_mem(DESC_ADDR + 0, kind & 0xFF)
     emu.write_mem(DESC_ADDR + 1, x & 0xFF)
     emu.write_mem(DESC_ADDR + 2, (x >> 8) & 0xFF)
@@ -133,7 +130,7 @@ def _write_descriptor(
 
 
 def _vic_bank(emu: C64Emu6502) -> int:
-    return emu.read_mem(CIA2_PRA) & 0x03
+    return cast(int, emu.read_mem(CIA2_PRA)) & 0x03
 
 
 def _read_under_io(emu: C64Emu6502, start: int, length: int) -> bytes:
@@ -146,7 +143,7 @@ def _read_under_io(emu: C64Emu6502, start: int, length: int) -> bytes:
             hidden.pop(addr, None)
     data = emu.read_mem_range(start, start + length - 1)
     emu.write_mem(CPU_PORT, 0x35)
-    return data
+    return cast(bytes, data)
 
 
 @pytest.mark.unit

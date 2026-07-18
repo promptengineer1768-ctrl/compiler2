@@ -29,6 +29,11 @@
 .import kernal_close, kernal_load, kernal_open
 .import kernal_print_packed, kernal_setlfs, kernal_setnam
 
+; Direct public KERNAL vectors used only inside a stable $01=$36 window so the
+; raw install path can stream a full page without per-byte bridge overhead.
+KERNAL_CHRIN = $FFCF
+KERNAL_IO_PORT = $36
+
 ; Expansion store / reason constants (must match expansion_profile.asm)
 EXPANSION_STORE_NONE   = 0
 EXPANSION_STORE_GEORAM = 1
@@ -212,6 +217,10 @@ loader_decompression:
 ; Clobbers: A, X, Y
 .export loader_entry
 loader_entry:
+    ; Keep IRQs masked while $01 may be $35 (KERNAL banked out). An IRQ in
+    ; that window vectors into open RAM at $FFFE and dies at $FFFF. CLI only
+    ; around serial disk I/O with KERNAL mapped ($36).
+    sei
     lda #$00
     sta loader_sequence_phase
     lda #$2F
@@ -252,6 +261,7 @@ loader_entry:
 @load_georam:
     jsr loader_install_selected_georam
     bcs @failed
+    sei
     jmp @loaded
 
 @load_reu:
@@ -259,6 +269,7 @@ loader_entry:
     bcs @failed
     jsr loader_apply_reu_patch
     bcs @failed
+    sei
 
 @loaded:
     lda loader_candidate_image_fp
@@ -271,6 +282,7 @@ loader_entry:
     inc loader_sequence_phase
 
 @ready:
+    sei
     jsr loader_restore_banking
     ldx #<ready_message
     ldy #>ready_message
@@ -279,6 +291,7 @@ loader_entry:
     jmp compiler_init
 
 @failed:
+    sei
     lda #$FF
     sta loader_sequence_phase
     jsr expansion_clear
@@ -290,14 +303,28 @@ loader_entry:
     sec
     rts
 
-.segment "CODE"
+; ---------------------------------------------------------------------------
+; Install-time helpers must stay in LOADER (shipped in basicv3.prg).
+; CODE is geoRAM-backed and is not present until after this install path runs.
+; ---------------------------------------------------------------------------
 
 ; Print a packed static status string at X/Y through the common emitter.
 loader_print:
     jmp kernal_print_packed
 
 ; Stream the uncompressed 64 KiB GEORAM PRG directly into geoRAM.
+;
+; Strategy: keep IRQs masked (SEI) and $01=$36 for the whole install stream.
+; Stock IEC bit-bangs under SEI inside CHRIN; a long CLI window during the
+; 64 KiB transfer has been observed to end in an IRQ/UDTIM stack storm at EOF
+; (blank screen, SP collapse, PC thrashing $EAxx/$F6xx/$1Fxx). OPEN uses the
+; bridge (which CLI only while KERNAL is mapped); the payload and CLOSE use
+; direct jump-table calls under SEI so the bridge cannot re-enable IRQs.
+KERNAL_CLRCHN = $FFCC
+KERNAL_CLOSE  = $FFC3
+
 loader_load_raw_georam:
+    jsr loader_enter_disk_io
     lda #georam_filename_len
     ldx #<georam_filename
     ldy #>georam_filename
@@ -307,28 +334,59 @@ loader_load_raw_georam:
     ldy #2
     jsr kernal_setlfs
     jsr kernal_open
-    bcs @error
+    bcc @opened
+    jmp @error
+@opened:
     ldx #2
     jsr kernal_chkin
-    bcs @close_error
-    jsr kernal_chrin     ; discard fake $DE00 PRG load address
-    jsr kernal_chrin
+    bcc @chkin_ok
+    jmp @close_error
+@chkin_ok:
+    ; Re-assert SEI + KERNAL map after bridge OPEN/CHKIN. Also mask CIA
+    ; interrupt *sources*: stock CHRIN clears I on return, and an IRQ during
+    ; the long install stream has been observed to collapse the stack at EOI
+    ; (PC thrashing UDTIM/IRQ, blank screen). With sources off, CLI is safe.
+    sei
+    lda #KERNAL_IO_PORT
+    sta $01
+    lda #$7F
+    sta $DC0D                       ; CIA1 ICR: disable all sources
+    sta $DD0D                       ; CIA2 ICR: disable all sources
+    lda $DC0D                       ; ack any pending
+    lda $DD0D
+    ; Discard fake $DE00 PRG load-address header.
+    jsr KERNAL_CHRIN
+    jsr KERNAL_CHRIN
     lda #0
     sta loader_raw_block
 @block:
-    lda loader_raw_block
-    sta $DFFF
     lda #0
     sta loader_raw_page
 @page:
-    lda loader_raw_page
-    sta $DFFE
+    ; Re-mask CIA every page; KERNAL serial may re-enable sources.
+    lda #$7F
+    sta $DC0D
+    sta $DD0D
+    lda $DC0D
+    lda $DD0D
+    lda #0
+    sta $D01A
+    ; Read a full page into georam_stage_buffer first. Writing the geoRAM
+    ; window ($DE00) during active IEC CHRIN was observed to stack-storm
+    ; near EOI; copy only after the page is fully received.
     ldy #0
 @byte:
-    jsr kernal_chrin
-    sta $DE00,y
+    sty loader_raw_y
+    jsr KERNAL_CHRIN
+    sei
+    ldy loader_raw_y
+    sta georam_stage_buffer,y
+    lda $90
+    and #$40
+    bne @eoi_flush
     iny
     bne @byte
+    jsr loader_flush_page_to_georam
     inc loader_raw_page
     lda loader_raw_page
     cmp #64
@@ -337,23 +395,72 @@ loader_load_raw_georam:
     lda loader_raw_block
     cmp #4
     bcc @block
+    jmp @done
+@eoi_flush:
+    ; Partial last page: still install received bytes 0..Y inclusive.
+    jsr loader_flush_page_to_georam
+@done:
+    sei
+    lda #KERNAL_IO_PORT
+    sta $01
     jsr kernal_clrchn
     lda #2
     jsr kernal_close
+    jsr loader_leave_disk_io
     clc
     rts
 @close_error:
+    sei
     jsr kernal_clrchn
     lda #2
     jsr kernal_close
-@error:
+    jsr loader_leave_disk_io
     sec
+    rts
+@error:
+    jsr loader_leave_disk_io
+    sec
+    rts
+
+; Copy georam_stage_buffer[0..255] to the current geoRAM block/page.
+; Call with SEI and $01 showing I/O ($36). Clobbers A, Y.
+loader_flush_page_to_georam:
+    lda #KERNAL_IO_PORT
+    sta $01
+    lda loader_raw_block
+    sta $DFFF
+    lda loader_raw_page
+    sta $DFFE
+    ldy #0
+@copy:
+    lda georam_stage_buffer,y
+    sta $DE00,y
+    iny
+    bne @copy
+    rts
+
+; Map KERNAL+I/O with IRQs masked for the install stream.
+loader_enter_disk_io:
+    sei
+    lda #KERNAL_IO_PORT
+    sta $01
+    rts
+
+; Keep IRQs masked and restore the post-install CPU port. CIA interrupt
+; sources stay disabled until compiler_vectors / a later explicit restore —
+; re-enabling Timer A here while $01 may drop to $35 has been observed to
+; stack-storm immediately after a successful page probe.
+loader_leave_disk_io:
+    sei
+    lda #CPU_PORT_CANONICAL
+    sta $01
     rts
 
 ; Load the geoRAM-canonical GEORAM image into REU via per-page DMA.
 ; Opens "GEORAM", skips the fake $DE00 PRG header, DMA-writes pages to REU
 ; addresses that match geoRAM linear order (bank = block, page offset).
 loader_load_georam_into_reu:
+    jsr loader_enter_disk_io
     lda #georam_filename_len
     ldx #<georam_filename
     ldy #>georam_filename
@@ -363,10 +470,14 @@ loader_load_georam_into_reu:
     ldy #2
     jsr kernal_setlfs
     jsr kernal_open
-    bcs @error
+    bcc @opened
+    jmp @error
+@opened:
     ldx #2
     jsr kernal_chkin
-    bcs @close_error
+    bcc @chkin_ok
+    jmp @close_error
+@chkin_ok:
     jsr kernal_chrin
     jsr kernal_chrin
     lda #0
@@ -381,7 +492,9 @@ loader_load_georam_into_reu:
 @page:
     ldy #0
 @byte:
+    sty loader_raw_y
     jsr kernal_chrin
+    ldy loader_raw_y
     sta georam_stage_buffer,y
     iny
     bne @byte
@@ -413,6 +526,7 @@ loader_load_georam_into_reu:
     jsr kernal_clrchn
     lda #2
     jsr kernal_close
+    jsr loader_leave_disk_io
     clc
     rts
 @close_error:
@@ -420,6 +534,7 @@ loader_load_georam_into_reu:
     lda #2
     jsr kernal_close
 @error:
+    jsr loader_leave_disk_io
     sec
     rts
 
@@ -427,6 +542,7 @@ loader_load_georam_into_reu:
 ; Envelope: magic 'R''E''U''1', version u16, image fingerprint byte.
 ; Rejects fingerprint mismatch with the installed image.
 loader_apply_reu_patch:
+    jsr loader_enter_disk_io
     lda #reu_filename_len
     ldx #<reu_filename
     ldy #>reu_filename
@@ -456,6 +572,7 @@ loader_apply_reu_patch:
     jsr kernal_clrchn
     lda #2
     jsr kernal_close
+    jsr loader_leave_disk_io
     clc
     rts
 @close_error:
@@ -463,6 +580,7 @@ loader_apply_reu_patch:
     lda #2
     jsr kernal_close
 @error:
+    jsr loader_leave_disk_io
     sec
     rts
 
@@ -476,6 +594,7 @@ ready_message:     .byte "BASIC V3 READY", $8D
 failed_message:    .byte "?GEORAM LOAD ERROR", $8D
 loader_raw_block:  .byte 0
 loader_raw_page:   .byte 0
+loader_raw_y:      .byte 0
 
 ; =============================================================================
 ; Dual-device detection wrapper
@@ -576,11 +695,9 @@ loader_install_selected_georam:
     lda #DEFAULT_DEVICE
 @device_ready:
     sta georam_stream_device
-    lda #georam_filename_len
-    ldx #<georam_filename
-    ldy #>georam_filename
-    jsr georam_stream_load
-    bcc @installed
+    ; Raw 64 KiB GEORAM PRG install (canonical package). CGS1 is optional and
+    ; can be re-enabled once the stream path is validated under the same IRQ
+    ; banking rules as the raw path.
     jsr loader_load_raw_georam
     bcs @error
 @installed:
@@ -592,16 +709,37 @@ loader_install_selected_georam:
     sec
     rts
 
+; Sequential read of the PRG image on the data channel (sa=2).
+georam_filename:
+    .byte "GEORAM,P,R"
+georam_filename_len = * - georam_filename
+
+reu_filename:
+    .byte "REU,P,R"
+reu_filename_len = * - reu_filename
+
+; loader_restore_banking - Restore CPU port to the canonical post-install map.
+; Input:  none
+; Output: none
+; Clobbers: A
+.export loader_restore_banking
+loader_restore_banking:
+    lda #CPU_PORT_CANONICAL
+    sta $01
+    sta loader_banking_state
+    rts
+
 ; =============================================================================
-; RAM Payload Install
+; RAM Payload Install (post-bootstrap helpers; may live in geoRAM-backed CODE)
 ; =============================================================================
+
+.segment "CODE"
 
 ; georam_load_georam_file - Validate the staged GEORAM disk image.
 ; Inputs: georam_stage_page_count and stage buffer populated by KERNAL load.
 ; Outputs: C clear when one or more bounded pages are ready, set otherwise.
 ; Side effects: sets georam_file_loaded and loader phase. Clobbers: A.
 ; Zero page: none.
-.segment "CODE"
 .export georam_load_georam_file
 georam_load_georam_file:
     lda georam_stage_page_count
@@ -627,14 +765,6 @@ georam_load_georam_file:
     lda #ERR_FILE_OPEN
     sec
     rts
-
-georam_filename:
-    .byte "GEORAM"
-georam_filename_len = * - georam_filename
-
-reu_filename:
-    .byte "REU"
-reu_filename_len = * - reu_filename
 
 ; georam_install_pages - Install staged PRG payload bytes through geoRAM.
 ; Inputs: validated stage buffer/page count. Outputs: C=error.
@@ -679,8 +809,6 @@ georam_install_pages:
     sec
     rts
 
-.segment "CODE"
-
 ; loader_install_ram_payload - RAM payload install
 ; Input:  X/Y = source pointer
 ; Output: C = error
@@ -696,21 +824,6 @@ loader_install_ram_payload:
     iny
     bne @copy
     clc
-    rts
-
-; =============================================================================
-; Banking Restore
-; =============================================================================
-
-; loader_restore_banking - Restore $35
-; Input:  none
-; Output: none
-; Clobbers: A
-.export loader_restore_banking
-loader_restore_banking:
-    lda #CPU_PORT_CANONICAL
-    sta $01
-    sta loader_banking_state
     rts
 
 ; =============================================================================

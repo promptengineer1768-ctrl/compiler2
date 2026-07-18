@@ -61,8 +61,9 @@ def test_smoke_collection_is_stable_and_covers_critical_layers() -> None:
 
 
 @pytest.mark.system
+@pytest.mark.vice
 def test_smoke_selection_completes_under_sixty_seconds() -> None:
-    """The fast authoritative selection must meet the documented host budget."""
+    """The VICE-inclusive smoke selection must meet the documented host budget."""
     started = time.perf_counter()
     result = subprocess.run(
         [sys.executable, "-m", "pytest", "tests", "-q", "-m", "smoke"],

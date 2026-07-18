@@ -150,9 +150,9 @@ class TestBuildD64:
         names = [item["name"] for item in manifest["files"]]
         assert names == ["basicv3", "georam", "reu"]
         assert all(item["type"] == "PRG" for item in manifest["files"])
-        assert package_d64.validate_dual_d64_release(
-            out_d64, basicv3, georam, reu
-        ) == []
+        assert (
+            package_d64.validate_dual_d64_release(out_d64, basicv3, georam, reu) == []
+        )
 
     def test_direct_build_auto_generates_reu_patch(self, tmp_path: Path) -> None:
         """Omitting reu_path still produces a dual-device D64 with REU."""

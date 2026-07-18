@@ -1,4 +1,4 @@
-"""Generate fingerprinted VICE snapshots and inject editor mailbox input."""
+"""Generate fingerprinted VICE Next snapshots and inject editor mailbox input."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ MAILBOX_SYMBOLS: Final = (
 
 
 def _decode_text(result: object) -> dict[str, Any]:
-    """Decode a JSON text result returned by the VICE MCP bridge.
+    """Decode a JSON text result returned by the VICE Next bridge.
 
     Args:
         result: Raw MCP response.
@@ -66,7 +66,7 @@ def inject_editor_mailbox(
     """Atomically submit PETSCII-compatible text through the editor mailbox.
 
     Args:
-        client: Connected VICE MCP client.
+        client: Connected VICE Next client.
         addresses: Linked mailbox addresses.
         text: ASCII command text without Return.
     """

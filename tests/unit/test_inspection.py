@@ -277,8 +277,7 @@ class TestInspectPrintVar:
         emu.write_mem_range(text, command + b"\x00")
         emu.write_mem_range(
             table,
-            padded
-            + bytes((suffix, descriptor & 0xFF, descriptor >> 8, 0)),
+            padded + bytes((suffix, descriptor & 0xFF, descriptor >> 8, 0)),
         )
         table_slot = _load_symbol_address("inspect_symbol_table")
         emu.write_mem(table_slot, table & 0xFF)
