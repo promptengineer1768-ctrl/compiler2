@@ -175,6 +175,7 @@ def _string_asc(emu: C64Emu6502, descriptor: int) -> int:
 class TestArrays:
     """Real-byte coverage for array descriptor helpers."""
 
+    @pytest.mark.callable_coverage("arr_check_bounds", executor="execute")
     def test_check_bounds_accepts_last_element_and_rejects_limit(self) -> None:
         """arr_check_bounds implements the unsigned subscript/extent primitive."""
         emu = _new_emulator()
@@ -182,6 +183,9 @@ class TestArrays:
         assert _call(emu, "arr_check_bounds", a=5, x=5, y=0)
         assert _call(emu, "arr_check_bounds", a=5, x=0, y=1)
 
+    @pytest.mark.callable_coverage("arr_resolve_element", executor="execute")
+    @pytest.mark.callable_coverage("arr_free", executor="execute")
+    @pytest.mark.callable_coverage("arr_dim", executor="execute")
     def test_dim_publishes_arena_descriptor_and_free_invalidates_it(self) -> None:
         """DIM creates an AD descriptor backed by the manifest array arena."""
         emu = _new_emulator()
@@ -202,6 +206,10 @@ class TestArrays:
         assert not _call(emu, "arr_free", x=DESCRIPTOR & 0xFF, y=DESCRIPTOR >> 8)
         assert _call(emu, "arr_resolve_element", x=REQUEST & 0xFF, y=REQUEST >> 8)
 
+    @pytest.mark.callable_coverage("arr_store_element", executor="execute")
+    @pytest.mark.callable_coverage("arr_resolve_element", executor="execute")
+    @pytest.mark.callable_coverage("arr_load_element", executor="execute")
+    @pytest.mark.callable_coverage("arr_dim", executor="execute")
     def test_two_dimensional_int_store_load_and_resolve_use_georam(self) -> None:
         """Element access resolves row-major offsets through arena selection."""
         emu = _new_emulator()
@@ -234,6 +242,9 @@ class TestArrays:
         state = emu.get_state()
         assert (int(state.x), int(state.y)) == (0x56, 0x34)
 
+    @pytest.mark.callable_coverage("arr_resolve_element", executor="execute")
+    @pytest.mark.callable_coverage("arr_redim", executor="execute")
+    @pytest.mark.callable_coverage("arr_dim", executor="execute")
     def test_bounds_redim_and_malformed_descriptors_are_rejected(self) -> None:
         """Array helpers reject bad subscripts, redimension, and stale handles."""
         emu = _new_emulator()
@@ -267,6 +278,9 @@ class TestArrays:
         )
         assert _call(emu, "arr_resolve_element", x=REQUEST & 0xFF, y=REQUEST >> 8)
 
+    @pytest.mark.callable_coverage("arr_store_element", executor="execute")
+    @pytest.mark.callable_coverage("arr_load_element", executor="execute")
+    @pytest.mark.callable_coverage("arr_dim", executor="execute")
     def test_float_array_elements_copy_through_fac(self) -> None:
         """Float arrays store and load five-byte FAC payloads."""
         emu = _new_emulator()
@@ -293,6 +307,10 @@ class TestArrays:
             0x04,
         ]
 
+    @pytest.mark.callable_coverage("arr_store_element", executor="execute")
+    @pytest.mark.callable_coverage("arr_load_element", executor="execute")
+    @pytest.mark.callable_coverage("arr_free", executor="execute")
+    @pytest.mark.callable_coverage("arr_dim", executor="execute")
     def test_string_array_elements_copy_owned_canonical_descriptors(self) -> None:
         """String stores and loads create independent canonical SD ownership."""
         emu = _new_emulator()
@@ -357,6 +375,9 @@ class TestArrays:
         assert not _call(emu, "arr_free", x=DESCRIPTOR & 0xFF, y=DESCRIPTOR >> 8)
         assert _string_asc(emu, RESULT_SD) == ord("B")
 
+    @pytest.mark.callable_coverage("arr_store_element", executor="execute")
+    @pytest.mark.callable_coverage("arr_load_element", executor="execute")
+    @pytest.mark.callable_coverage("arr_dim", executor="execute")
     def test_float_element_crossing_page_boundary_round_trips(self) -> None:
         """Typed copies reselect geoRAM when an element spans two pages."""
         emu = _new_emulator()
@@ -380,6 +401,8 @@ class TestArrays:
         assert not _call(emu, "arr_load_element", x=REQUEST & 0xFF, y=REQUEST >> 8)
         assert [emu.read_mem(zp_fac1 + offset) for offset in range(5)] == expected
 
+    @pytest.mark.callable_coverage("arr_free", executor="execute")
+    @pytest.mark.callable_coverage("arr_dim", executor="execute")
     def test_page_allocator_prevents_overlap_and_reuses_freed_extent(self) -> None:
         """Distinct arrays own disjoint pages and free returns an extent."""
         emu = _new_emulator()

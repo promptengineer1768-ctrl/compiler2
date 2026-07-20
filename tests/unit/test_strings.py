@@ -169,6 +169,7 @@ class TestStrings:
             != _sd(emu, DESCRIPTORS + 2 * SD_SIZE)[6:8]
         )
 
+    @pytest.mark.callable_coverage("str_free", executor="execute")
     def test_capacity_free_reuse_stale_double_free_and_malformed(self) -> None:
         """The 64-page arena exhausts, reuses frees, and rejects invalid SDs."""
         emu = _new_emu()
@@ -191,6 +192,8 @@ class TestStrings:
         emu.write_mem_range(malformed, stale)
         assert _call(emu, "str_free", x=malformed & 0xFF, y=malformed >> 8)
 
+    @pytest.mark.callable_coverage("str_concat", executor="execute")
+    @pytest.mark.callable_coverage("str_assign", executor="execute")
     def test_copy_assign_and_concat_are_alias_safe_and_atomic(self) -> None:
         """Destination aliasing works and overflow preserves its old value."""
         emu = _new_emu()
@@ -228,6 +231,8 @@ class TestStrings:
         )
         assert (_sd(emu, output), _payload(emu, output)) == before
 
+    @pytest.mark.callable_coverage("str_from_bytes", executor="execute")
+    @pytest.mark.callable_coverage("str_export_bytes", executor="execute")
     def test_from_bytes_and_export_bytes_use_bounded_normal_memory(self) -> None:
         """SB imports normal bytes into an SD; SE exports only when capacity fits."""
         emu = _new_emu()
@@ -275,6 +280,7 @@ class TestStrings:
             ("str_mid", b"SM", bytes([5, 9]), b""),
         ],
     )
+    @pytest.mark.callable_coverage("str_concat", executor="execute")
     def test_slice_edges_and_destination_aliasing(
         self, routine: str, magic: bytes, extra: bytes, expected: bytes
     ) -> None:
@@ -300,6 +306,9 @@ class TestStrings:
         assert not _invoke(emu, routine, record)
         assert _payload(emu, source) == expected
 
+    @pytest.mark.callable_coverage("str_len", executor="execute")
+    @pytest.mark.callable_coverage("str_cmp", executor="execute")
+    @pytest.mark.callable_coverage("str_asc", executor="execute")
     def test_unsigned_petscii_compare_chr_len_and_asc(self) -> None:
         """Comparison is unsigned and scalar helpers consume valid SDs."""
         emu = _new_emu()
@@ -323,6 +332,8 @@ class TestStrings:
         ("text", "value"),
         [(b"  -123X", -123.0), (b"+.5", 0.5), (b"1.25E2!", 125.0), (b"junk", 0.0)],
     )
+    @pytest.mark.callable_coverage("str_val", executor="execute")
+    @pytest.mark.callable_coverage("str_concat", executor="execute")
     def test_val_stock_numeric_prefixes(self, text: bytes, value: float) -> None:
         """VAL accepts stock spaces, signs, decimals, exponents, and trailing junk."""
         emu = _new_emu()
@@ -350,6 +361,7 @@ class TestStrings:
         ("value", "expected"),
         [(9.0, b" 9"), (-123.0, b"-123"), (0.5, b" .5"), (3.5, b" 3.5")],
     )
+    @pytest.mark.callable_coverage("str_str", executor="execute")
     def test_str_uses_stock_basic_format(self, value: float, expected: bytes) -> None:
         """STR$ includes the stock leading sign space and decimal spelling."""
         emu = _new_emu()

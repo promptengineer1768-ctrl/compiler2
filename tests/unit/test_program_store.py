@@ -258,6 +258,7 @@ def _new_emulator() -> C64Emu6502:
 class TestProgramStore:
     """Real-byte coverage for arena transactions and atomic publication."""
 
+    @pytest.mark.callable_coverage("program_replace_from_load", executor="execute")
     def test_replace_from_load_publishes_multi_page_arena_program(self) -> None:
         """LOAD publishes a cloned arena root without a one-byte size ceiling."""
         emu = _new_emulator()
@@ -281,6 +282,9 @@ class TestProgramStore:
         assert _read_stream(emu, published) == payload
         assert emu.read_mem(published + 4) == 1
 
+    @pytest.mark.callable_coverage("program_tx_begin", executor="execute")
+    @pytest.mark.callable_coverage("program_tx_abort", executor="execute")
+    @pytest.mark.callable_coverage("program_replace_from_load", executor="execute")
     def test_begin_clones_root_and_abort_preserves_published_bytes(self) -> None:
         """Abort invalidates staging and leaves the published root unchanged."""
         emu = _new_emulator()
@@ -318,6 +322,11 @@ class TestProgramStore:
             y=transaction >> 8,
         )
 
+    @pytest.mark.callable_coverage("program_tx_put_line", executor="execute")
+    @pytest.mark.callable_coverage("program_tx_delete_line", executor="execute")
+    @pytest.mark.callable_coverage("program_tx_commit", executor="execute")
+    @pytest.mark.callable_coverage("program_tx_begin", executor="execute")
+    @pytest.mark.callable_coverage("program_replace_from_load", executor="execute")
     def test_put_replace_delete_and_commit_publish_sorted_program(self) -> None:
         """PP/PD requests edit staging and commit one normalized sorted root."""
         emu = _new_emulator()
@@ -378,6 +387,10 @@ class TestProgramStore:
         published = int(state.x) | (int(state.y) << 8)
         assert _read_stream(emu, published) == _normalized_program([(10, b"\x99\x33")])
 
+    @pytest.mark.callable_coverage("program_tx_commit", executor="execute")
+    @pytest.mark.callable_coverage("program_tx_begin", executor="execute")
+    @pytest.mark.callable_coverage("program_tx_abort", executor="execute")
+    @pytest.mark.callable_coverage("program_replace_from_load", executor="execute")
     def test_forged_or_stale_transaction_cannot_publish(self) -> None:
         """Identity, state, and base-generation checks guard publication."""
         emu = _new_emulator()
@@ -412,6 +425,9 @@ class TestProgramStore:
         )
         assert _read_stream(emu, published) == before
 
+    @pytest.mark.callable_coverage("program_tx_put_line", executor="execute")
+    @pytest.mark.callable_coverage("program_tx_begin", executor="execute")
+    @pytest.mark.callable_coverage("program_replace_from_load", executor="execute")
     def test_invalid_load_or_edit_preserves_published_root(self) -> None:
         """Malformed normalized records fail before root publication."""
         emu = _new_emulator()

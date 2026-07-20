@@ -164,6 +164,7 @@ class TestWedgeParse:
             "normal",
         ],
     )
+    @pytest.mark.callable_coverage("wedge_parse", executor="execute")
     def test_parse_kinds(self, text: bytes, kind: int) -> None:
         """wedge_parse classifies each development prefix form."""
         emu = _new_emu()
@@ -172,6 +173,7 @@ class TestWedgeParse:
         assert not _carry_set(emu)
         assert state.a == kind
 
+    @pytest.mark.callable_coverage("wedge_parse", executor="execute")
     def test_parse_slash_requires_name(self) -> None:
         """Bare / is a syntax error."""
         emu = _new_emu()
@@ -179,6 +181,7 @@ class TestWedgeParse:
         _call(emu, "wedge_parse", x=RECORD_ADDR & 0xFF, y=RECORD_ADDR >> 8)
         assert _carry_set(emu)
 
+    @pytest.mark.callable_coverage("wedge_parse", executor="execute")
     def test_parse_bang_requires_name(self) -> None:
         """Bare ! is a syntax error."""
         emu = _new_emu()
@@ -202,6 +205,7 @@ class TestWedgeDispatchDevelopment:
         ],
         ids=["directory", "status", "load", "stream"],
     )
+    @pytest.mark.callable_coverage("wedge_dispatch_development", executor="execute")
     def test_dispatch_records_kind(self, kind: int, text: bytes) -> None:
         """wedge_dispatch_development routes each kind to its core handler."""
         emu = _new_emu()
@@ -219,6 +223,7 @@ class TestWedgeDispatchDevelopment:
         assert emu.read_mem(_load_symbol_address("wedge_last_command")) == kind
         assert state.a is not None
 
+    @pytest.mark.callable_coverage("wedge_dispatch_development", executor="execute")
     def test_dispatch_rejects_invalid_kind(self) -> None:
         """Kinds outside 0..3 are syntax errors."""
         emu = _new_emu()
@@ -231,6 +236,7 @@ class TestWedgeDispatchDevelopment:
 class TestWedgeDirectory:
     """Directory listing tests."""
 
+    @pytest.mark.callable_coverage("wedge_directory", executor="execute")
     def test_directory_streams(self) -> None:
         """wedge_directory records the directory kind and returns cleanly."""
         emu = _new_emu()
@@ -251,6 +257,7 @@ class TestWedgeDirectory:
 class TestWedgeLoadAbsolute:
     """Absolute load tests."""
 
+    @pytest.mark.callable_coverage("wedge_load_absolute", executor="execute")
     def test_load_absolute(self) -> None:
         """wedge_load_absolute performs SETNAM/SETLFS/LOAD for /name."""
         emu = _new_emu()
@@ -276,6 +283,7 @@ class TestWedgeLoadAbsolute:
 class TestWedgeStatusOrCommand:
     """Status/command tests."""
 
+    @pytest.mark.callable_coverage("wedge_status_or_command", executor="execute")
     def test_status_reads(self) -> None:
         """Bare @ opens the command channel and streams status."""
         emu = _new_emu()
@@ -290,6 +298,7 @@ class TestWedgeStatusOrCommand:
         assert not _carry_set(emu)
         assert emu.read_mem(_load_symbol_address("wedge_last_command")) == 1
 
+    @pytest.mark.callable_coverage("wedge_status_or_command", executor="execute")
     def test_device_select_updates_fa(self) -> None:
         """@10 writes stock KERNAL fa at $BA."""
         emu = _new_emu()
@@ -304,6 +313,7 @@ class TestWedgeStatusOrCommand:
         assert emu.read_mem(0xBA) == 10
         assert emu.read_mem(_load_symbol_address("wedge_current_device")) == 10
 
+    @pytest.mark.callable_coverage("wedge_status_or_command", executor="execute")
     def test_at_dollar_is_directory(self) -> None:
         """@$ is routed as a directory listing, not a command-channel name."""
         emu = _new_emu()
@@ -318,6 +328,7 @@ class TestWedgeStatusOrCommand:
         assert not _carry_set(emu)
         assert emu.read_mem(_load_symbol_address("wedge_last_command")) == 0
 
+    @pytest.mark.callable_coverage("wedge_status_or_command", executor="execute")
     def test_destructive_requires_confirmation(self) -> None:
         """Scratch forms without confirmation are declined."""
         emu = _new_emu()
@@ -331,6 +342,7 @@ class TestWedgeStatusOrCommand:
         )
         assert _carry_set(emu)
 
+    @pytest.mark.callable_coverage("wedge_status_or_command", executor="execute")
     def test_destructive_proceeds_when_confirmed(self) -> None:
         """Scratch forms proceed when the confirmation flag is set."""
         emu = _new_emu()
@@ -352,6 +364,7 @@ class TestWedgeStatusOrCommand:
 class TestWedgeStreamSeq:
     """SEQ streaming tests."""
 
+    @pytest.mark.callable_coverage("wedge_stream_seq", executor="execute")
     def test_stream_seq(self) -> None:
         """wedge_stream_seq records the stream kind and returns cleanly."""
         emu = _new_emu()
@@ -372,6 +385,7 @@ class TestWedgeStreamSeq:
 class TestWedgeConfirmDestructive:
     """Confirmation guard tests."""
 
+    @pytest.mark.callable_coverage("wedge_confirm_destructive", executor="execute")
     def test_confirm_accepts_nonzero(self) -> None:
         """Nonzero confirmation byte accepts the destructive operation."""
         emu = _new_emu()
@@ -384,6 +398,7 @@ class TestWedgeConfirmDestructive:
         )
         assert not _carry_set(emu)
 
+    @pytest.mark.callable_coverage("wedge_confirm_destructive", executor="execute")
     def test_confirm_declines_zero(self) -> None:
         """Zero confirmation byte declines the destructive operation."""
         emu = _new_emu()
@@ -402,6 +417,7 @@ class TestWedgeConfirmDestructive:
 class TestWedgeFormatDirectory:
     """Bounded directory formatting tests."""
 
+    @pytest.mark.callable_coverage("wedge_format_directory", executor="execute")
     def test_format_copies_entry(self) -> None:
         """wedge_format_directory copies entry text into the output buffer."""
         emu = _new_emu()

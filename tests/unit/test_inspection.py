@@ -225,6 +225,7 @@ class TestInspectParseCommand:
 class TestInspectPrintVar:
     """Variable printing tests for inspection shell."""
 
+    @pytest.mark.callable_coverage("inspect_print_var", executor="execute_rts")
     def test_print_var_resolves_and_prints(self) -> None:
         """inspect_print_var resolves a real integer VD and formats its value."""
         emu = _new_emu()
@@ -245,6 +246,7 @@ class TestInspectPrintVar:
         # The formatter emits a trailing field separator after the digits.
         assert emu.read_mem(output) == ord(" ")
 
+    @pytest.mark.callable_coverage("inspect_print_string_var", executor="execute_rts")
     def test_print_string_var(self) -> None:
         """inspect_print_string_var rejects a non-string VD."""
         emu = _new_emu()
@@ -308,6 +310,8 @@ class TestInspectPrintVar:
 class TestInspectCont:
     """CONT statement tests for inspection shell."""
 
+    @pytest.mark.callable_coverage("inspect_cont", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctrl_stop", executor="execute_rts")
     def test_cont_restores_continuation(self) -> None:
         """inspect_cont should restore compiled continuation state."""
         emu = _new_emu()
@@ -325,6 +329,7 @@ class TestInspectCont:
         assert not _carry_is_set(emu)
         assert (emu.get_state().x, emu.get_state().y) == (0x78, 0x56)
 
+    @pytest.mark.callable_coverage("inspect_cont", executor="execute_rts")
     def test_cont_rejects_unpublished_handle(self) -> None:
         """inspect_cont propagates ctrl_cont validation failures."""
         emu = _new_emu()
@@ -339,6 +344,7 @@ class TestInspectCont:
 class TestInspectListLoader:
     """LIST command tests for inspection shell."""
 
+    @pytest.mark.callable_coverage("inspect_list_loader", executor="execute_rts")
     def test_list_loader_prints_sys(self) -> None:
         """inspect_list_loader should print '2026 SYS2061'."""
         body = _linked_bytes("inspect_list_loader", 12)
@@ -362,6 +368,7 @@ class TestInspectListLoader:
 class TestInspectRun:
     """RUN command tests for inspection shell."""
 
+    @pytest.mark.callable_coverage("inspect_run", executor="execute_rts")
     def test_run_enters_compiled_image(self) -> None:
         """inspect_run should reinitialize and enter current compiled image."""
         emu = _new_emu()
@@ -378,6 +385,7 @@ class TestInspectRun:
         assert emu.read_mem(marker) == 0xA5
         assert not _carry_is_set(emu)
 
+    @pytest.mark.callable_coverage("inspect_run", executor="execute_rts")
     def test_run_rejects_export_without_linked_entry(self) -> None:
         """RUN fails instead of jumping through a missing linker entry."""
         emu = _new_emu()
@@ -417,6 +425,8 @@ class TestInspectLoadSave:
 class TestInspectClr:
     """CLR command tests for inspection shell."""
 
+    @pytest.mark.callable_coverage("inspect_clr", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctrl_stop", executor="execute_rts")
     def test_clr_clears_state(self) -> None:
         """inspect_clr should clear variables, arrays, strings, frames."""
         emu = _new_emu()
@@ -449,6 +459,7 @@ class TestInspectWedge:
         [(b"$", 0), (b"/FILE", 2), (b"@", 1), (b"!README", 3)],
         ids=["directory", "load", "status", "stream"],
     )
+    @pytest.mark.callable_coverage("inspect_wedge", executor="execute_rts")
     def test_wedge_dispatches_prefix(self, command: bytes, kind: int) -> None:
         """inspect_wedge should call standalone wedge service."""
         emu = _new_emu()
@@ -464,6 +475,7 @@ class TestInspectWedge:
         assert not _carry_is_set(emu)
         assert emu.read_mem(_load_symbol_address("wedge_last_command")) == kind
 
+    @pytest.mark.callable_coverage("inspect_wedge", executor="execute_rts")
     def test_wedge_device_selection_updates_kernal_fa(self) -> None:
         """@10 changes the same current-device byte used by LOAD and COMPILE."""
         emu = _new_emu()

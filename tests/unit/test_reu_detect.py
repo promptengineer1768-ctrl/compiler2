@@ -91,6 +91,7 @@ def _load_binary(emu: Any, *, reu: bool, size: int = 512 * 1024) -> None:
 class TestReuDetect:
     """REU detection and fingerprint tests."""
 
+    @pytest.mark.callable_coverage("detect_reu", executor="execute_rts")
     def test_detect_reu_present_publishes_fingerprint(self) -> None:
         """detect_reu succeeds on 512 KiB REU and publishes capacity + fingerprint."""
         if C64Emu6502 is None:
@@ -116,6 +117,7 @@ class TestReuDetect:
         assert reu[0x40000] == 0x22
         assert reu[0x7FF00] == 0x33
 
+    @pytest.mark.callable_coverage("detect_reu", executor="execute_rts")
     def test_detect_reu_absent_fails_and_restores(self) -> None:
         """detect_reu fails cleanly when no REU is present."""
         if C64Emu6502 is None:
@@ -130,6 +132,7 @@ class TestReuDetect:
         assert emu.read_mem(_load_symbol_address("detect_reu_capacity_banks")) == 0
         assert emu.read_mem(0x0001) == 0x35
 
+    @pytest.mark.callable_coverage("detect_reu", executor="execute_rts")
     def test_detect_reu_undersized_fails(self) -> None:
         """REU smaller than 512 KiB must not publish a valid profile."""
         if C64Emu6502 is None:
@@ -141,6 +144,7 @@ class TestReuDetect:
         assert emu.read_mem(_load_symbol_address("detect_reu_valid")) == 0
         assert emu.read_mem(_load_symbol_address("detect_reu_fingerprint")) == 0
 
+    @pytest.mark.callable_coverage("detect_reu_check_minimum", executor="execute_rts")
     def test_detect_reu_check_minimum(self) -> None:
         """detect_reu_check_minimum rejects fewer than 8 banks."""
         if C64Emu6502 is None:

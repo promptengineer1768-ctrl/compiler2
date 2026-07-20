@@ -100,6 +100,7 @@ def _load_binary(emu: C64Emu6502) -> None:
 class TestFatal:
     """Fatal path behavior tests."""
 
+    @pytest.mark.callable_coverage("fatal_restore_machine", executor="execute_rts")
     def test_restore_machine_returns_to_canonical_state(self) -> None:
         """fatal_restore_machine should reset selection, context, and port."""
         dll = _dll_path()
@@ -128,6 +129,7 @@ class TestFatal:
         assert emu.read_mem(0xDFFF) == 0x00
         assert emu.read_mem(0xDFFE) == 0x00
 
+    @pytest.mark.callable_coverage("fatal_georam", executor="execute_rts")
     def test_fatal_georam_records_reason_and_restores_state(self) -> None:
         """fatal_georam should store the failure metadata and exit cleanly."""
         dll = _dll_path()

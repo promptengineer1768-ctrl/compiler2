@@ -99,6 +99,7 @@ def _load_binary(emu: Emu6502) -> None:
 class TestScreen:
     """Screen and cursor behavior tests."""
 
+    @pytest.mark.callable_coverage("screen_init", executor="execute_rts")
     def test_init_clears_screen_state(self) -> None:
         """screen_init should use the production clear path."""
         dll = _dll_path()
@@ -122,6 +123,7 @@ class TestScreen:
         assert emu.read_mem(zp_crsr_vis) == 0x00
         assert emu.read_mem_range(0x0400, 0x0400 + 999) == b" " * 1000
 
+    @pytest.mark.callable_coverage("screen_clear", executor="execute_rts")
     def test_clear_homes_cursor_and_fills_spaces(self) -> None:
         """screen_clear should blank the visible screen and home the cursor."""
         dll = _dll_path()
@@ -145,6 +147,7 @@ class TestScreen:
         assert emu.read_mem(zp_crsr_vis) == 0x00
         assert emu.read_mem_range(0x0400, 0x0400 + 39) == b" " * 40
 
+    @pytest.mark.callable_coverage("screen_scroll_up", executor="execute_rts")
     def test_scroll_up_moves_rows_and_clears_bottom_row(self) -> None:
         """screen_scroll_up should shift visible rows up by one."""
         dll = _dll_path()
@@ -161,6 +164,8 @@ class TestScreen:
         assert emu.read_mem_range(0x0400 + 23 * 40, 0x0400 + 24 * 40 - 1) == (b"Y" * 40)
         assert emu.read_mem_range(0x0400 + 24 * 40, 0x0400 + 25 * 40 - 1) == (b" " * 40)
 
+    @pytest.mark.callable_coverage("screen_putchar", executor="execute_rts")
+    @pytest.mark.callable_coverage("screen_cursor_left", executor="execute_rts")
     def test_putchar_and_cursor_wrapping(self) -> None:
         """screen_putchar should write at the cursor and wrap to the next line."""
         dll = _dll_path()
@@ -186,6 +191,9 @@ class TestScreen:
         assert emu.read_mem(zp_crsr_x) == 0x27
         assert emu.read_mem(zp_crsr_y) == 0x00
 
+    @pytest.mark.callable_coverage("screen_getchar", executor="execute_rts")
+    @pytest.mark.callable_coverage("screen_cursor_on", executor="execute_rts")
+    @pytest.mark.callable_coverage("screen_cursor_off", executor="execute_rts")
     def test_getchar_and_cursor_visibility_helpers(self) -> None:
         """screen_getchar and cursor visibility helpers should use real state."""
         dll = _dll_path()
@@ -219,6 +227,9 @@ class TestScreen:
         )
         assert emu.read_mem(zp_crsr_vis) == 0x00
 
+    @pytest.mark.callable_coverage("screen_cursor_up", executor="execute_rts")
+    @pytest.mark.callable_coverage("screen_cursor_right", executor="execute_rts")
+    @pytest.mark.callable_coverage("screen_cursor_down", executor="execute_rts")
     def test_cursor_movement_edges_and_bottom_scroll(self) -> None:
         """Cursor movement should wrap at edges and scroll at the bottom."""
         dll = _dll_path()
@@ -269,6 +280,7 @@ class TestScreen:
         assert emu.read_mem(0x0400) == 0x01
         assert emu.read_mem(zp_crsr_x) == 0x01
 
+    @pytest.mark.callable_coverage("screen_line_input", executor="execute_rts")
     def test_line_input_trims_or_keeps_spaces_by_quote_mode(self) -> None:
         """screen_line_input converts screen codes to PETSCII and trims spaces."""
         dll = _dll_path()

@@ -52,8 +52,8 @@ EXPECTED_RESULTS = {
 STOCK_FIXTURE_IDS = set(EXPECTED_RESULTS)
 STOCK_PROFILE_CONTRACTS = {
     "c64_basicv2": {
-        "count": 95,
-        "modes": {"immediate": 41, "program": 54},
+        "count": 105,
+        "modes": {"immediate": 47, "program": 58},
         "vice_version": "3.10",
         "rom_checksums": {
             "basic-901226-01.bin": "89878cea0a268734696de11c4bae593eaaa506465d2029d619c0e0cbccdfa62d",

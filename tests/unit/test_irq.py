@@ -147,6 +147,8 @@ def _emulator_models_ram_under_io() -> bool:
 class TestIrq:
     """IRQ entry and helper tests."""
 
+    @pytest.mark.callable_coverage("irq_update_jiffy", executor="execute_rts")
+    @pytest.mark.callable_coverage("irq_cursor_blink", executor="execute_rts")
     def test_irq_helpers_update_visible_state(self) -> None:
         """IRQ helpers advance the jiffy clock (harness) and reverse the cell."""
         if not _emulator_models_ram_under_io():
@@ -192,6 +194,7 @@ class TestIrq:
         assert emu.read_mem(cursor_drawn) == 0x00
         assert emu.read_mem(0x0400 + 2 * 40 + 3) == 0x20
 
+    @pytest.mark.callable_coverage("irq_restore_mapping", executor="execute_rts")
     def test_irq_restore_mapping_writes_saved_port(self) -> None:
         """irq_restore_mapping should write the supplied mapping byte to $01."""
         if not _emulator_models_ram_under_io():
@@ -205,6 +208,7 @@ class TestIrq:
         emu.execute(_load_symbol_address("irq_restore_mapping"), 10_000)
         assert emu.read_mem(0x0001) == 0x35
 
+    @pytest.mark.callable_coverage("irq_entry", executor="execute_rts")
     def test_irq_entry_restores_cpu_port_and_updates_helpers(self) -> None:
         """irq_entry should preserve mapping and call the resident helpers."""
         if not _emulator_models_ram_under_io():

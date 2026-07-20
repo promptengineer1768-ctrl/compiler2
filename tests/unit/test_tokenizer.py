@@ -204,6 +204,8 @@ def _carry_is_set(emu: C64Emu6502) -> bool:
 class TestTokenizer:
     """Tokenizer behavior tests."""
 
+    @pytest.mark.callable_coverage("token_peek", executor="execute_rts")
+    @pytest.mark.callable_coverage("token_next", executor="execute_rts")
     def test_next_peek_whitespace_numbers_strings_and_symbols(self) -> None:
         emu = _new_emu(b' 123 "HI" +')
 
@@ -235,6 +237,7 @@ class TestTokenizer:
             (b".625:", 4),
         ],
     )
+    @pytest.mark.callable_coverage("token_next", executor="execute_rts")
     def test_number_forms_use_real_scanner_bytes(
         self, source: bytes, length: int
     ) -> None:
@@ -243,12 +246,14 @@ class TestTokenizer:
         assert not _carry_is_set(emu)
         assert _token_state(emu) == (TOKEN_NUMBER, length, 0)
 
+    @pytest.mark.callable_coverage("token_next", executor="execute_rts")
     def test_unterminated_string_reports_token_error(self) -> None:
         emu = _new_emu(b'"OPEN')
         emu.execute(_symbol_address("token_next"), 10000)
         assert _carry_is_set(emu)
         assert _token_state(emu) == (0xFF, 4, 0)
 
+    @pytest.mark.callable_coverage("token_next", executor="execute_rts")
     def test_identifiers_keywords_abbreviations_rem_and_data(self) -> None:
         emu = _new_emu(bytes([ord("P"), ord("R") | 0x80]) + b" A1 REM X: DATA 1,2")
 
@@ -271,6 +276,7 @@ class TestTokenizer:
         emu.execute(_symbol_address("token_next"), 10000)
         assert _token_state(emu) == (TOKEN_SYMBOL, 1, 0)
 
+    @pytest.mark.callable_coverage("token_next", executor="execute_rts")
     def test_dialect_filtering_for_plus4_keyword(self) -> None:
         emu = _new_emu(b"DO")
         emu.write_mem(_load_map_address("token_dialect"), 0)
@@ -289,6 +295,7 @@ class TestTokenizer:
         _commands(),
         ids=lambda command: str(command["keyword"]),
     )
+    @pytest.mark.callable_coverage("token_next", executor="execute_rts")
     def test_generated_keyword_trie_covers_command_manifest(
         self, command: dict[str, object]
     ) -> None:
@@ -315,6 +322,7 @@ class TestTokenizer:
         [entry for entry in _commands() if len(str(entry["keyword"])) >= 2],
         ids=lambda command: f"{command['keyword']}-abbr",
     )
+    @pytest.mark.callable_coverage("token_next", executor="execute_rts")
     def test_generated_keyword_trie_accepts_stock_abbreviations(
         self, command: dict[str, object]
     ) -> None:
@@ -346,6 +354,12 @@ class TestTokenizer:
         assert report["worst_observed_transitions"] >= 1
         assert report["total_trie_bytes"] > len(_commands())
 
+    @pytest.mark.callable_coverage("token_string", executor="execute_rts")
+    @pytest.mark.callable_coverage("token_skip_whitespace", executor="execute_rts")
+    @pytest.mark.callable_coverage("token_rem", executor="execute_rts")
+    @pytest.mark.callable_coverage("token_number", executor="execute_rts")
+    @pytest.mark.callable_coverage("token_identifier", executor="execute_rts")
+    @pytest.mark.callable_coverage("token_data", executor="execute_rts")
     def test_public_scanners_have_direct_real_byte_coverage(self) -> None:
         emu = _new_emu(b" \tX")
         emu.execute(_symbol_address("token_skip_whitespace"), 10000)

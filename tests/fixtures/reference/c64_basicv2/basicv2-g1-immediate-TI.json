@@ -1,24 +1,24 @@
 {
-  "generator_version": "1.0",
-  "input_sequence": [
-    "PRINT TI"
-  ],
-  "machine": "C64",
-  "normalization_rules": "screen-v1",
-  "normalized_result": "38",
-  "profile": "basicv2",
-  "raw_error": "",
-  "raw_screen": "\n    **** COMMODORE 64 BASIC V2 ****\n\n 64K RAM SYSTEM  38911 BASIC BYTES FREE\n\nREADY.\nPRINT TI\n 38\n\nREADY.",
-  "raw_state": {},
-  "reference_mode": "immediate",
-  "regeneration_fingerprint": "c9f69c1578e3752189e2434215cfe25b60cc5fc2c89d3e2616eadd23da6025a3",
-  "rom_checksums": {
-    "basic-901226-01.bin": "89878cea0a268734696de11c4bae593eaaa506465d2029d619c0e0cbccdfa62d",
-    "chargen-901225-01.bin": "fd0d53b8480e86163ac98998976c72cc58d5dd8eb824ed7b829774e74213b420",
-    "kernal-901227-03.bin": "83c60d47047d7beab8e5b7bf6f67f80daa088b7a6a27de0d7e016f6484042721"
-  },
-  "schema_version": "1.0",
-  "source_text": "PRINT TI",
-  "vice_executable": "x64sc.exe",
-  "vice_version": "3.10.0.0"
+    "generator_version": "1.0",
+    "input_sequence": [
+        "PRINT TI"
+    ],
+    "machine": "C64",
+    "normalization_rules": "screen-v1",
+    "normalized_result": "38",
+    "profile": "basicv2",
+    "raw_error": "",
+    "raw_screen": "\n    **** COMMODORE 64 BASIC V2 ****\n\n 64K RAM SYSTEM  38911 BASIC BYTES FREE\n\nREADY.\nPRINT TI\n 38\n\nREADY.",
+    "raw_state": {},
+    "reference_mode": "immediate",
+    "regeneration_fingerprint": "98ec95ade0fbf4f184add1861d0f8c63297d6e19e5a70e2d65815d57aa85301b",
+    "rom_checksums": {
+        "basic-901226-01.bin": "89878cea0a268734696de11c4bae593eaaa506465d2029d619c0e0cbccdfa62d",
+        "chargen-901225-01.bin": "fd0d53b8480e86163ac98998976c72cc58d5dd8eb824ed7b829774e74213b420",
+        "kernal-901227-03.bin": "83c60d47047d7beab8e5b7bf6f67f80daa088b7a6a27de0d7e016f6484042721"
+    },
+    "schema_version": "1.0",
+    "source_text": "PRINT TI",
+    "vice_executable": "x64sc.exe",
+    "vice_version": "3.10"
 }

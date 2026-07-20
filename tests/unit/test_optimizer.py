@@ -90,6 +90,7 @@ def _set_ir(emu: C64Emu6502, records: bytes) -> None:
 class TestOptimizer:
     """Optimizer behavior tests."""
 
+    @pytest.mark.callable_coverage("opt_eligible_for_for_fast", executor="execute_rts")
     def test_for_fast_path_eligibility_and_barriers(self) -> None:
         emu = _new_emu(bytes([FOR_REQUIRED, 0, 0, 1]))
         emu.execute(_symbol_address("opt_eligible_for_for_fast"), 1000)
@@ -104,6 +105,8 @@ class TestOptimizer:
             emu.execute(_symbol_address("opt_eligible_for_for_fast"), 1000)
             assert not _carry_is_set(emu)
 
+    @pytest.mark.callable_coverage("opt_select_branch_polarity", executor="execute_rts")
+    @pytest.mark.callable_coverage("opt_eligible_for_do_fast", executor="execute_rts")
     def test_do_fast_path_and_branch_polarity(self) -> None:
         for flags in (DO_SIMPLE, DO_BARE):
             emu = _new_emu(bytes([flags, 0, 0, 1]))
@@ -129,6 +132,9 @@ class TestOptimizer:
         emu.execute(_symbol_address("opt_select_branch_polarity"), 1000)
         assert _carry_is_set(emu)
 
+    @pytest.mark.callable_coverage("opt_propagate_dirty", executor="execute_rts")
+    @pytest.mark.callable_coverage("opt_check_invalidation", executor="execute_rts")
+    @pytest.mark.callable_coverage("opt_check_aliasing", executor="execute_rts")
     def test_cached_effect_summary_invalidation_alias_and_dirty(self) -> None:
         emu = _new_emu(bytes([FOR_REQUIRED, 0x24, 0x80, 7]))
         emu.execute(_symbol_address("opt_check_invalidation"), 1000)
@@ -146,6 +152,10 @@ class TestOptimizer:
         emu.execute(_symbol_address("opt_propagate_dirty"), 1000)
         assert emu.get_state().a == 0x24
 
+    @pytest.mark.callable_coverage("opt_run_passes", executor="execute_rts")
+    @pytest.mark.callable_coverage("opt_check_invalidation", executor="execute_rts")
+    @pytest.mark.callable_coverage("opt_check_aliasing", executor="execute_rts")
+    @pytest.mark.callable_coverage("opt_build_effect_summaries", executor="execute_rts")
     def test_summary_generation_cache_and_pass_driver(self) -> None:
         emu = _new_emu()
         _set_ir(
@@ -198,6 +208,7 @@ class TestOptimizer:
         emu.execute(_symbol_address("opt_run_passes"), 1000)
         assert not _carry_is_set(emu)
 
+    @pytest.mark.callable_coverage("opt_build_effect_summaries", executor="execute_rts")
     def test_summary_capacity_failure_is_not_published(self) -> None:
         records = b"".join(bytes([0x07, FOR_REQUIRED, 0, 0]) for _ in range(5))
         emu = _new_emu()
@@ -207,6 +218,7 @@ class TestOptimizer:
         emu.execute(_symbol_address("opt_build_effect_summaries"), 2000)
         assert _carry_is_set(emu)
 
+    @pytest.mark.callable_coverage("opt_check_stop_poll", executor="execute_rts")
     def test_stop_poll_uses_summary_metadata(self) -> None:
         for meta, expected in ((0, False), (1, True)):
             emu = _new_emu(bytes([FOR_REQUIRED, 0, 0, meta]))

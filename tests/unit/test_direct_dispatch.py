@@ -140,6 +140,7 @@ def _cpu_read(emu: Any, address: int) -> int:
     [(ord("$"), 0), (ord("@"), 1), (ord("/"), 2), (ord("!"), 3)],
     ids=["directory", "status", "load", "stream"],
 )
+@pytest.mark.callable_coverage("direct_probe_prefix", executor="execute")
 def test_probe_prefix_recognizes_wedge(prefix: int, kind: int) -> None:
     """Each wedge introducer is recognized before tokenization."""
     _, state = _execute("direct_probe_prefix", prefix)
@@ -147,6 +148,7 @@ def test_probe_prefix_recognizes_wedge(prefix: int, kind: int) -> None:
     assert (state.p & 1) == 0
 
 
+@pytest.mark.callable_coverage("direct_probe_prefix", executor="execute")
 @pytest.mark.unit
 @pytest.mark.local
 def test_probe_prefix_leaves_normal_input_unclaimed() -> None:
@@ -161,6 +163,7 @@ def test_probe_prefix_leaves_normal_input_unclaimed() -> None:
 @pytest.mark.parametrize(
     "token", [138, 155, 162, 147, 149, 148, 154, 206, 212, TOKEN_QUIT]
 )
+@pytest.mark.callable_coverage("direct_classify", executor="execute")
 def test_classify_direct_only_commands(token: int) -> None:
     """Generated direct-only commands use the command dispatcher."""
     _, state = _execute("direct_classify", token)
@@ -168,6 +171,7 @@ def test_classify_direct_only_commands(token: int) -> None:
     assert (state.p & 1) == 0
 
 
+@pytest.mark.callable_coverage("direct_classify", executor="execute")
 @pytest.mark.unit
 @pytest.mark.local
 @pytest.mark.parametrize("token", [134, 136, 137, 141, 150, 153, 158, 151])
@@ -178,6 +182,7 @@ def test_classify_immediate_statements_as_temporary(token: int) -> None:
     assert (state.p & 1) == 0
 
 
+@pytest.mark.callable_coverage("direct_classify", executor="execute")
 @pytest.mark.unit
 @pytest.mark.local
 @pytest.mark.parametrize("token", [128, 129, 131, 139, 0x7F])
@@ -188,6 +193,7 @@ def test_classify_rejects_program_only_or_unknown_tokens(token: int) -> None:
     assert (state.p & 1) == 1
 
 
+@pytest.mark.callable_coverage("direct_execute_command", executor="execute")
 @pytest.mark.unit
 @pytest.mark.local
 def test_execute_command_records_dispatch() -> None:
@@ -222,6 +228,7 @@ def _georam_routine_bytes(symbol: str, length: int) -> bytes:
     return georam[start : start + length]
 
 
+@pytest.mark.callable_coverage("direct_execute_command", executor="execute_rts")
 @pytest.mark.unit
 @pytest.mark.local
 @pytest.mark.smoke
@@ -331,6 +338,7 @@ def test_xip_dispatch_uses_gate_for_nested_pipeline_calls() -> None:
         )
 
 
+@pytest.mark.callable_coverage("direct_execute_temporary", executor="execute")
 @pytest.mark.unit
 @pytest.mark.local
 def test_execute_temporary_advances_generation() -> None:

@@ -183,6 +183,12 @@ def _load_georam_backing(emu: C64Emu6502) -> None:
 class TestIo:
     """Runtime console I/O tests."""
 
+    @pytest.mark.callable_coverage("io_print_value", executor="execute_rts")
+    @pytest.mark.callable_coverage("io_print_tab", executor="execute_rts")
+    @pytest.mark.callable_coverage("io_print_space", executor="execute_rts")
+    @pytest.mark.callable_coverage("io_print_semicolon", executor="execute_rts")
+    @pytest.mark.callable_coverage("io_print_newline", executor="execute_rts")
+    @pytest.mark.callable_coverage("io_print_comma", executor="execute_rts")
     def test_print_helpers_update_output_buffer(self) -> None:
         dll = _dll_path()
         emu = C64Emu6502(lib_path=dll)
@@ -236,6 +242,7 @@ class TestIo:
         ],
         ids=["int1-negative", "int2-positive", "int2-min", "int3-unsigned"],
     )
+    @pytest.mark.callable_coverage("io_print_value", executor="execute_rts")
     def test_print_formats_each_integer_tier(
         self, value_type: int, raw: bytes, expected: bytes
     ) -> None:
@@ -255,6 +262,8 @@ class TestIo:
         )
         assert emu.read_mem_range(out_buf, out_buf + len(expected) - 1) == expected
 
+    @pytest.mark.callable_coverage("io_print_value", executor="execute_rts")
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute_rts")
     def test_print_formats_packed_float_through_string_runtime(self) -> None:
         """FLOAT PRINT uses the canonical packed formatter and string arena."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -274,6 +283,11 @@ class TestIo:
         )
         assert emu.read_mem_range(out_buf, out_buf + len(expected) - 1) == expected
 
+    @pytest.mark.callable_coverage("io_input_value", executor="execute_rts")
+    @pytest.mark.callable_coverage("io_input_string", executor="execute_rts")
+    @pytest.mark.callable_coverage("io_get", executor="execute_rts")
+    @pytest.mark.callable_coverage("io_cmd", executor="execute_rts")
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute_rts")
     def test_input_get_and_cmd_helpers(self) -> None:
         dll = _dll_path()
         emu = C64Emu6502(lib_path=dll)
@@ -331,6 +345,8 @@ class TestIo:
         assert emu.read_mem_range(string_cell, string_cell + 1) == b"SD"
         assert emu.read_mem(string_cell + 3) == 1
 
+    @pytest.mark.callable_coverage("io_input_value", executor="execute_rts")
+    @pytest.mark.callable_coverage("io_input_string", executor="execute_rts")
     def test_input_rejects_removed_raw_character_abi(self) -> None:
         """INPUT entries require an IN request and destination descriptor."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -343,6 +359,12 @@ class TestIo:
             emu.execute(_load_symbol_address(routine), 10000)
             assert emu.get_state().p & 1
 
+    @pytest.mark.callable_coverage("rio_open", executor="execute_rts")
+    @pytest.mark.callable_coverage("rio_load", executor="execute_rts")
+    @pytest.mark.callable_coverage("rio_clrchn", executor="execute_rts")
+    @pytest.mark.callable_coverage("rio_close", executor="execute_rts")
+    @pytest.mark.callable_coverage("rio_chrout", executor="execute_rts")
+    @pytest.mark.callable_coverage("rio_chrin", executor="execute_rts")
     def test_runtime_io_wrappers_drive_kernal_bridge_state(self) -> None:
         dll = _dll_path()
         emu = C64Emu6502(lib_path=dll)
@@ -433,6 +455,7 @@ class TestIo:
         assert emu.read_mem(0x0001) == 0x35
         assert emu.read_mem(zp_status) == 0
 
+    @pytest.mark.callable_coverage("rio_chrin", executor="execute_rts")
     @pytest.mark.parametrize("routine", ["rio_chrin", "rio_chrout"])
     def test_channel_wrappers_preserve_primary_error_and_restore_channel(
         self, routine: str
@@ -478,6 +501,10 @@ class TestIo:
         assert emu.read_mem(marker) == 1
         assert emu.read_mem(0x0001) == 0x35
 
+    @pytest.mark.callable_coverage("rio_verify", executor="execute_rts")
+    @pytest.mark.callable_coverage("rio_save", executor="execute_rts")
+    @pytest.mark.callable_coverage("program_replace_from_load", executor="execute_rts")
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute_rts")
     def test_rio_save_and_verify_use_token_class_emission(self) -> None:
         """SAVE emits format bytes for the published program; VERIFY matches them."""
         dll = _dll_path()
@@ -623,6 +650,7 @@ class TestIo:
             "float-fractional",
         ],
     )
+    @pytest.mark.callable_coverage("math_to_arg_byte", executor="execute_rts")
     def test_argument_byte_coercion_is_unsigned_and_range_checked(
         self, value_type: int, raw: bytes, expected: int, ok: bool
     ) -> None:

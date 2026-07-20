@@ -155,6 +155,7 @@ class TestFpMode:
 class TestFpFlags:
     """IEEE floating-point flag tests."""
 
+    @pytest.mark.callable_coverage("fp_test_flags", executor="execute_rts")
     def test_flags_mask_clear_and_test(self) -> None:
         """Flag get, clear, and test operate through real mask paths."""
         emu = _new_emu()
@@ -194,6 +195,7 @@ class TestFpFlags:
 class TestFpRounding:
     """IEEE floating-point rounding mode tests."""
 
+    @pytest.mark.callable_coverage("fp_set_rounding", executor="execute_rts")
     def test_rounding_accepts_only_four_modes(self) -> None:
         """Rounding mode setter accepts 0..3 and rejects larger IDs."""
         emu = _new_emu()
@@ -223,6 +225,7 @@ class TestFpConstants:
         ],
         ids=["inf", "qnan", "snan", "invalid-zero"],
     )
+    @pytest.mark.callable_coverage("fp_load_constant", executor="execute_rts")
     def test_fp_load_constant_bytes(self, constant_id: int, expected: bytes) -> None:
         """fp_load_constant writes exact special-constant FAC1 bytes."""
         emu = _new_emu()

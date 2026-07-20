@@ -313,6 +313,9 @@ class TestProgramCodec:
         assert "jmp __program_stream_decode_stock_validated" in basic35
         assert "jmp __program_stream_decode_stock\n" not in basic35
 
+    @pytest.mark.callable_coverage("program_classify_file", executor="execute")
+    @pytest.mark.callable_coverage("georam_select", executor="execute")
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute")
     def test_classify_stock_and_extended_records(self) -> None:
         """Classification should distinguish V2, C2P1, and Plus/4 PRG records."""
         dll = _dll_path()
@@ -354,6 +357,11 @@ class TestProgramCodec:
         assert state.a == 2
         assert (int(state.p) & 0x01) == 0
 
+    @pytest.mark.callable_coverage("program_encode_stock", executor="execute")
+    @pytest.mark.callable_coverage("program_encode_extended", executor="execute")
+    @pytest.mark.callable_coverage("program_decode_stock", executor="execute")
+    @pytest.mark.callable_coverage("program_decode_extended", executor="execute")
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute")
     def test_stock_and_extended_round_trip(self) -> None:
         """Encode and decode helpers should round-trip small records."""
         dll = _dll_path()
@@ -410,6 +418,11 @@ class TestProgramCodec:
         assert encoded_payload[4] == 0x01
         assert encoded_payload[16:] == ext_body
 
+    @pytest.mark.callable_coverage("program_encode_stock", executor="execute")
+    @pytest.mark.callable_coverage("program_encode_extended", executor="execute")
+    @pytest.mark.callable_coverage("program_decode_stock", executor="execute")
+    @pytest.mark.callable_coverage("program_decode_extended", executor="execute")
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute")
     @pytest.mark.parametrize("format_name", ["stock", "extended"])
     def test_whole_program_stream_round_trip_spans_multiple_pages(
         self, format_name: str
@@ -456,6 +469,8 @@ class TestProgramCodec:
         ],
         ids=["descending-lines", "bad-link", "missing-terminator", "trailing-data"],
     )
+    @pytest.mark.callable_coverage("program_decode_stock", executor="execute")
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute")
     def test_stock_decoder_rejects_structural_corruption(self, payload: bytes) -> None:
         """Import validates links, ordering, line terminators, and final marker."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -470,6 +485,8 @@ class TestProgramCodec:
             y=source >> 8,
         )
 
+    @pytest.mark.callable_coverage("program_encode_stock", executor="execute")
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute")
     def test_stock_encoder_recomputes_every_link(self) -> None:
         """Export ignores stale imported links and emits canonical addresses."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -486,6 +503,8 @@ class TestProgramCodec:
         assert encoded == decoded
         assert _read_stream(emu, encoded) == canonical
 
+    @pytest.mark.callable_coverage("program_encode_stock", executor="execute")
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute")
     def test_encode_clones_non_scratch_logical_program(self) -> None:
         """SAVE encoding never mutates the published logical-program arena."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -509,6 +528,8 @@ class TestProgramCodec:
         "mutation",
         ["version", "abi", "length", "checksum", "reserved"],
     )
+    @pytest.mark.callable_coverage("program_decode_extended", executor="execute")
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute")
     def test_extended_decoder_rejects_header_corruption(self, mutation: str) -> None:
         """C2P1 import validates every versioned envelope integrity field."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -528,6 +549,10 @@ class TestProgramCodec:
             y=source >> 8,
         )
 
+    @pytest.mark.callable_coverage("program_decode_stock", executor="execute")
+    @pytest.mark.callable_coverage("program_decode_extended", executor="execute")
+    @pytest.mark.callable_coverage("program_classify_file", executor="execute")
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute")
     def test_malformed_records_are_rejected(self) -> None:
         """Malformed stock and extended inputs should return carry set."""
         dll = _dll_path()
@@ -563,6 +588,14 @@ class TestProgramCodec:
             y=malformed_extended >> 8,
         )
 
+    @pytest.mark.callable_coverage("program_select_save_format", executor="execute")
+    @pytest.mark.callable_coverage("program_encode_stock", executor="execute")
+    @pytest.mark.callable_coverage("program_encode_extended", executor="execute")
+    @pytest.mark.callable_coverage("program_encode_basic35", executor="execute")
+    @pytest.mark.callable_coverage("program_decode_stock", executor="execute")
+    @pytest.mark.callable_coverage("program_decode_extended", executor="execute")
+    @pytest.mark.callable_coverage("program_decode_basic35", executor="execute")
+    @pytest.mark.callable_coverage("program_classify_file", executor="execute")
     def test_removed_bounded_record_abi_is_rejected(self) -> None:
         """Codec entry points accept only arena-backed whole-program handles."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -591,6 +624,8 @@ class TestProgramCodec:
             ("extent", 0x81),
         ],
     )
+    @pytest.mark.callable_coverage("program_classify_file", executor="execute")
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute")
     def test_malformed_stream_descriptors_are_rejected(
         self, field: str, value: int
     ) -> None:
@@ -618,6 +653,9 @@ class TestProgramCodec:
             y=descriptor >> 8,
         )
 
+    @pytest.mark.callable_coverage("program_encode_extended", executor="execute")
+    @pytest.mark.callable_coverage("program_decode_extended", executor="execute")
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute")
     def test_extended_empty_body_round_trip(self) -> None:
         """The 16-bit stream representation supports an empty C2P1 body."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -641,6 +679,8 @@ class TestProgramCodec:
         )
         assert _read_stream(emu, descriptor) == _extended_program(b"")
 
+    @pytest.mark.callable_coverage("program_decode_extended", executor="execute")
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute")
     def test_extended_decoder_rejects_malformed_body_without_publishing(self) -> None:
         """Extended import validates the logical body before removing C2P1."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -659,6 +699,8 @@ class TestProgramCodec:
         )
         assert _read_stream(emu, descriptor) == before
 
+    @pytest.mark.callable_coverage("program_encode_extended", executor="execute")
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute")
     def test_extended_encoder_rejects_malformed_body_without_publishing(self) -> None:
         """Extended export validates normalized input before shifting it."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -677,6 +719,8 @@ class TestProgramCodec:
         )
         assert _read_stream(emu, descriptor) == before
 
+    @pytest.mark.callable_coverage("program_encode_extended", executor="execute")
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute")
     def test_extended_encoder_clones_non_scratch_logical_program(self) -> None:
         """Extended export leaves a published non-scratch stream unchanged."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -697,6 +741,9 @@ class TestProgramCodec:
         assert encoded != source
         assert _read_stream(emu, encoded) == _extended_program(logical)
 
+    @pytest.mark.callable_coverage("program_encode_basic35", executor="execute")
+    @pytest.mark.callable_coverage("program_decode_basic35", executor="execute")
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute")
     def test_plus4_basic35_round_trip(self) -> None:
         """Plus/4 $1001 PRG encode/decode preserves linked-line structure."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -732,6 +779,8 @@ class TestProgramCodec:
         ],
         ids=["v2", "basic35", "c2", "rem-ignored", "string-ignored", "c2-over-35"],
     )
+    @pytest.mark.callable_coverage("program_select_save_format", executor="execute")
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute")
     def test_select_save_format_by_tokens_outside_rem_string(
         self, lines: list[tuple[int, bytes]], expected_format: int
     ) -> None:

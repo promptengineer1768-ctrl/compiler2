@@ -120,6 +120,10 @@ def _write_descriptor(
 class TestContextStack:
     """Context stack round-trip and overflow tests."""
 
+    @pytest.mark.callable_coverage("ctx_push", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctx_pop", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctx_init", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctx_depth", executor="execute_rts")
     def test_round_trip_and_depth(self) -> None:
         """ctx_push/ctx_pop should preserve the selected block/page pair."""
         dll = _dll_path()
@@ -145,6 +149,9 @@ class TestContextStack:
         emu.execute(_load_symbol_address("ctx_depth"), 10_000)
         assert emu.get_state().a == 0x00
 
+    @pytest.mark.callable_coverage("ctx_push", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctx_init", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctx_check_overflow", executor="execute_rts")
     def test_overflow_is_reported(self) -> None:
         """ctx_check_overflow should report a full stack."""
         dll = _dll_path()
@@ -197,6 +204,9 @@ class TestHibasicGraphicsSwap:
 class TestGeoramGate:
     """geoRAM gate helpers and handle-based access tests."""
 
+    @pytest.mark.callable_coverage("georam_ctx_push", executor="execute_rts")
+    @pytest.mark.callable_coverage("georam_ctx_pop", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctx_init", executor="execute_rts")
     def test_gate_context_pop_restores_hardware_selection(self) -> None:
         """georam_ctx_pop restores mirrored and hardware page selection."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -213,6 +223,11 @@ class TestGeoramGate:
         assert (emu.read_mem(block), emu.read_mem(page)) == (3, 7)
         assert (emu.read_mem(0xDFFF), emu.read_mem(0xDFFE)) == (3, 7)
 
+    @pytest.mark.callable_coverage("georam_write_word", executor="execute_rts")
+    @pytest.mark.callable_coverage("georam_write_byte", executor="execute_rts")
+    @pytest.mark.callable_coverage("georam_select", executor="execute_rts")
+    @pytest.mark.callable_coverage("georam_read_word", executor="execute_rts")
+    @pytest.mark.callable_coverage("georam_read_byte", executor="execute_rts")
     def test_direct_word_and_byte_access_use_selected_page(self) -> None:
         """Handle primitives read and write real assembled geoRAM bytes."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -235,6 +250,8 @@ class TestGeoramGate:
         emu.execute_rts(_load_symbol_address("georam_read_byte"), 10_000)
         assert emu.get_state().a == 0x5A
 
+    @pytest.mark.callable_coverage("georam_verify_mirror", executor="execute_rts")
+    @pytest.mark.callable_coverage("georam_select", executor="execute_rts")
     def test_select_and_mirror_check(self) -> None:
         """georam_select should update the mirror and verification helper."""
         dll = _dll_path()
@@ -254,6 +271,10 @@ class TestGeoramGate:
         emu.execute(_load_symbol_address("georam_verify_mirror"), 10_000)
         assert (emu.get_state().p & 0x01) == 0
 
+    @pytest.mark.callable_coverage("wedge_parse", executor="execute_rts")
+    @pytest.mark.callable_coverage("georam_select", executor="execute_rts")
+    @pytest.mark.callable_coverage("georam_call_group_n", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctx_init", executor="execute_rts")
     def test_nested_call_cycle_preserves_caller_state(self) -> None:
         """georam_call_group_n should run the directory target and restore selection."""
         dll = _dll_path()
@@ -295,6 +316,9 @@ class TestGeoramGate:
         assert emu.read_mem(0xDFFF) == 0x04
         assert emu.read_mem(0xDFFE) == 0x01
 
+    @pytest.mark.callable_coverage("georam_select", executor="execute_rts")
+    @pytest.mark.callable_coverage("georam_call_group_n", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctx_init", executor="execute_rts")
     def test_missing_directory_entry_restores_selection_and_reports_error(self) -> None:
         """A missing generated directory entry should fail without leaking context."""
         dll = _dll_path()
@@ -323,6 +347,11 @@ class TestGeoramGate:
         assert emu.read_mem(0xDFFF) == 0x04
         assert emu.read_mem(0xDFFE) == 0x01
 
+    @pytest.mark.callable_coverage("wedge_parse", executor="execute_rts")
+    @pytest.mark.callable_coverage("georam_tail_group_n", executor="execute_rts")
+    @pytest.mark.callable_coverage("georam_select", executor="execute_rts")
+    @pytest.mark.callable_coverage("georam_ctx_push", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctx_init", executor="execute_rts")
     def test_tail_group_jumps_to_directory_target_and_reuses_frame(self) -> None:
         """georam_tail_group_n should jump to the target instead of aliasing call."""
         dll = _dll_path()
@@ -371,6 +400,10 @@ class TestGeoramGate:
         assert emu.read_mem(0xDFFF) == target["block"]
         assert emu.read_mem(0xDFFE) == target["page"]
 
+    @pytest.mark.callable_coverage("georam_tail_group_n", executor="execute_rts")
+    @pytest.mark.callable_coverage("georam_select", executor="execute_rts")
+    @pytest.mark.callable_coverage("georam_ctx_push", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctx_init", executor="execute_rts")
     def test_tail_group_missing_entry_preserves_frame_and_selection(self) -> None:
         """Missing tail targets should fail before consuming the current frame."""
         dll = _dll_path()
@@ -401,6 +434,12 @@ class TestGeoramGate:
         assert emu.read_mem(0xDFFF) == 0x04
         assert emu.read_mem(0xDFFE) == 0x01
 
+    @pytest.mark.callable_coverage("georam_write_byte", executor="execute_rts")
+    @pytest.mark.callable_coverage("georam_select", executor="execute_rts")
+    @pytest.mark.callable_coverage("georam_copy_to_ram", executor="execute_rts")
+    @pytest.mark.callable_coverage("georam_copy_from_ram", executor="execute_rts")
+    @pytest.mark.callable_coverage("georam_checksum", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctx_init", executor="execute_rts")
     def test_handle_based_byte_and_copy_operations_validate_page(self) -> None:
         """Handle-based reads, writes, copies, and checksum should round-trip."""
         dll = _dll_path()
@@ -443,6 +482,11 @@ class TestGeoramGate:
         emu.execute(_load_symbol_address("georam_write_byte"), 10_000)
         assert emu.get_state().p & 0x01
 
+    @pytest.mark.callable_coverage("georam_select", executor="execute_rts")
+    @pytest.mark.callable_coverage("georam_copy_to_ram", executor="execute_rts")
+    @pytest.mark.callable_coverage("georam_copy_pages", executor="execute_rts")
+    @pytest.mark.callable_coverage("georam_copy_from_ram", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctx_init", executor="execute_rts")
     def test_copy_pages_copies_between_georam_pages_and_restores_selection(
         self,
     ) -> None:

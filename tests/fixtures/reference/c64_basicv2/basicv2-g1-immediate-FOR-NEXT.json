@@ -1,24 +1,24 @@
 {
-  "generator_version": "1.0",
-  "input_sequence": [
-    "FOR I=1 TO 3:PRINT I:NEXT"
-  ],
-  "machine": "C64",
-  "normalization_rules": "screen-v1",
-  "normalized_result": "1\n2\n3",
-  "profile": "basicv2",
-  "raw_error": "",
-  "raw_screen": "\n    **** COMMODORE 64 BASIC V2 ****\n\n 64K RAM SYSTEM  38911 BASIC BYTES FREE\n\nREADY.\nFOR I=1 TO 3:PRINT I:NEXT\n 1\n 2\n 3\n\nREADY.",
-  "raw_state": {},
-  "reference_mode": "immediate",
-  "regeneration_fingerprint": "70a98f5ba87d072746ecec82fedf381d9756dce7585ac510c27d14a8cbcb6cf5",
-  "rom_checksums": {
-    "basic-901226-01.bin": "89878cea0a268734696de11c4bae593eaaa506465d2029d619c0e0cbccdfa62d",
-    "chargen-901225-01.bin": "fd0d53b8480e86163ac98998976c72cc58d5dd8eb824ed7b829774e74213b420",
-    "kernal-901227-03.bin": "83c60d47047d7beab8e5b7bf6f67f80daa088b7a6a27de0d7e016f6484042721"
-  },
-  "schema_version": "1.0",
-  "source_text": "FOR I=1 TO 3:PRINT I:NEXT",
-  "vice_executable": "x64sc.exe",
-  "vice_version": "3.10.0.0"
+    "generator_version": "1.0",
+    "input_sequence": [
+        "FOR I=1 TO 3:PRINT I:NEXT"
+    ],
+    "machine": "C64",
+    "normalization_rules": "screen-v1",
+    "normalized_result": "1\n2\n3",
+    "profile": "basicv2",
+    "raw_error": "",
+    "raw_screen": "\n    **** COMMODORE 64 BASIC V2 ****\n\n 64K RAM SYSTEM  38911 BASIC BYTES FREE\n\nREADY.\nFOR I=1 TO 3:PRINT I:NEXT\n 1\n 2\n 3\n\nREADY.",
+    "raw_state": {},
+    "reference_mode": "immediate",
+    "regeneration_fingerprint": "e0793e2b2284c0b3b1581264fccdb0af46e38227da43c280f859eda6e106f8ef",
+    "rom_checksums": {
+        "basic-901226-01.bin": "89878cea0a268734696de11c4bae593eaaa506465d2029d619c0e0cbccdfa62d",
+        "chargen-901225-01.bin": "fd0d53b8480e86163ac98998976c72cc58d5dd8eb824ed7b829774e74213b420",
+        "kernal-901227-03.bin": "83c60d47047d7beab8e5b7bf6f67f80daa088b7a6a27de0d7e016f6484042721"
+    },
+    "schema_version": "1.0",
+    "source_text": "FOR I=1 TO 3:PRINT I:NEXT",
+    "vice_executable": "x64sc.exe",
+    "vice_version": "3.10"
 }

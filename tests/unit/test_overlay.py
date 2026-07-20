@@ -94,6 +94,8 @@ def _execute(emu: C64Emu6502, routine: str, *, a: int | None = None) -> bool:
 class TestGeoramOverlayDispatch:
     """Resolution, nesting, and generated-directory integrity coverage."""
 
+    @pytest.mark.callable_coverage("overlay_resolve", executor="execute")
+    @pytest.mark.callable_coverage("editor_submit_line", executor="execute")
     def test_resolve_uses_generated_page_and_offset(self) -> None:
         """A real group-1 routine ID resolves to its generated placement."""
         emu = _new_emulator()
@@ -106,6 +108,8 @@ class TestGeoramOverlayDispatch:
         assert int(state.y) == int(record["offset"])
         assert _execute(emu, "overlay_resolve", a=0)
 
+    @pytest.mark.callable_coverage("overlay_validate", executor="execute")
+    @pytest.mark.callable_coverage("editor_submit_line", executor="execute")
     def test_validate_detects_generated_table_corruption(self) -> None:
         """Runtime validation rejects any byte drift in the linked tables."""
         emu = _new_emulator()
@@ -121,6 +125,11 @@ class TestGeoramOverlayDispatch:
         emu.write_mem(table_byte, original)
         assert not _execute(emu, "overlay_validate")
 
+    @pytest.mark.callable_coverage("overlay_exit", executor="execute")
+    @pytest.mark.callable_coverage("overlay_enter", executor="execute")
+    @pytest.mark.callable_coverage("georam_select", executor="execute")
+    @pytest.mark.callable_coverage("editor_submit_line", executor="execute")
+    @pytest.mark.callable_coverage("editor_delete_line", executor="execute")
     def test_nested_enter_exit_restores_real_georam_selection(self) -> None:
         """Nested overlays restore each caller selection and reject underflow."""
         emu = _new_emulator()

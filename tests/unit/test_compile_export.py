@@ -158,6 +158,7 @@ def _reset_budget_state(emu: C64Emu6502) -> None:
     emu.write_mem(_symbol("diag_print_count"), 0)
 
 
+@pytest.mark.callable_coverage("export_parse_command", executor="execute")
 @pytest.mark.unit
 @pytest.mark.local
 def test_export_parse_command_defaults_and_validates_device() -> None:
@@ -183,6 +184,7 @@ def test_export_parse_command_defaults_and_validates_device() -> None:
     assert carry and a == ERR_ILLEGAL_QUANTITY
 
 
+@pytest.mark.callable_coverage("export_parse_command", executor="execute")
 @pytest.mark.unit
 @pytest.mark.local
 def test_export_parse_command_preserves_explicit_filename() -> None:
@@ -200,6 +202,7 @@ def test_export_parse_command_preserves_explicit_filename() -> None:
     assert carry and a == ERR_ILLEGAL_QUANTITY
 
 
+@pytest.mark.callable_coverage("export_collect_dependencies", executor="execute")
 @pytest.mark.unit
 @pytest.mark.local
 @pytest.mark.parametrize("forbidden", [0x10, 0x20, 0x40, 0x80])
@@ -217,6 +220,7 @@ def test_export_collect_dependencies_rejects_development_dependencies(
     assert not carry and (low | (high << 8)) == record
 
 
+@pytest.mark.callable_coverage("export_link_image", executor="execute")
 @pytest.mark.unit
 @pytest.mark.local
 def test_export_link_image_requires_resolved_standalone_image() -> None:
@@ -243,6 +247,7 @@ def test_export_link_image_requires_resolved_standalone_image() -> None:
         (0x2000, 0x2000, 0x0200, 0x0801, False),  # empty image
     ],
 )
+@pytest.mark.callable_coverage("export_check_budgets", executor="execute")
 def test_export_check_budgets_hard_fail_only_invalid_ranges(
     start: int,
     end: int,
@@ -261,6 +266,7 @@ def test_export_check_budgets_hard_fail_only_invalid_ranges(
         assert a == ERR_OUT_OF_MEMORY
 
 
+@pytest.mark.callable_coverage("export_check_budgets", executor="execute")
 @pytest.mark.unit
 @pytest.mark.local
 def test_export_check_budgets_edge_triggered_80_and_100_warnings() -> None:
@@ -343,6 +349,7 @@ def test_export_check_budgets_edge_triggered_80_and_100_warnings() -> None:
         ),
     ],
 )
+@pytest.mark.callable_coverage("export_check_budgets", executor="execute")
 def test_export_check_budgets_dual_layout_profiles(
     start: int,
     end: int,
@@ -417,6 +424,10 @@ def test_export_compile_command_transaction_parse_deps_link_budgets_write() -> N
     assert _cpu_read(emu, _symbol("export_layout_flags")) == EXPORT_FLAG_CE00_RESERVED
 
 
+@pytest.mark.callable_coverage("kernal_setnam", executor="execute")
+@pytest.mark.callable_coverage("kernal_setlfs", executor="execute")
+@pytest.mark.callable_coverage("kernal_save", executor="execute")
+@pytest.mark.callable_coverage("export_write_prg", executor="execute")
 @pytest.mark.unit
 @pytest.mark.local
 def test_export_write_prg_validates_record_and_uses_kernal_save_abi() -> None:

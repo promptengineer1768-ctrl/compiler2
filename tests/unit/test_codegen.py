@@ -120,6 +120,7 @@ def _execute_routine(emu: C64Emu6502, symbol: str, cycles: int = 10_000) -> None
 class TestCodegen:
     """Code emission behavior tests."""
 
+    @pytest.mark.callable_coverage("codegen_finish_line", executor="execute_rts")
     @pytest.mark.parametrize(("name", "opcode"), EMITTERS)
     def test_each_codegen_operation_emits_executable_6502(
         self, name: str, opcode: int
@@ -134,6 +135,9 @@ class TestCodegen:
         state = emu.get_state()
         assert (state.a, state.x, state.y) == (0x21, 0x43, 0x65)
 
+    @pytest.mark.callable_coverage("codegen_init", executor="execute_rts")
+    @pytest.mark.callable_coverage("codegen_finish_line", executor="execute_rts")
+    @pytest.mark.callable_coverage("codegen_emit_return", executor="execute_rts")
     def test_finish_and_init_reset(self) -> None:
         emu = _new_emu()
         emu.execute(_symbol_address("codegen_emit_return"), 1000)
@@ -154,6 +158,7 @@ class TestCodegen:
         state = emu.get_state()
         assert (state.a, state.x, state.y) == (0x11, 0x22, 0x33)
 
+    @pytest.mark.callable_coverage("codegen_get_code_ptr", executor="execute_rts")
     def test_get_code_ptr_returns_executable_buffer(self) -> None:
         """codegen_get_code_ptr returns the real native scratch buffer address."""
         emu = _new_emu()
@@ -161,6 +166,8 @@ class TestCodegen:
         state = emu.get_state()
         assert state.x | (state.y << 8) == _symbol_address("codegen_buffer")
 
+    @pytest.mark.callable_coverage("codegen_init", executor="execute_rts")
+    @pytest.mark.callable_coverage("codegen_emit_reloc", executor="execute_rts")
     def test_relocation_records_fixup_and_init_clears_it(self) -> None:
         """codegen_emit_reloc appends typed addresses to the linker fixup list."""
         emu = _new_emu()
@@ -220,6 +227,7 @@ class TestCodegen:
         emu.execute(_symbol_address("codegen_buffer"), 10_000)
         assert emu.read_mem_range(0x00A0, 0x00A2) == b"\x00\x00\x00"
 
+    @pytest.mark.callable_coverage("kernal_rdtim", executor="execute_rts")
     def test_print_ti_emits_runtime_rdtime_call(self) -> None:
         """PRINT TI must read the time in generated code, not during compile."""
         emu = _new_emu()
@@ -301,6 +309,7 @@ class TestCodegen:
         zp_fac1 = _zp_address("zp_fac1")
         assert emu.read_mem_range(zp_fac1, zp_fac1 + 1) == b"\x02\x00"
 
+    @pytest.mark.callable_coverage("io_print_newline", executor="execute_rts")
     def test_print_semicolon_omits_newline_from_generated_bytes(self) -> None:
         """PRINT "."; must emit output without a trailing newline call."""
         emu = _new_emu()

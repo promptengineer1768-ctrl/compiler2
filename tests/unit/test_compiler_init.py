@@ -140,6 +140,8 @@ class TestCompilerInit:
         assert emu.read_mem(start - 1) == 0x3C
         assert emu.read_mem(start + size) == 0xC3
 
+    @pytest.mark.callable_coverage("init_editor", executor="execute")
+    @pytest.mark.callable_coverage("georam_select", executor="execute")
     def test_init_editor_clears_the_separately_loaded_pinned_metadata(self) -> None:
         """Cold editor init clears RAM_HIGH rw state without touching HIBASIC code."""
         emu = _new_emulator()
@@ -166,6 +168,8 @@ class TestCompilerInit:
         assert emu.read_mem(0xDFFE) == 0x2D
         assert emu.read_mem(start + size) == 0xC3
 
+    @pytest.mark.callable_coverage("init_arenas", executor="execute")
+    @pytest.mark.callable_coverage("arena_handle_valid", executor="execute")
     def test_init_arenas_constructs_the_real_typed_directory(self) -> None:
         """init_arenas delegates to the production arena constructor."""
         emu = _new_emulator()
@@ -186,6 +190,7 @@ class TestCompilerInit:
 class TestCompilerVectors:
     """Vector setup tests."""
 
+    @pytest.mark.callable_coverage("irq_entry", executor="execute_rts")
     def test_setup_vectors_installs_irq_and_nmi(self) -> None:
         """compiler_vectors saves priors and installs irq_entry/nmi_entry."""
         emu = _new_emulator()
@@ -319,6 +324,7 @@ class TestCompilerStateMachine:
         assert emu.read_mem(phase) == INIT_STATE_READY
 
 
+@pytest.mark.callable_coverage("init_editor", executor="execute")
 @pytest.mark.unit
 @pytest.mark.local
 def test_init_editor_sets_cold_start_state() -> None:

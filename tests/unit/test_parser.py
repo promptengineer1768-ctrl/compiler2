@@ -140,6 +140,8 @@ def _ir_records(emu: C64Emu6502) -> list[tuple[int, int, int, int]]:
 class TestParser:
     """Parser behavior tests."""
 
+    @pytest.mark.callable_coverage("parse_statement", executor="execute")
+    @pytest.mark.callable_coverage("parse_line", executor="execute")
     def test_line_and_statement_parsing(self) -> None:
         emu = _new_emu(b"10 PRINT A")
         assert not _execute(emu, "parse_line")
@@ -167,6 +169,7 @@ class TestParser:
         "source",
         (b"", b"10", b"10 FOO", b"PLOT 1", b"FORMAT A", b"GOTO 100"),
     )
+    @pytest.mark.callable_coverage("parse_line", executor="execute")
     def test_statement_parser_rejects_unknown_or_incomplete_syntax(
         self, source: bytes
     ) -> None:
@@ -174,6 +177,7 @@ class TestParser:
         assert _execute(emu, "parse_line")
         assert _parser_state(emu)[1] == STMT_NONE
 
+    @pytest.mark.callable_coverage("parse_line", executor="execute")
     def test_colon_multi_statement_line(self) -> None:
         """Colon-separated statements produce multiple IR_STMT records."""
         emu = _new_emu(b"A=1:PRINT A")
@@ -185,6 +189,7 @@ class TestParser:
         assert stmts[0][1] == STMT_LET
         assert stmts[1][1] == STMT_PRINT
 
+    @pytest.mark.callable_coverage("parse_line", executor="execute")
     def test_print_trailing_semicolon_sets_the_ir_newline_flag(self) -> None:
         """PRINT value; must preserve its no-newline behavior into codegen."""
         emu = _new_emu(b'PRINT ".";')
@@ -195,6 +200,7 @@ class TestParser:
             (IR_END, 0, 0, 0),
         ]
 
+    @pytest.mark.callable_coverage("parse_line", executor="execute")
     def test_rem_and_terminal_end_are_real_parser_productions(self) -> None:
         """REM consumes its body; END emits the stored-program stop statement."""
         emu = _new_emu(b"10 REM NOELS RETRO LAB BASIC BENCHMARK")
@@ -213,6 +219,8 @@ class TestParser:
         emu = _new_emu(b"END:PRINT 1")
         assert _execute(emu, "parse_line")
 
+    @pytest.mark.callable_coverage("parse_expression", executor="execute")
+    @pytest.mark.callable_coverage("parse_comparison", executor="execute")
     def test_expression_precedence_and_comparison(self) -> None:
         emu = _new_emu(b"1+2*3")
         assert not _execute(emu, "parse_expression")
@@ -255,6 +263,7 @@ class TestParser:
             b"1.2.3",
         ),
     )
+    @pytest.mark.callable_coverage("parse_expression", executor="execute")
     def test_expression_parser_rejects_malformed_input(self, source: bytes) -> None:
         emu = _new_emu(source)
         assert _execute(emu, "parse_expression")
@@ -275,6 +284,10 @@ class TestParser:
         emu = _new_emu(source)
         assert _execute(emu, routine)
 
+    @pytest.mark.callable_coverage("parse_gosub", executor="execute")
+    @pytest.mark.callable_coverage("parse_function_call", executor="execute")
+    @pytest.mark.callable_coverage("parse_for", executor="execute")
+    @pytest.mark.callable_coverage("parse_array_ref", executor="execute")
     def test_function_array_for_and_gosub_parsing(self) -> None:
         emu = _new_emu(b"SIN(1)")
         assert not _execute(emu, "parse_function_call")

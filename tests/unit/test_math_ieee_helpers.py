@@ -113,6 +113,7 @@ def _call(emu: C64Emu6502, name: str) -> int:
 class TestMathClassification:
     """IEEE classification helpers return A=1 for true, A=0 for false."""
 
+    @pytest.mark.callable_coverage("math_iszero", executor="execute")
     def test_iszero(self) -> None:
         emu = _new_emu()
         _set_fac(emu, "fac1", bytes(5))
@@ -120,6 +121,7 @@ class TestMathClassification:
         _set_fac(emu, "fac1", bytes([0x81, 0x00, 0x00, 0x00, 0x00]))
         assert _call(emu, "math_iszero") == 0
 
+    @pytest.mark.callable_coverage("math_isnan", executor="execute")
     def test_isnan(self) -> None:
         emu = _new_emu()
         _set_fac(emu, "fac1", bytes([0xFF, 0x80, 0x00, 0x00, 0x00]))
@@ -127,6 +129,7 @@ class TestMathClassification:
         _set_fac(emu, "fac1", bytes(5))
         assert _call(emu, "math_isnan") == 0
 
+    @pytest.mark.callable_coverage("math_isinf", executor="execute")
     def test_isinf(self) -> None:
         emu = _new_emu()
         _set_fac(emu, "fac1", bytes([0xFF, 0x80, 0x00, 0x00, 0x00]))
@@ -136,6 +139,7 @@ class TestMathClassification:
         _set_fac(emu, "fac1", bytes([0x81, 0x00, 0x00, 0x00, 0x00]))
         assert _call(emu, "math_isinf") == 0
 
+    @pytest.mark.callable_coverage("math_isfin", executor="execute")
     def test_isfin(self) -> None:
         emu = _new_emu()
         _set_fac(emu, "fac1", bytes([0x81, 0x00, 0x00, 0x00, 0x00]))
@@ -143,6 +147,7 @@ class TestMathClassification:
         _set_fac(emu, "fac1", bytes([0xFF, 0x80, 0x00, 0x00, 0x00]))  # inf
         assert _call(emu, "math_isfin") == 0
 
+    @pytest.mark.callable_coverage("math_isnorm", executor="execute")
     def test_isnorm(self) -> None:
         emu = _new_emu()
         _set_fac(emu, "fac1", bytes([0x80, 0x00, 0x00, 0x00, 0x00]))
@@ -152,6 +157,7 @@ class TestMathClassification:
         _set_fac(emu, "fac1", bytes([0xFF, 0x80, 0x00, 0x00, 0x00]))  # inf
         assert _call(emu, "math_isnorm") == 0
 
+    @pytest.mark.callable_coverage("math_issnan", executor="execute")
     def test_issnan(self) -> None:
         emu = _new_emu()
         _set_fac(emu, "fac1", bytes([0xFF, 0x00, 0x00, 0x00, 0x01]))
@@ -161,6 +167,7 @@ class TestMathClassification:
         _set_fac(emu, "fac1", bytes([0x81, 0x00, 0x00, 0x00, 0x00]))
         assert _call(emu, "math_issnan") == 0
 
+    @pytest.mark.callable_coverage("math_isunord", executor="execute")
     def test_isunord(self) -> None:
         emu = _new_emu()
         _set_fac(emu, "fac1", bytes([0x81, 0x00, 0x00, 0x00, 0x00]))
@@ -169,6 +176,7 @@ class TestMathClassification:
         _set_fac(emu, "fac1", bytes([0xFF, 0x80, 0x00, 0x00, 0x00]))
         assert _call(emu, "math_isunord") == 1
 
+    @pytest.mark.callable_coverage("math_sgnbit", executor="execute")
     def test_sgnbit(self) -> None:
         emu = _new_emu()
         _set_fac(emu, "fac1", bytes([0x81, 0x80, 0x00, 0x00, 0x00]))  # negative
@@ -183,12 +191,14 @@ class TestMathClassification:
 class TestMathFACManipulation:
     """Helpers that rewrite the FAC in place."""
 
+    @pytest.mark.callable_coverage("math_mant", executor="execute")
     def test_mant_sets_exponent_to_one(self) -> None:
         emu = _new_emu()
         _set_fac(emu, "fac1", bytes([0x85, 0x12, 0x34, 0x56, 0x78]))
         _call(emu, "math_mant")
         assert _get_fac(emu)[0] == 0x80
 
+    @pytest.mark.callable_coverage("math_logb", executor="execute")
     def test_logb_returns_unbiased_exponent(self) -> None:
         emu = _new_emu()
         _set_fac(emu, "fac1", bytes([0x81, 0x00, 0x00, 0x00, 0x00]))  # 1.0
@@ -196,6 +206,7 @@ class TestMathFACManipulation:
         # math_logb(FAC1) = unbiased exponent, published in FAC1 as integer 1.
         assert _get_fac(emu) == bytes([0x81, 0x00, 0x00, 0x00, 0x00])
 
+    @pytest.mark.callable_coverage("math_scalb", executor="execute")
     def test_scalb_adds_exponent(self) -> None:
         emu = _new_emu()
         _set_fac(emu, "fac1", bytes([0x80, 0x00, 0x00, 0x00, 0x00]))
@@ -203,6 +214,7 @@ class TestMathFACManipulation:
         _call(emu, "math_scalb")
         assert _get_fac(emu)[0] == 0x83
 
+    @pytest.mark.callable_coverage("math_nextup", executor="execute")
     def test_nextup_increments_mantissa(self) -> None:
         emu = _new_emu()
         _set_fac(emu, "fac1", bytes([0x80, 0x00, 0x00, 0x00, 0x00]))
@@ -210,6 +222,7 @@ class TestMathFACManipulation:
         fac = _get_fac(emu)
         assert fac[4] == 0x01 and fac[0] == 0x80
 
+    @pytest.mark.callable_coverage("math_nextdown", executor="execute")
     def test_nextdown_decrements_mantissa(self) -> None:
         emu = _new_emu()
         _set_fac(emu, "fac1", bytes([0x80, 0x00, 0x00, 0x00, 0x01]))
@@ -217,6 +230,7 @@ class TestMathFACManipulation:
         fac = _get_fac(emu)
         assert fac[4] == 0x00 and fac[0] == 0x80
 
+    @pytest.mark.callable_coverage("math_copysign", executor="execute")
     def test_copysign_takes_arg_sign(self) -> None:
         emu = _new_emu()
         _set_fac(emu, "fac1", bytes([0x81, 0x00, 0x00, 0x00, 0x00]))  # positive
@@ -224,12 +238,14 @@ class TestMathFACManipulation:
         _call(emu, "math_copysign")
         assert _get_fac(emu)[1] & 0x80
 
+    @pytest.mark.callable_coverage("math_totalorder", executor="execute")
     def test_totalorder_returns_sign_of_difference(self) -> None:
         emu = _new_emu()
         _set_fac(emu, "fac1", bytes([0x81, 0x00, 0x00, 0x00, 0x00]))  # 1.0
         _set_fac(emu, "arg", bytes([0x82, 0x00, 0x00, 0x00, 0x00]))  # 2.0
         assert _call(emu, "math_totalorder") & 0x80
 
+    @pytest.mark.callable_coverage("math_rint", executor="execute")
     def test_rint_truncates_to_integer(self) -> None:
         emu = _new_emu()
         _set_fac(emu, "fac1", bytes([0x81, 0x20, 0x00, 0x00, 0x00]))

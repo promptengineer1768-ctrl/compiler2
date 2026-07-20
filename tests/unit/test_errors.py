@@ -116,6 +116,13 @@ def _carry_is_clear(emu: C64Emu6502) -> bool:
 class TestErrors:
     """Runtime error helper tests."""
 
+    @pytest.mark.callable_coverage("err_undefdfunction", executor="execute_rts")
+    @pytest.mark.callable_coverage("err_type", executor="execute_rts")
+    @pytest.mark.callable_coverage("err_syntax", executor="execute_rts")
+    @pytest.mark.callable_coverage("err_raise_direct", executor="execute_rts")
+    @pytest.mark.callable_coverage("err_raise", executor="execute_rts")
+    @pytest.mark.callable_coverage("err_overflow", executor="execute_rts")
+    @pytest.mark.callable_coverage("err_outofmemory", executor="execute_rts")
     def test_error_codes_and_raise(self) -> None:
         dll = _dll_path()
         emu = C64Emu6502(lib_path=dll)
@@ -149,6 +156,9 @@ class TestErrors:
         assert emu.read_mem(errline + 1) == 0x12
         assert _carry_is_set(emu)
 
+    @pytest.mark.callable_coverage("err_save_cont", executor="execute_rts")
+    @pytest.mark.callable_coverage("err_from_kernal", executor="execute_rts")
+    @pytest.mark.callable_coverage("err_break", executor="execute_rts")
     def test_error_bridge_break_and_continuation(self) -> None:
         dll = _dll_path()
         emu = C64Emu6502(lib_path=dll)
@@ -226,6 +236,7 @@ class TestErrors:
         length = emu.read_mem(_load_symbol_address("err_message_length"))
         assert emu.read_mem_range(buffer, buffer + length - 1) == message
 
+    @pytest.mark.callable_coverage("err_raise", executor="execute_rts")
     def test_error_raise_unwinds_runtime_and_formats_program_line(self) -> None:
         """Program errors restore channels/graphics and format the source line."""
         emu = C64Emu6502(lib_path=_dll_path())

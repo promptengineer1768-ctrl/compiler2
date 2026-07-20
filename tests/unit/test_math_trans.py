@@ -133,6 +133,7 @@ def _decode_c64_float(data: bytes) -> float:
 class TestMathLog:
     """LOG (natural logarithm) function tests."""
 
+    @pytest.mark.callable_coverage("math_log", executor="execute_rts")
     def test_log_one(self) -> None:
         """LOG(1) should return 0."""
         dll = _dll_path()
@@ -155,6 +156,7 @@ class TestMathLog:
         result = _load_float_from_fac1(emu, zp_fac1)
         assert abs(result) < 1e-6, f"LOG(1) should be ~0, got {result}"
 
+    @pytest.mark.callable_coverage("math_log", executor="execute_rts")
     def test_log_e(self) -> None:
         """LOG(e) should return ~1.0."""
         dll = _dll_path()
@@ -172,6 +174,7 @@ class TestMathLog:
         result = _load_float_from_fac1(emu, zp_fac1)
         assert abs(result - 1.0) < 0.001, f"LOG(e) should be ~1.0, got {result}"
 
+    @pytest.mark.callable_coverage("math_log", executor="execute_rts")
     def test_log_positive(self) -> None:
         """LOG(10) should return ~2.302585."""
         dll = _dll_path()
@@ -203,6 +206,7 @@ class TestMathLog:
 class TestMathExp:
     """EXP function tests."""
 
+    @pytest.mark.callable_coverage("math_exp", executor="execute_rts")
     def test_exp_zero(self) -> None:
         """EXP(0) should return 1.0."""
         dll = _dll_path()
@@ -225,6 +229,7 @@ class TestMathExp:
         result = _load_float_from_fac1(emu, zp_fac1)
         assert abs(result - 1.0) < 0.001, f"EXP(0) should be ~1.0, got {result}"
 
+    @pytest.mark.callable_coverage("math_exp", executor="execute_rts")
     def test_exp_one(self) -> None:
         """EXP(1) should return ~e."""
         dll = _dll_path()
@@ -256,6 +261,7 @@ class TestMathExp:
 class TestMathSqr:
     """SQR (square root) function tests."""
 
+    @pytest.mark.callable_coverage("math_sqr", executor="execute_rts")
     def test_sqr_zero(self) -> None:
         """SQR(0) should return 0."""
         dll = _dll_path()
@@ -278,6 +284,7 @@ class TestMathSqr:
         result = _load_float_from_fac1(emu, zp_fac1)
         assert abs(result) < 1e-6, f"SQR(0) should be ~0, got {result}"
 
+    @pytest.mark.callable_coverage("math_sqr", executor="execute_rts")
     def test_sqr_four(self) -> None:
         """SQR(4) should return 2.0."""
         dll = _dll_path()
@@ -300,6 +307,7 @@ class TestMathSqr:
         result = _load_float_from_fac1(emu, zp_fac1)
         assert abs(result - 2.0) < 0.001, f"SQR(4) should be ~2.0, got {result}"
 
+    @pytest.mark.callable_coverage("math_sqr", executor="execute_rts")
     def test_sqr_nine(self) -> None:
         """SQR(9) should return 3.0."""
         dll = _dll_path()
@@ -328,6 +336,7 @@ class TestMathSqr:
 class TestMathPow:
     """Exponentiation (math_pow) tests."""
 
+    @pytest.mark.callable_coverage("math_pow", executor="execute_rts")
     def test_pow_two_three(self) -> None:
         """2^3 should return 8.0."""
         dll = _dll_path()
@@ -364,6 +373,7 @@ class TestMathPow:
 class TestMathRnd:
     """RND (random number) function tests."""
 
+    @pytest.mark.callable_coverage("math_rnd", executor="execute_rts")
     def test_rnd_negative_argument(self) -> None:
         """RND with negative argument should seed RNG."""
         dll = _dll_path()
@@ -386,6 +396,7 @@ class TestMathRnd:
         result = _load_float_from_fac1(emu, zp_fac1)
         assert 0.0 <= result <= 1.0, f"RND(-1) should be in [0,1], got {result}"
 
+    @pytest.mark.callable_coverage("math_rnd", executor="execute_rts")
     def test_rnd_positive_argument(self) -> None:
         """RND with positive argument should return value in [0,1]."""
         dll = _dll_path()
@@ -414,6 +425,7 @@ class TestMathRnd:
 class TestMathFma:
     """Fused multiply-add (math_fma) tests."""
 
+    @pytest.mark.callable_coverage("math_fma", executor="execute_rts")
     def test_fma_basic(self) -> None:
         """FMA(2, 3, 1) should return 7.0."""
         dll = _dll_path()
@@ -465,6 +477,7 @@ class TestMathIEEEExtensions:
         [(7.0, 3.0), (7.0, 2.0), (-7.0, 2.0), (5.0, 2.0)],
         ids=["positive", "nearest-not-fmod", "negative", "tie-even"],
     )
+    @pytest.mark.callable_coverage("math_remain", executor="execute_rts")
     def test_math_remain_matches_ieee_oracle(
         self, dividend: float, divisor: float
     ) -> None:
@@ -491,6 +504,7 @@ class TestMathBinary32Text:
     @pytest.mark.parametrize(
         "value", [0.0, 1.0, -2.5, math.pi], ids=["zero", "one", "negative", "pi"]
     )
+    @pytest.mark.callable_coverage("math_bin32str", executor="execute_rts")
     def test_bin32str_matches_python_binary32_oracle(self, value: float) -> None:
         """BIN32$ emits canonical big-endian IEEE binary32 text."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -511,6 +525,7 @@ class TestMathBinary32Text:
         ["3F800000", "$C0200000", "40490FDB"],
         ids=["one", "prefixed-negative", "pi"],
     )
+    @pytest.mark.callable_coverage("math_val32", executor="execute_rts")
     def test_val32_matches_python_binary32_oracle(self, text: str) -> None:
         """VAL32 parses canonical text through assembled production bytes."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -527,6 +542,7 @@ class TestMathBinary32Text:
             expected, rel=1e-6
         )
 
+    @pytest.mark.callable_coverage("math_min", executor="execute_rts")
     def test_math_min(self) -> None:
         """math_min should return the smaller value."""
         dll = _dll_path()
@@ -557,6 +573,7 @@ class TestMathBinary32Text:
         result = _load_float_from_fac1(emu, zp_fac1)
         assert abs(result - 3.0) < 0.001, f"math_min(5,3) should be ~3.0, got {result}"
 
+    @pytest.mark.callable_coverage("math_max", executor="execute_rts")
     def test_math_max(self) -> None:
         """math_max should return the larger value."""
         dll = _dll_path()
@@ -587,6 +604,7 @@ class TestMathBinary32Text:
         result = _load_float_from_fac1(emu, zp_fac1)
         assert abs(result - 5.0) < 0.001, f"math_max(5,3) should be ~5.0, got {result}"
 
+    @pytest.mark.callable_coverage("math_isnan", executor="execute_rts")
     def test_math_isnan(self) -> None:
         """math_isnan should return 1 for NaN, 0 for normal value."""
         dll = _dll_path()
@@ -611,6 +629,7 @@ class TestMathBinary32Text:
         result_a = emu.get_state().a
         assert result_a == 1, f"math_isnan(NaN) should return 1, got {result_a}"
 
+    @pytest.mark.callable_coverage("math_isinf", executor="execute_rts")
     def test_math_isinf(self) -> None:
         """math_isinf should return 1 for Infinity, 0 for normal value."""
         dll = _dll_path()

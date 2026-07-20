@@ -160,13 +160,37 @@ def _callable_coverage_claim(decorator: ast.expr) -> tuple[str, str] | None:
 
 
 def _function_calls_name(node: ast.FunctionDef | ast.AsyncFunctionDef, name: str) -> bool:
-    """Return whether a function body directly calls a named executor."""
-    return any(
-        isinstance(child, ast.Call)
-        and isinstance(child.func, ast.Name)
-        and child.func.id == name
-        for child in ast.walk(node)
-    )
+    """Return whether a function body directly calls a named executor.
+
+    Recognises both bare function calls (``execute_rts(...)``) and method
+    calls on emulator instances (``emu.execute_rts(...)`` or
+    ``emu.execute(...)``).  The conftest patches ``C64Emu6502.execute``
+    to call ``execute_rts``, so ``"execute"`` is treated as an alias when
+    *name* is ``"execute_rts"``.  ``_execute_routine`` is a thin wrapper
+    around ``emu.execute_rts`` so it is also recognised.  Common
+    test-file helpers (``_call``, ``_execute``, ``_run_paged``,
+    ``_invoke``, ``_run_xip``, ``_execute_xip_no_args``) are thin
+    wrappers around ``emu.execute()`` and are recognised for
+    ``executor="execute"``.
+    """
+    aliases = {name}
+    if name == "execute_rts":
+        aliases.add("execute")
+        aliases.add("_execute_routine")
+    if name == "execute":
+        aliases.update({
+            "_call", "_execute", "_run_paged", "_invoke",
+            "_run_xip", "_execute_xip_no_args", "_returns",
+        })
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call):
+            continue
+        func = child.func
+        if isinstance(func, ast.Name) and func.id in aliases:
+            return True
+        if isinstance(func, ast.Attribute) and func.attr in aliases:
+            return True
+    return False
 
 
 def validate_callable_coverage(

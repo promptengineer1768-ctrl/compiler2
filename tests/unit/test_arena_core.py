@@ -89,6 +89,9 @@ def _assert_valid(emu: C64Emu6502, handle: tuple[int, int]) -> None:
 class TestGeoramArenaCore:
     """Lifecycle, directory, integrity, and generation tests."""
 
+    @pytest.mark.callable_coverage("page_alloc_count", executor="execute")
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute")
+    @pytest.mark.callable_coverage("arena_check_integrity", executor="execute")
     def test_arena_init_all_constructs_manifest_directory(self) -> None:
         """Cold start creates all nine typed arenas and reserves 752 pages."""
         emu = _new_emulator()
@@ -103,6 +106,7 @@ class TestGeoramArenaCore:
         assert not failed
         assert free_lo | (free_hi << 8) == 1296
 
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute")
     def test_program_staging_arena_owns_full_whole_program_capacity(self) -> None:
         """The dedicated staging arena exposes all 128 reserved pages."""
         emu = _new_emulator()
@@ -114,6 +118,10 @@ class TestGeoramArenaCore:
         assert emu.read_mem(0xDEFF) == 0xA9
         assert _execute(emu, "arena_select_page", a=128, x=9, y=1)[2]
 
+    @pytest.mark.callable_coverage("page_alloc_count", executor="execute")
+    @pytest.mark.callable_coverage("arena_handle_valid", executor="execute")
+    @pytest.mark.callable_coverage("arena_destroy", executor="execute")
+    @pytest.mark.callable_coverage("arena_create", executor="execute")
     def test_single_create_destroy_and_generation_reuse(self) -> None:
         """Destroy frees pages and prevents stale handles after slot reuse."""
         emu = _new_emulator()
@@ -139,6 +147,12 @@ class TestGeoramArenaCore:
         assert arena_id2 == arena_id
         assert generation2 != generation
 
+    @pytest.mark.callable_coverage("georam_select", executor="execute")
+    @pytest.mark.callable_coverage("arena_reset", executor="execute")
+    @pytest.mark.callable_coverage("arena_invalidate_generation", executor="execute")
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute")
+    @pytest.mark.callable_coverage("arena_handle_valid", executor="execute")
+    @pytest.mark.callable_coverage("arena_get_handle", executor="execute")
     def test_reset_and_explicit_invalidation_reject_old_handles(self) -> None:
         """Each logical reset advances only the selected arena generation."""
         emu = _new_emulator()
@@ -169,6 +183,8 @@ class TestGeoramArenaCore:
         assert _execute(emu, "arena_get_handle", x=1, y=2)[2]
         assert not _execute(emu, "arena_get_handle", x=1, y=3)[2]
 
+    @pytest.mark.callable_coverage("arena_get_handle", executor="execute")
+    @pytest.mark.callable_coverage("arena_create", executor="execute")
     def test_get_handle_resolves_offset_to_backing_extent(self) -> None:
         """Arena-relative page offsets resolve to allocator extent handles."""
         emu = _new_emulator()
@@ -186,6 +202,7 @@ class TestGeoramArenaCore:
         _, _, failed = _execute(emu, "arena_get_handle", a=2, x=arena_id, y=generation)
         assert failed
 
+    @pytest.mark.callable_coverage("arena_create", executor="execute")
     def test_select_page_maps_arena_relative_pages_and_checks_bounds(self) -> None:
         """Arena-relative selections map distinct pages without exposing addresses."""
         emu = _new_emulator()
@@ -202,6 +219,8 @@ class TestGeoramArenaCore:
         assert emu.read_mem(0xDE00) == 0x41
         assert _execute(emu, "arena_select_page", a=2, x=arena_id, y=generation)[2]
 
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute")
+    @pytest.mark.callable_coverage("arena_check_integrity", executor="execute")
     def test_integrity_detects_canary_and_checksum_damage(self) -> None:
         """Directory corruption is rejected without affecting another arena."""
         emu = _new_emulator()
@@ -211,6 +230,9 @@ class TestGeoramArenaCore:
         assert _execute(emu, "arena_check_integrity", x=3, y=1)[2]
         _assert_valid(emu, (2, 1))
 
+    @pytest.mark.callable_coverage("arena_reset", executor="execute")
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute")
+    @pytest.mark.callable_coverage("arena_destroy", executor="execute")
     def test_directory_generation_tracks_mutations(self) -> None:
         """Global directory generation advances on reset and destroy."""
         emu = _new_emulator()

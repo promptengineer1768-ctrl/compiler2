@@ -131,6 +131,11 @@ def _carry_is_clear(emu: C64Emu6502) -> bool:
 class TestSystem:
     """Runtime system helper tests."""
 
+    @pytest.mark.callable_coverage("system_wait", executor="execute_rts")
+    @pytest.mark.callable_coverage("system_usr", executor="execute_rts")
+    @pytest.mark.callable_coverage("system_sys", executor="execute_rts")
+    @pytest.mark.callable_coverage("system_poke", executor="execute_rts")
+    @pytest.mark.callable_coverage("system_peek", executor="execute_rts")
     def test_peek_poke_sys_usr_wait(self) -> None:
         dll = _dll_path()
         emu = C64Emu6502(lib_path=dll)
@@ -206,6 +211,13 @@ class TestSystem:
         emu.execute(wait_addr, 10000)
         assert _carry_is_set(emu)
 
+    @pytest.mark.callable_coverage("system_ti_string_store", executor="execute_rts")
+    @pytest.mark.callable_coverage("system_ti_string_load", executor="execute_rts")
+    @pytest.mark.callable_coverage("system_ti_store", executor="execute_rts")
+    @pytest.mark.callable_coverage("system_ti_load", executor="execute_rts")
+    @pytest.mark.callable_coverage("str_from_bytes", executor="execute_rts")
+    @pytest.mark.callable_coverage("str_export_bytes", executor="execute_rts")
+    @pytest.mark.callable_coverage("arena_init_all", executor="execute_rts")
     def test_ti_clock_and_string_helpers(self) -> None:
         dll = _dll_path()
         emu = C64Emu6502(lib_path=dll)
@@ -311,6 +323,7 @@ class TestSystem:
             "vector-last",
         ],
     )
+    @pytest.mark.callable_coverage("system_poke", executor="execute_rts")
     def test_poke_uses_generated_protected_boundaries(
         self, address: int, protected: bool
     ) -> None:
@@ -328,6 +341,8 @@ class TestSystem:
         else:
             assert emu.read_mem(address) == (original ^ 0xFF)
 
+    @pytest.mark.callable_coverage("system_poke", executor="execute_rts")
+    @pytest.mark.callable_coverage("reu_xip_active", executor="execute_rts")
     def test_poke_protects_ce00_when_reu_xip_active(self) -> None:
         """$CE00 is protected only while reu_xip_active is set."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -353,6 +368,11 @@ class TestSystem:
         assert _carry_is_clear(emu)
         assert emu.read_mem(target) == (original ^ 0xFF)
 
+    @pytest.mark.callable_coverage("page_alloc_init", executor="execute_rts")
+    @pytest.mark.callable_coverage("fre_set_profile", executor="execute_rts")
+    @pytest.mark.callable_coverage("fre_set_export_bytes", executor="execute_rts")
+    @pytest.mark.callable_coverage("fre_query", executor="execute_rts")
+    @pytest.mark.callable_coverage("fre_init", executor="execute_rts")
     def test_fre_profile_expansion_and_export(self) -> None:
         """fre_query reports expansion page free vs export free bytes."""
         emu = C64Emu6502(lib_path=_dll_path())

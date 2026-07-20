@@ -128,6 +128,7 @@ def _read_c_string(emu: C64Emu6502, addr: int, limit: int = 80) -> bytes:
 class TestEditorSubmitLine:
     """Line entry tests."""
 
+    @pytest.mark.callable_coverage("editor_submit_line", executor="execute_rts")
     def test_submit_numbered_line(self) -> None:
         """editor_submit_line should store a numbered line."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -139,6 +140,7 @@ class TestEditorSubmitLine:
         state = emu.get_state()
         assert state.a is not None
 
+    @pytest.mark.callable_coverage("editor_submit_line", executor="execute_rts")
     def test_submit_direct_line(self) -> None:
         """editor_submit_line should execute a direct line."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -156,6 +158,7 @@ class TestEditorSubmitLine:
 class TestEditorDeleteLine:
     """Line deletion tests."""
 
+    @pytest.mark.callable_coverage("editor_delete_line", executor="execute")
     def test_delete_existing_line(self) -> None:
         """editor_delete_line should remove a line."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -170,6 +173,7 @@ class TestEditorDeleteLine:
 class TestEditorDetokenizeLine:
     """LIST conversion tests."""
 
+    @pytest.mark.callable_coverage("editor_detokenize_line", executor="execute_rts")
     def test_detokenize_empty_body_line(self) -> None:
         """editor_detokenize_line formats line number for an empty body."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -187,6 +191,7 @@ class TestEditorDetokenizeLine:
         text = _read_c_string(emu, text_addr)
         assert text.startswith(b"10")
 
+    @pytest.mark.callable_coverage("editor_detokenize_line", executor="execute_rts")
     def test_detokenize_print_token(self) -> None:
         """Token $99 (PRINT) expands to the keyword name."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -210,6 +215,7 @@ class TestEditorDetokenizeLine:
 class TestEditorListRange:
     """Range listing tests."""
 
+    @pytest.mark.callable_coverage("editor_list_range", executor="execute_rts")
     def test_list_range_empty_source(self) -> None:
         """Empty source pointer lists nothing and succeeds."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -222,6 +228,7 @@ class TestEditorListRange:
         emu.execute(_load_symbol_address("editor_list_range"), 50_000)
         assert not _carry_set(emu)
 
+    @pytest.mark.callable_coverage("editor_list_range", executor="execute_rts")
     def test_list_range_stock_linked_line(self) -> None:
         """Lists one stock-linked line inside the requested range."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -273,6 +280,7 @@ class TestEditorListRange:
 class TestEditorReadyTransition:
     """READY state transition tests."""
 
+    @pytest.mark.callable_coverage("editor_ready_transition", executor="execute")
     def test_ready_transition(self) -> None:
         """editor_ready_transition should update state to READY."""
         emu = C64Emu6502(lib_path=_dll_path())

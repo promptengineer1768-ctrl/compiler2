@@ -111,6 +111,9 @@ class TestGeoramDetect:
         emu.execute_rts(_load_symbol_address(routine), 10_000)
         assert (emu.get_state().p & 0x01) == 0
 
+    @pytest.mark.callable_coverage("detect_validate_profile", executor="execute_rts")
+    @pytest.mark.callable_coverage("detect_publish_profile", executor="execute_rts")
+    @pytest.mark.callable_coverage("detect_probe_aliasing", executor="execute_rts")
     def test_publish_profile_copies_capacity_and_returns_page_count(self) -> None:
         """detect_publish_profile publishes the measured capacity atomically."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -122,6 +125,7 @@ class TestGeoramDetect:
         emu.execute_rts(_load_symbol_address("detect_validate_profile"), 10_000)
         assert (emu.get_state().p & 0x01) == 0
 
+    @pytest.mark.callable_coverage("detect_georam", executor="execute_rts")
     def test_detect_absent_restores_state_and_fails(self) -> None:
         """detect_georam should fail cleanly when geoRAM pages alias."""
         dll = _dll_path()
@@ -146,6 +150,8 @@ class TestGeoramDetect:
         assert emu.read_mem(0xDFFF) == 0x12
         assert emu.read_mem(0xDFFE) == 0x34
 
+    @pytest.mark.callable_coverage("detect_validate_profile", executor="execute_rts")
+    @pytest.mark.callable_coverage("detect_georam", executor="execute_rts")
     def test_detect_present_publishes_profile(self) -> None:
         """detect_georam should publish a 512 KiB profile when pages are distinct."""
         dll = _dll_path()
@@ -165,6 +171,7 @@ class TestGeoramDetect:
         emu.execute(_load_symbol_address("detect_validate_profile"), 10_000)
         assert (emu.get_state().p & 0x01) == 0
 
+    @pytest.mark.callable_coverage("detect_georam", executor="execute_rts")
     def test_detect_undersized_georam_fails_cleanly(self) -> None:
         """detect_georam should reject geoRAM smaller than 512 KiB."""
         dll = _dll_path()
@@ -187,6 +194,8 @@ class TestGeoramDetect:
         assert emu.read_mem(0xDFFF) == 0x03
         assert emu.read_mem(0xDFFE) == 0x04
 
+    @pytest.mark.callable_coverage("detect_probe_aliasing", executor="execute_rts")
+    @pytest.mark.callable_coverage("detect_check_minimum", executor="execute_rts")
     def test_detect_aliasing_and_minimum_threshold(self) -> None:
         """Probe aliasing should distinguish absent and supported capacity."""
         dll = _dll_path()
@@ -204,6 +213,7 @@ class TestGeoramDetect:
         emu.execute(_load_symbol_address("detect_check_minimum"), 10_000)
         assert (emu.get_state().p & 0x01) == 0
 
+    @pytest.mark.callable_coverage("detect_check_minimum", executor="execute_rts")
     def test_minimum_threshold_rejects_undersized_capacity(self) -> None:
         """detect_check_minimum should reject capacities below 512 KiB."""
         dll = _dll_path()
@@ -220,6 +230,8 @@ class TestGeoramDetect:
         emu.execute(_load_symbol_address("detect_check_minimum"), 10_000)
         assert (emu.get_state().p & 0x01) == 0
 
+    @pytest.mark.callable_coverage("detect_save_state", executor="execute_rts")
+    @pytest.mark.callable_coverage("detect_restore_state", executor="execute_rts")
     def test_save_and_restore_round_trip(self) -> None:
         """detect_save_state and detect_restore_state should round-trip the map."""
         dll = _dll_path()
@@ -252,6 +264,7 @@ class TestGeoramDetect:
         [(512, 0x20), (1024, 0x40)],
         ids=["512k", "1m"],
     )
+    @pytest.mark.callable_coverage("detect_georam", executor="execute_rts")
     def test_detect_measures_actual_supported_capacity(
         self, capacity_kib: int, expected_blocks: int
     ) -> None:
@@ -272,6 +285,7 @@ class TestGeoramDetect:
         )
         assert (state.x | (state.y << 8)) == expected_blocks * 64
 
+    @pytest.mark.callable_coverage("detect_georam", executor="execute_rts")
     def test_detect_establishes_io_visibility_and_restores_hidden_mapping(self) -> None:
         """Detection must probe real hardware even when I/O starts hidden."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -305,6 +319,7 @@ class TestGeoramDetect:
         ],
         ids=["georam-only", "reu-only", "both-prefer-georam"],
     )
+    @pytest.mark.callable_coverage("detect_expansion", executor="execute_rts")
     def test_dual_detector_selects_one_store_and_publishes_profile(
         self,
         georam: bool,
@@ -341,6 +356,7 @@ class TestGeoramDetect:
         assert emu.read_mem(_load_symbol_address("detect_profile_n_fill")) == 32
         assert emu.read_mem(_load_symbol_address("detect_profile_generation")) != 0
 
+    @pytest.mark.callable_coverage("detect_expansion", executor="execute_rts")
     def test_dual_detector_rejects_neither_device(self) -> None:
         """Installation fails before publishing a store when neither probe passes."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -352,6 +368,8 @@ class TestGeoramDetect:
         assert emu.get_state().p & 0x01
         assert emu.read_mem(_load_symbol_address("detect_profile_store_kind")) == 0
 
+    @pytest.mark.callable_coverage("detect_validate_profile", executor="execute_rts")
+    @pytest.mark.callable_coverage("detect_expansion", executor="execute_rts")
     def test_dual_profile_integrity_detects_policy_corruption(self) -> None:
         """The immutable interval fingerprint covers policy, slots, and thresholds."""
         emu = C64Emu6502(lib_path=_dll_path())

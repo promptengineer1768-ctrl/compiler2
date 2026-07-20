@@ -21,7 +21,7 @@
       "source_section": "REQUIREMENTS.md#2.1",
       "design_section": "docs/EDITOR.md",
       "implementation": "src/resident/resident_main.asm",
-      "tests": ["test_resident_main", "test_loader_smoke"],
+      "tests": ["test_loader_smoke"],
       "status": "planned"
     },
     {
@@ -222,7 +222,7 @@
       "source_section": "REQUIREMENTS.md#8.5",
       "design_section": "REU_DESIGN.md",
       "implementation": "src/arena/georam_detect.asm",
-      "tests": ["test_georam_detect", "test_resident_main"],
+      "tests": ["test_georam_detect"],
       "status": "planned"
     },
     {

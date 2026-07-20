@@ -110,6 +110,9 @@ def _zp_address(name: str) -> int:
 class TestControl:
     """Runtime control helper tests."""
 
+    @pytest.mark.callable_coverage("ctrl_push_loop_frame", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctrl_pop_loop_frame", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctrl_check_stop", executor="execute_rts")
     def test_tagged_push_pop_and_stop_poll(self) -> None:
         dll = _dll_path()
         emu = C64Emu6502(lib_path=dll)
@@ -133,6 +136,16 @@ class TestControl:
         emu.execute(check_addr, 10000)
         assert emu.get_state().a == 0x01
 
+    @pytest.mark.callable_coverage("ctrl_return", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctrl_on_goto", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctrl_on_gosub", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctrl_loop_test", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctrl_gosub", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctrl_for_next", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctrl_for_init", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctrl_exit_loop", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctrl_end", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctrl_do_init", executor="execute_rts")
     def test_loop_and_branch_helpers(self) -> None:
         dll = _dll_path()
         emu = C64Emu6502(lib_path=dll)
@@ -218,6 +231,8 @@ class TestControl:
         ],
         ids=["positive-step", "negative-step", "signed-range"],
     )
+    @pytest.mark.callable_coverage("ctrl_for_next", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctrl_for_init", executor="execute_rts")
     def test_for_next_honors_signed_limit_and_step(
         self,
         start: int,
@@ -269,6 +284,8 @@ class TestControl:
         [(1, 126, 127, 1, 127), (2, 300, 301, 1, 301), (3, 300, 301, 1, 301)],
         ids=["int1", "int2", "int3"],
     )
+    @pytest.mark.callable_coverage("ctrl_for_next", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctrl_for_init", executor="execute_rts")
     def test_for_uses_compiler_assigned_integer_storage_type(
         self, value_type: int, start: int, limit: int, step: int, expected: int
     ) -> None:
@@ -296,6 +313,8 @@ class TestControl:
             actual |= emu.read_mem(variable + 1) << 8
         assert actual == expected
 
+    @pytest.mark.callable_coverage("ctrl_for_next", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctrl_for_init", executor="execute_rts")
     def test_generic_integer_for_promotes_int1_to_int2(self) -> None:
         """A non-specialized frame widens rather than wrapping an INT1 variable."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -315,6 +334,8 @@ class TestControl:
         assert emu.read_mem(descriptor + 1) == 2
         assert emu.read_mem(variable) | (emu.read_mem(variable + 1) << 8) == 128
 
+    @pytest.mark.callable_coverage("ctrl_for_next", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctrl_for_init", executor="execute_rts")
     def test_int3_for_comparison_is_unsigned(self) -> None:
         """INT3 high-bit values sort above every nonnegative signed limit."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -333,6 +354,9 @@ class TestControl:
         assert emu.read_mem(variable) | (emu.read_mem(variable + 1) << 8) == 32768
         assert emu.get_state().p & 1
 
+    @pytest.mark.callable_coverage("math_float_to_int", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctrl_for_next", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctrl_for_init", executor="execute_rts")
     def test_generic_float_for_uses_packed_numeric_runtime(self) -> None:
         """A FLOAT loop variable advances through the canonical packed math path."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -372,6 +396,8 @@ class TestControl:
         [(0, 0, False), (1, 0, True), (1, 1, False), (3, 0, False), (3, 1, True)],
         ids=["bare", "while-false", "while-true", "until-false", "until-true"],
     )
+    @pytest.mark.callable_coverage("ctrl_loop_test", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctrl_do_init", executor="execute_rts")
     def test_loop_condition_modes(
         self, flags: int, condition: int, exits: bool
     ) -> None:
@@ -390,6 +416,10 @@ class TestControl:
         emu.execute(_load_symbol_address("ctrl_loop_test"), 10000)
         assert bool(emu.get_state().p & 1) is exits
 
+    @pytest.mark.callable_coverage("ctrl_stop", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctrl_exit_loop", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctrl_do_init", executor="execute_rts")
+    @pytest.mark.callable_coverage("ctrl_cont", executor="execute_rts")
     def test_continuation_snapshot_validates_generation_and_restores_stack(
         self,
     ) -> None:
@@ -423,6 +453,7 @@ class TestControl:
         emu.execute(_load_symbol_address("ctrl_cont"), 10000)
         assert (emu.get_state().p & 1) == 1
 
+    @pytest.mark.callable_coverage("ctrl_end", executor="execute_rts")
     def test_end_exits_graphics_and_enters_development_ready_shell(self) -> None:
         """END restores text mode and publishes the development READY prompt."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -444,6 +475,7 @@ class TestControl:
         assert emu.read_mem(0xD021) == 0x0E
         assert emu.read_mem(_load_symbol_address("kernal_output_byte")) == 0x0D
 
+    @pytest.mark.callable_coverage("ctrl_end", executor="execute_rts")
     def test_end_enters_standalone_inspection_shell(self) -> None:
         """Standalone END restores text mode and remains in its READY loop."""
         emu = C64Emu6502(lib_path=_dll_path())

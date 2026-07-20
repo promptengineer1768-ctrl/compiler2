@@ -105,6 +105,9 @@ def _query(emu: C64Emu6502, routine: str) -> int:
 class TestGeoramPageAlloc:
     """Bitmap, fragmentation, bounds, and handle-integrity coverage."""
 
+    @pytest.mark.callable_coverage("page_alloc_largest", executor="execute")
+    @pytest.mark.callable_coverage("page_alloc_init", executor="execute")
+    @pytest.mark.callable_coverage("page_alloc_count", executor="execute")
     def test_init_count_largest_and_arbitrary_free(self) -> None:
         """Initialization exposes all 2,048 pages and frees non-LIFO extents."""
         emu = _new_emulator()
@@ -126,6 +129,9 @@ class TestGeoramPageAlloc:
         assert _query(emu, "page_alloc_count") == 0
         assert _query(emu, "page_alloc_largest") == 0
 
+    @pytest.mark.callable_coverage("page_alloc_largest", executor="execute")
+    @pytest.mark.callable_coverage("page_alloc_init", executor="execute")
+    @pytest.mark.callable_coverage("page_alloc_count", executor="execute")
     def test_alignment_changes_fragmentation_shape(self) -> None:
         """Power-of-two alignment leaves the expected leading gap."""
         emu = _new_emulator()
@@ -140,6 +146,8 @@ class TestGeoramPageAlloc:
         [(0, 1, 1), (1, 0, 1), (1, 3, 1), (1, 1, 0)],
         ids=["zero-count", "zero-alignment", "non-power-two", "zero-owner"],
     )
+    @pytest.mark.callable_coverage("page_alloc_init", executor="execute")
+    @pytest.mark.callable_coverage("page_alloc_count", executor="execute")
     def test_invalid_requests_fail(
         self, count: int, alignment: int, owner: int
     ) -> None:
@@ -149,6 +157,7 @@ class TestGeoramPageAlloc:
         assert _request(emu, count, alignment=alignment, owner=owner)[2]
         assert _query(emu, "page_alloc_count") == 2048
 
+    @pytest.mark.callable_coverage("page_alloc_init", executor="execute")
     def test_generation_rejects_stale_and_double_free_handles(self) -> None:
         """A freed slot cannot be reused through an older generation handle."""
         emu = _new_emulator()
@@ -165,6 +174,8 @@ class TestGeoramPageAlloc:
         assert _free(emu, (slot, generation))
         assert not _free(emu, (new_slot, new_generation))
 
+    @pytest.mark.callable_coverage("page_check_in_range", executor="execute")
+    @pytest.mark.callable_coverage("page_alloc_init", executor="execute")
     def test_check_in_range_validates_live_handle(self) -> None:
         """Bounds checks accept live extents and reject stale handles."""
         emu = _new_emulator()
@@ -179,6 +190,8 @@ class TestGeoramPageAlloc:
         emu.set_y(generation)
         assert _execute(emu, "page_check_in_range")
 
+    @pytest.mark.callable_coverage("page_alloc_init", executor="execute")
+    @pytest.mark.callable_coverage("georam_select", executor="execute")
     def test_clear_extent_zeroes_pages_and_restores_selection(self) -> None:
         """Extent clearing uses the real GeoRAM window and preserves its caller."""
         emu = _new_emulator()

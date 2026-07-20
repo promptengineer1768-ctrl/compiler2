@@ -52,7 +52,7 @@ def test_noel_program_store_holds_every_numbered_line() -> None:
         return
     # The adapter's 48-byte descriptor is not source storage: the current
     # design writes numbered lines transactionally to the geoRAM PS stream.
-    assert "program_tx_put_line" in source
+    assert "GEORAM_ROUTINE_ID_PROGRAM_TX_PUT_LINE" in source
     assert "program_store_copy_line_body_at" in source
     assert "Program bytes are in geoRAM" in source
 

@@ -30,8 +30,6 @@
       ],
       "affected_task_sections": ["T9.4", "T10.1", "T10.2", "T10.3", "T12.1", "T12.2"],
       "invalidated_checklist_items": [
-        {"section": "T10.1", "task": "Generate and validate `build/compiler.bin`"},
-        {"section": "T10.1", "task": "Generate and validate `build/build_manifest.json`"},
         {"section": "T10.3", "task": "Validate resident byte budget within limit"},
         {"section": "T10.3", "task": "Validate standalone COMPILE budget"},
         {"section": "T12.2", "task": "Move cold helpers to geoRAM (no eligible resident cold helpers; generated report records keep-resident decisions)"}
@@ -49,7 +47,7 @@
       ],
       "affected_task_sections": ["T10.4", "T11.1", "T11.2", "T11.3", "T11.4", "T11.5", "T13.1"],
       "invalidated_checklist_items": [
-        {"section": "T10.4", "task": "Validate every callable has unit coverage"},
+        {"section": "T10.4", "task": "Validate every callable has unit coverage — `build/phase1_for_benchmark.json`"},
         {"section": "T11.2", "task": "Validate all BASIC V2 keywords covered with real VICE captures"},
         {"section": "T11.2", "task": "Verify all E2E tests pass with no placeholder catalog fixtures marked as"},
         {"section": "T11.3", "task": "Validate all BASIC V3.5 keywords covered with real Plus/4 VICE captures"},

@@ -131,6 +131,7 @@ def _decode_c64_float(data: bytes) -> float:
 class TestMathSin:
     """SIN function tests."""
 
+    @pytest.mark.callable_coverage("math_sin", executor="execute_rts")
     def test_sin_zero(self) -> None:
         """SIN(0) should return 0."""
         dll = _dll_path()
@@ -153,6 +154,7 @@ class TestMathSin:
         result = _load_float_from_fac1(emu, zp_fac1)
         assert abs(result) < 1e-6, f"SIN(0) should be ~0, got {result}"
 
+    @pytest.mark.callable_coverage("math_sin", executor="execute_rts")
     def test_sin_half_pi(self) -> None:
         """SIN(pi/2) should return ~1.0."""
         dll = _dll_path()
@@ -170,6 +172,7 @@ class TestMathSin:
         result = _load_float_from_fac1(emu, zp_fac1)
         assert abs(result - 1.0) < 0.001, f"SIN(pi/2) should be ~1.0, got {result}"
 
+    @pytest.mark.callable_coverage("math_sin", executor="execute_rts")
     def test_sin_negative(self) -> None:
         """SIN(-x) should return -SIN(x)."""
         dll = _dll_path()
@@ -193,6 +196,7 @@ class TestMathSin:
 class TestMathCos:
     """COS function tests."""
 
+    @pytest.mark.callable_coverage("math_cos", executor="execute_rts")
     def test_cos_zero(self) -> None:
         """COS(0) should return 1.0."""
         dll = _dll_path()
@@ -215,6 +219,7 @@ class TestMathCos:
         result = _load_float_from_fac1(emu, zp_fac1)
         assert abs(result - 1.0) < 0.001, f"COS(0) should be ~1.0, got {result}"
 
+    @pytest.mark.callable_coverage("math_cos", executor="execute_rts")
     def test_cos_pi(self) -> None:
         """COS(pi) should return ~-1.0."""
         dll = _dll_path()
@@ -238,6 +243,7 @@ class TestMathCos:
 class TestMathTan:
     """TAN function tests."""
 
+    @pytest.mark.callable_coverage("math_tan", executor="execute_rts")
     def test_tan_zero(self) -> None:
         """TAN(0) should return 0."""
         dll = _dll_path()
@@ -260,6 +266,7 @@ class TestMathTan:
         result = _load_float_from_fac1(emu, zp_fac1)
         assert abs(result) < 1e-6, f"TAN(0) should be ~0, got {result}"
 
+    @pytest.mark.callable_coverage("math_tan", executor="execute_rts")
     def test_tan_quarter_pi(self) -> None:
         """TAN(pi/4) should return ~1.0."""
         dll = _dll_path()
@@ -283,6 +290,7 @@ class TestMathTan:
 class TestMathAtn:
     """ATN function tests."""
 
+    @pytest.mark.callable_coverage("math_atn", executor="execute_rts")
     def test_atn_zero(self) -> None:
         """ATN(0) should return 0."""
         dll = _dll_path()
@@ -305,6 +313,7 @@ class TestMathAtn:
         result = _load_float_from_fac1(emu, zp_fac1)
         assert abs(result) < 1e-6, f"ATN(0) should be ~0, got {result}"
 
+    @pytest.mark.callable_coverage("math_atn", executor="execute_rts")
     def test_atn_one(self) -> None:
         """ATN(1) should return ~pi/4."""
         dll = _dll_path()
@@ -328,6 +337,7 @@ class TestMathAtn:
         expected = math.pi / 4
         assert abs(result - expected) < 0.001, f"ATN(1) should be ~pi/4, got {result}"
 
+    @pytest.mark.callable_coverage("math_atn", executor="execute_rts")
     def test_atn_negative(self) -> None:
         """ATN(-1) should return ~-pi/4."""
         dll = _dll_path()
@@ -352,6 +362,7 @@ class TestMathAtn:
 class TestMathAcs:
     """ACS (arccosine) function tests."""
 
+    @pytest.mark.callable_coverage("math_acs", executor="execute_rts")
     def test_acs_one(self) -> None:
         """ACS(1) should return 0."""
         dll = _dll_path()
@@ -374,6 +385,7 @@ class TestMathAcs:
         result = _load_float_from_fac1(emu, zp_fac1)
         assert abs(result) < 0.001, f"ACS(1) should be ~0, got {result}"
 
+    @pytest.mark.callable_coverage("math_acs", executor="execute_rts")
     def test_acs_zero(self) -> None:
         """ACS(0) should return ~pi/2."""
         dll = _dll_path()
@@ -397,6 +409,7 @@ class TestMathAcs:
         expected = math.pi / 2
         assert abs(result - expected) < 0.001, f"ACS(0) should be ~pi/2, got {result}"
 
+    @pytest.mark.callable_coverage("math_acs", executor="execute_rts")
     def test_acs_half_general_path(self) -> None:
         """ACS(0.5) must traverse the real ASN/SQR/ATN production path."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -416,6 +429,7 @@ class TestMathAcs:
 class TestMathAsn:
     """ASN (arcsine) function tests."""
 
+    @pytest.mark.callable_coverage("math_asn", executor="execute_rts")
     def test_asn_zero(self) -> None:
         """ASN(0) should return 0."""
         dll = _dll_path()
@@ -438,6 +452,7 @@ class TestMathAsn:
         result = _load_float_from_fac1(emu, zp_fac1)
         assert abs(result) < 1e-6, f"ASN(0) should be ~0, got {result}"
 
+    @pytest.mark.callable_coverage("math_asn", executor="execute_rts")
     def test_asn_one(self) -> None:
         """ASN(1) should return ~pi/2."""
         dll = _dll_path()
@@ -461,6 +476,7 @@ class TestMathAsn:
         expected = math.pi / 2
         assert abs(result - expected) < 0.001, f"ASN(1) should be ~pi/2, got {result}"
 
+    @pytest.mark.callable_coverage("math_asn", executor="execute_rts")
     def test_asn_half_general_path(self) -> None:
         """ASN(0.5) must execute the general identity, not an exact shortcut."""
         emu = C64Emu6502(lib_path=_dll_path())

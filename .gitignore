@@ -22,3 +22,5 @@ Thumbs.db
 /debug_*.py
 /tools/_vice_*.py
 /tools/_dis_hang.py
+
+.env

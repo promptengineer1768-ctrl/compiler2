@@ -196,6 +196,7 @@ def _select_page(
 class TestVariables:
     """Real-byte coverage for variable descriptor helpers."""
 
+    @pytest.mark.callable_coverage("var_set_type", executor="execute")
     def test_set_type_updates_valid_descriptor_and_rejects_unknown_kind(self) -> None:
         """var_set_type validates the VD before changing its canonical kind."""
         emu = _new_emulator()
@@ -214,6 +215,9 @@ class TestVariables:
         )
         assert emu.read_mem(descriptor + 2) == KIND_FLOAT
 
+    @pytest.mark.callable_coverage("var_store_int", executor="execute")
+    @pytest.mark.callable_coverage("var_resolve", executor="execute")
+    @pytest.mark.callable_coverage("var_load_int", executor="execute")
     def test_direct_int_descriptor_load_store_and_type_rejection(self) -> None:
         """Integer helpers use typed VD/VI records, not raw pointer records."""
         emu = _new_emulator()
@@ -238,6 +242,8 @@ class TestVariables:
         emu.write_mem(descriptor + 2, KIND_FLOAT)
         assert _call(emu, "var_load_int", x=descriptor & 0xFF, y=descriptor >> 8)
 
+    @pytest.mark.callable_coverage("var_store_float", executor="execute")
+    @pytest.mark.callable_coverage("var_load_float", executor="execute")
     def test_arena_backed_float_descriptor_validates_generation(self) -> None:
         """Arena-backed descriptors validate the scalar arena handle before use."""
         emu = _new_emulator()
@@ -282,6 +288,8 @@ class TestVariables:
         emu.write_mem(descriptor + 7, 0x7F)
         assert _call(emu, "var_load_float", x=descriptor & 0xFF, y=descriptor >> 8)
 
+    @pytest.mark.callable_coverage("var_load_float", executor="execute")
+    @pytest.mark.callable_coverage("math_float_to_int", executor="execute")
     def test_float_load_reclassifies_fac_for_downstream_math(self) -> None:
         """Loading a packed float restores the FAC representation tag."""
         emu = _new_emulator()
@@ -300,6 +308,9 @@ class TestVariables:
         state = emu.get_state()
         assert (int(state.x), int(state.y)) == (2, 0)
 
+    @pytest.mark.callable_coverage("var_store_string", executor="execute")
+    @pytest.mark.callable_coverage("var_load_string", executor="execute")
+    @pytest.mark.callable_coverage("str_len", executor="execute")
     def test_string_descriptor_load_store_and_zero_length(self) -> None:
         """String variables own canonical SD copies and release replaced values."""
         emu = _new_emulator()
@@ -333,6 +344,7 @@ class TestVariables:
         assert bytes(emu.read_mem(cell + i) for i in range(12))[3] == 0
         assert _call(emu, "str_len", x=stale & 0xFF, y=stale >> 8)
 
+    @pytest.mark.callable_coverage("var_resolve", executor="execute")
     def test_descriptor_shape_and_stale_handles_are_rejected(self) -> None:
         """Malformed descriptors fail instead of resolving accidental raw pointers."""
         emu = _new_emulator()
@@ -362,6 +374,7 @@ class TestVariables:
             pytest.param(KIND_STRING, 0xF4, 0xF5, id="string"),
         ],
     )
+    @pytest.mark.callable_coverage("var_resolve", executor="execute")
     def test_arena_payload_must_fit_inside_georam_page(
         self, kind: int, valid_offset: int, invalid_offset: int
     ) -> None:
@@ -383,6 +396,8 @@ class TestVariables:
         emu.write_mem(descriptor + 9, invalid_offset)
         assert _call(emu, "var_resolve", x=descriptor & 0xFF, y=descriptor >> 8)
 
+    @pytest.mark.callable_coverage("var_promote_to_float", executor="execute")
+    @pytest.mark.callable_coverage("var_coerce", executor="execute")
     def test_promote_and_coerce_report_loss_or_unsupported_targets(self) -> None:
         """Coercion succeeds only for supported lossless conversions."""
         emu = _new_emulator()

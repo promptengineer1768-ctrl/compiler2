@@ -140,6 +140,7 @@ def _emulator_models_ram_under_io() -> bool:
 class TestRamUnderIoGate:
     """Unit tests for the RAM-under-I/O gate."""
 
+    @pytest.mark.callable_coverage("ram_under_io_enter", executor="execute_rts")
     def test_gate_enter_sets_all_ram_and_sei(self) -> None:
         """ram_under_io_enter must set $01 to $30 and set interrupt disable flag."""
         if not _emulator_models_ram_under_io():
@@ -177,6 +178,7 @@ class TestRamUnderIoGate:
             new_state.p & 0x04
         ) != 0, "ram_under_io_enter must set the Interrupt Disable (I) flag"
 
+    @pytest.mark.callable_coverage("ram_under_io_exit", executor="execute_rts")
     def test_gate_exit_restores_mapping_and_cli(self) -> None:
         """ram_under_io_exit must restore the mapping to $35 and clear interrupt disable."""
         if not _emulator_models_ram_under_io():
@@ -208,6 +210,7 @@ class TestRamUnderIoGate:
             new_state.p & 0x04
         ) == 0, "ram_under_io_exit must restore interrupt state (CLI)"
 
+    @pytest.mark.callable_coverage("ram_under_io_copy_in", executor="execute_rts")
     def test_copy_in_copies_to_under_io_ram(self) -> None:
         """ram_under_io_copy_in copies a buffer into the $D000-$DFFF RAM area."""
         if not _emulator_models_ram_under_io():
@@ -252,6 +255,7 @@ class TestRamUnderIoGate:
         copied = emu.read_mem_range(0xD100, 0xD100 + len(src_data) - 1)
         assert copied == src_data
 
+    @pytest.mark.callable_coverage("ram_under_io_copy_out", executor="execute_rts")
     def test_copy_out_reads_from_under_io_ram(self) -> None:
         """ram_under_io_copy_out copies from the $D000-$DFFF RAM area back to normal RAM."""
         if not _emulator_models_ram_under_io():

@@ -125,6 +125,9 @@ def _records(emu: C64Emu6502) -> bytes:
 class TestIrBuilder:
     """IR emission behavior tests."""
 
+    @pytest.mark.callable_coverage("ir_finish_line", executor="execute")
+    @pytest.mark.callable_coverage("ir_emit_stmt", executor="execute")
+    @pytest.mark.callable_coverage("ir_emit_expr", executor="execute")
     def test_init_statement_expression_and_finish(self) -> None:
         emu = _new_emu()
         assert _records(emu) == b""
@@ -168,6 +171,8 @@ class TestIrBuilder:
         _emit(emu, name, (0xA1, 0xB2, 0xC3))
         assert _records(emu) == bytes([opcode, 0xA1, 0xB2, 0xC3])
 
+    @pytest.mark.callable_coverage("ir_init", executor="execute")
+    @pytest.mark.callable_coverage("ir_emit_branch", executor="execute")
     def test_init_resets_existing_records(self) -> None:
         emu = _new_emu()
         _emit(emu, "ir_emit_branch", (1, 2, 3))
@@ -175,6 +180,8 @@ class TestIrBuilder:
         _run_paged(emu, "ir_init")
         assert _records(emu) == b""
 
+    @pytest.mark.callable_coverage("ir_get_buf_ptr", executor="execute")
+    @pytest.mark.callable_coverage("ir_emit_stmt", executor="execute")
     def test_get_buf_ptr_tracks_current_write_position(self) -> None:
         """ir_get_buf_ptr returns the address following the last real record."""
         emu = _new_emu()

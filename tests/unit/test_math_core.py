@@ -122,6 +122,11 @@ def _get_float_bytes(emu: C64Emu6502, base: int) -> bytes:
 class TestMathCore:
     """Runtime math helper tests."""
 
+    @pytest.mark.callable_coverage("math_sub", executor="execute_rts")
+    @pytest.mark.callable_coverage("math_sqr", executor="execute_rts")
+    @pytest.mark.callable_coverage("math_mul", executor="execute_rts")
+    @pytest.mark.callable_coverage("math_div", executor="execute_rts")
+    @pytest.mark.callable_coverage("math_add", executor="execute_rts")
     def test_add_sub_mul_div(self) -> None:
         dll = _dll_path()
         emu = C64Emu6502(lib_path=dll)
@@ -221,6 +226,8 @@ class TestMathCore:
     @pytest.mark.parametrize(
         "packed", [bytes(5), bytes.fromhex("0100000000"), bytes.fromhex("ff7fffffff")]
     )
+    @pytest.mark.callable_coverage("math_negate", executor="execute_rts")
+    @pytest.mark.callable_coverage("math_abs", executor="execute_rts")
     def test_unary_float_exact_exponent_extremes(
         self, routine: str, packed: bytes
     ) -> None:
@@ -239,6 +246,7 @@ class TestMathCore:
         assert _get_float_bytes(emu, _zp_address("zp_fac1")) == bytes(expected)
         assert (emu.get_state().p & 0x01) == 0
 
+    @pytest.mark.callable_coverage("math_div", executor="execute_rts")
     def test_divide_by_zero_reports_error_without_fabricating_result(self) -> None:
         """Division by zero sets carry and preserves the dividend in FAC."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -251,6 +259,7 @@ class TestMathCore:
         assert (emu.get_state().p & 0x01) == 1
         assert _get_float_bytes(emu, _zp_address("zp_fac1")) == original
 
+    @pytest.mark.callable_coverage("math_mul", executor="execute_rts")
     def test_float_underflow_flushes_to_canonical_zero(self) -> None:
         """A result below the smallest packed exponent becomes positive zero."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -263,6 +272,8 @@ class TestMathCore:
         assert _get_float_bytes(emu, _zp_address("zp_fac1")) == bytes(5)
         assert (emu.get_state().p & 0x01) == 0
 
+    @pytest.mark.callable_coverage("math_mul", executor="execute_rts")
+    @pytest.mark.callable_coverage("math_add", executor="execute_rts")
     @pytest.mark.parametrize("routine", ["math_add", "math_mul", "math_div"])
     def test_float_overflow_reports_error(self, routine: str) -> None:
         """Exponent overflow is reported instead of publishing wrapped success."""
@@ -282,6 +293,12 @@ class TestMathCore:
 
         assert (emu.get_state().p & 0x01) == 1
 
+    @pytest.mark.callable_coverage("math_sgn", executor="execute_rts")
+    @pytest.mark.callable_coverage("math_negate", executor="execute_rts")
+    @pytest.mark.callable_coverage("math_int_to_float", executor="execute_rts")
+    @pytest.mark.callable_coverage("math_int", executor="execute_rts")
+    @pytest.mark.callable_coverage("math_float_to_int", executor="execute_rts")
+    @pytest.mark.callable_coverage("math_abs", executor="execute_rts")
     def test_unary_and_conversion_helpers(self) -> None:
         dll = _dll_path()
         emu = C64Emu6502(lib_path=dll)
@@ -329,6 +346,8 @@ class TestMathCore:
         emu.execute(_load_symbol_address("math_float_to_int"), 10000)
         assert (emu.get_state().p & 0x01) == 1
 
+    @pytest.mark.callable_coverage("math_int_to_float", executor="execute_rts")
+    @pytest.mark.callable_coverage("math_float_to_int", executor="execute_rts")
     @pytest.mark.parametrize("value", [-32768, -1, 0, 1, 32767])
     def test_signed_int_float_conversion_boundaries(self, value: int) -> None:
         """Every signed 16-bit boundary round-trips through packed float."""
@@ -346,6 +365,7 @@ class TestMathCore:
         assert (state.x | (state.y << 8)) == (value & 0xFFFF)
         assert (state.p & 0x01) == 0
 
+    @pytest.mark.callable_coverage("math_float_to_int", executor="execute_rts")
     @pytest.mark.parametrize("value", [-32769.0, 32768.0, -1.5, 1.5])
     def test_float_to_int_rejects_out_of_range_or_fractional_values(
         self, value: float
@@ -365,6 +385,7 @@ class TestMathCore:
             (1.0, 0x01, False, False),
         ],
     )
+    @pytest.mark.callable_coverage("math_fpe", executor="execute_rts")
     def test_fpe_sets_branch_flags(
         self, value: float, expected_a: int, negative: bool, zero: bool
     ) -> None:
@@ -396,6 +417,7 @@ class TestMathCore:
             (-2147483648.0, -2147483648.0),
         ],
     )
+    @pytest.mark.callable_coverage("math_int", executor="execute_rts")
     def test_int_uses_stock_floor_semantics(
         self, value: float, expected: float
     ) -> None:
@@ -413,6 +435,7 @@ class TestMathCore:
     @pytest.mark.parametrize(
         ("value", "expected"), [(-9.0, -1.0), (0.0, 0.0), (9.0, 1.0)]
     )
+    @pytest.mark.callable_coverage("math_sgn", executor="execute_rts")
     def test_sgn_direct_cases(self, value: float, expected: float) -> None:
         """SGN returns a packed -1, 0, or 1 for every sign class."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -426,6 +449,7 @@ class TestMathCore:
         ("left", "right", "expected"),
         [(3.0, 7.0, 0xFF), (7.0, 7.0, 0x00), (9.0, -2.0, 0x01)],
     )
+    @pytest.mark.callable_coverage("math_cmp", executor="execute_rts")
     def test_cmp_direct_ordering(
         self, left: float, right: float, expected: int
     ) -> None:
@@ -458,6 +482,7 @@ class TestMathCore:
             "int2-max-vs-int3-high-bit",
         ],
     )
+    @pytest.mark.callable_coverage("math_cmp", executor="execute_rts")
     def test_mixed_adaptive_integer_comparison(
         self,
         left_type: int,
@@ -479,6 +504,12 @@ class TestMathCore:
         emu.execute(_load_symbol_address("math_cmp"), 10000)
         assert emu.get_state().a == expected
 
+    @pytest.mark.callable_coverage("math_sub_int", executor="execute_rts")
+    @pytest.mark.callable_coverage("math_mul_int", executor="execute_rts")
+    @pytest.mark.callable_coverage("math_fpe", executor="execute_rts")
+    @pytest.mark.callable_coverage("math_div_int", executor="execute_rts")
+    @pytest.mark.callable_coverage("math_cmp", executor="execute_rts")
+    @pytest.mark.callable_coverage("math_add_int", executor="execute_rts")
     def test_cmp_fpe_and_int_helpers(self) -> None:
         dll = _dll_path()
         emu = C64Emu6502(lib_path=dll)
@@ -595,6 +626,7 @@ class TestMathCore:
             assert expected is not None
             assert result == (expected & 0xFFFF).to_bytes(2, "little")
 
+    @pytest.mark.callable_coverage("math_u24_to_float", executor="execute_rts")
     @pytest.mark.parametrize("value", [0, 1, 255, 65535, 0xFFFFFF])
     def test_unsigned_24_bit_to_float_is_exact(self, value: int) -> None:
         """The shared u24 conversion exactly covers the complete jiffy domain."""

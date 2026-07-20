@@ -157,6 +157,8 @@ def _generation(emu: C64Emu6502) -> int:
 class TestSemantic:
     """Semantic policy behavior executed through linked assembly bytes."""
 
+    @pytest.mark.callable_coverage("semantic_set_dialect", executor="execute")
+    @pytest.mark.callable_coverage("semantic_check_for_dialect", executor="execute")
     def test_dialect_query_set_and_generation_invalidation(self) -> None:
         emu = _new_emu()
         _run_paged(emu, "semantic_check_for_dialect")
@@ -180,6 +182,8 @@ class TestSemantic:
         assert _carry_is_set(emu)
         assert _generation(emu) == initial + 1
 
+    @pytest.mark.callable_coverage("semantic_validate_dialect", executor="execute")
+    @pytest.mark.callable_coverage("semantic_set_dialect", executor="execute")
     def test_keyword_token_is_checked_against_current_dialect(self) -> None:
         emu = _new_emu()
         for token in (TOKEN_PRINT, TOKEN_FOR):
@@ -218,6 +222,7 @@ class TestSemantic:
             TOKEN_BASIC3_5,
         ],
     )
+    @pytest.mark.callable_coverage("semantic_classify_direct", executor="execute")
     def test_direct_only_statement_tokens_are_rejected_in_programs(
         self, token: int
     ) -> None:
@@ -227,6 +232,7 @@ class TestSemantic:
         assert _carry_is_set(emu)
         assert emu.get_state().a == token
 
+    @pytest.mark.callable_coverage("semantic_classify_direct", executor="execute")
     @pytest.mark.parametrize("token", [TOKEN_PRINT, TOKEN_FOR, TOKEN_NEXT])
     def test_program_statement_tokens_are_not_direct_only(self, token: int) -> None:
         emu = _new_emu()
@@ -252,6 +258,8 @@ class TestSemantic:
         assert _carry_is_set(emu) is (error != 0)
         assert emu.get_state().a == error
 
+    @pytest.mark.callable_coverage("semantic_validate_line", executor="execute")
+    @pytest.mark.callable_coverage("semantic_set_dialect", executor="execute")
     def test_line_validation_applies_dialect_without_publishing_state(self) -> None:
         emu = _new_emu(b"DO:LOOP")
         _call_source(emu, "semantic_validate_line")
@@ -277,6 +285,8 @@ class TestSemantic:
         _call_source(emu, "semantic_validate_line")
         assert not _carry_is_set(emu)
 
+    @pytest.mark.callable_coverage("semantic_set_numeric_mode", executor="execute")
+    @pytest.mark.callable_coverage("semantic_get_numeric_mode", executor="execute")
     def test_numeric_mode_round_trips_and_invalidates_generation(self) -> None:
         emu = _new_emu()
         initial = _generation(emu)

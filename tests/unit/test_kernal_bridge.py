@@ -119,6 +119,10 @@ def _linked_bytes(address: int, length: int) -> bytes:
 class TestKernalBridge:
     """Bridge behavior tests."""
 
+    @pytest.mark.callable_coverage("kernal_setnam", executor="execute_rts")
+    @pytest.mark.callable_coverage("kernal_setlfs", executor="execute_rts")
+    @pytest.mark.callable_coverage("kernal_save", executor="execute_rts")
+    @pytest.mark.callable_coverage("kernal_load", executor="execute_rts")
     def test_workspace_calls_store_parameters_and_restore_mapping(self) -> None:
         """SETLFS, SETNAM, LOAD, and SAVE should update their workspace bytes."""
         dll = _dll_path()
@@ -159,6 +163,11 @@ class TestKernalBridge:
 
         assert emu.get_state().p & 0x04
 
+    @pytest.mark.callable_coverage("kernal_open", executor="execute_rts")
+    @pytest.mark.callable_coverage("kernal_clrchn", executor="execute_rts")
+    @pytest.mark.callable_coverage("kernal_close", executor="execute_rts")
+    @pytest.mark.callable_coverage("kernal_chkout", executor="execute_rts")
+    @pytest.mark.callable_coverage("kernal_chkin", executor="execute_rts")
     def test_open_close_and_channel_calls_preserve_interrupt_state(self) -> None:
         """OPEN/CLOSE/CHKIN/CHKOUT/CLRCHN should restore the incoming I flag."""
         dll = _dll_path()
@@ -192,6 +201,15 @@ class TestKernalBridge:
             )
             assert (emu.get_state().p & 0x04) == 0
 
+    @pytest.mark.callable_coverage("kernal_udtim", executor="execute_rts")
+    @pytest.mark.callable_coverage("kernal_stop", executor="execute_rts")
+    @pytest.mark.callable_coverage("kernal_settim", executor="execute_rts")
+    @pytest.mark.callable_coverage("kernal_scnkey", executor="execute_rts")
+    @pytest.mark.callable_coverage("kernal_readst", executor="execute_rts")
+    @pytest.mark.callable_coverage("kernal_rdtim", executor="execute_rts")
+    @pytest.mark.callable_coverage("kernal_getin", executor="execute_rts")
+    @pytest.mark.callable_coverage("kernal_chrout", executor="execute_rts")
+    @pytest.mark.callable_coverage("kernal_chrin", executor="execute_rts")
     def test_io_and_time_helpers_round_trip(self) -> None:
         """CHRIN/CHROUT, RDTIM/SETTIM, UDTIM, STOP, and SCNKEY should be bounded."""
         dll = _dll_path()
@@ -282,6 +300,7 @@ class TestKernalBridge:
         body = _linked_bytes(_load_symbol_address(routine), 16)
         assert bytes((0x20, vector & 0xFF, vector >> 8)) in body
 
+    @pytest.mark.callable_coverage("kernal_print_packed", executor="execute_rts")
     def test_packed_static_string_emitter_masks_final_character(self) -> None:
         """The shared emitter stops on bit 7 and outputs the masked byte."""
         emu = C64Emu6502(lib_path=_dll_path())
@@ -297,6 +316,7 @@ class TestKernalBridge:
         assert emu.read_mem(output) == 0x0D
         assert (emu.get_state().p & 1) == 0
 
+    @pytest.mark.callable_coverage("kernal_readst", executor="execute_rts")
     @pytest.mark.parametrize("irq_disabled", [False, True])
     def test_bridge_returns_kernal_results_and_restores_mapping_and_irq_state(
         self, irq_disabled: bool

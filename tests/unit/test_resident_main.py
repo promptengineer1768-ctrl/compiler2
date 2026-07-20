@@ -111,6 +111,9 @@ def _linked_bytes(address: int, length: int) -> bytes:
 class TestResidentMain:
     """Resident loop and boundary assertion tests."""
 
+    @pytest.mark.callable_coverage("resident_submit_line", executor="execute_rts")
+    @pytest.mark.callable_coverage("resident_poll_input", executor="execute_rts")
+    @pytest.mark.callable_coverage("georam_select", executor="execute_rts")
     def test_poll_and_submit_line_use_screen_capture(self) -> None:
         """resident helpers should drain a byte and submit the captured line."""
         dll = _dll_path()
@@ -160,6 +163,7 @@ class TestResidentMain:
         assert bytes([0x4C, resident_main & 0xFF, resident_main >> 8]) in body
         assert 0x60 not in body
 
+    @pytest.mark.callable_coverage("georam_select", executor="execute_rts")
     def test_handle_key_echoes_printable_and_submits_on_return(self) -> None:
         """Printable keys paint the cell; RETURN captures and submits the line."""
         dll = _dll_path()
@@ -295,6 +299,8 @@ class TestResidentMain:
         assert emu.read_mem(0x0034) == 0xA0
         assert emu.read_mem(0x0016) == 0x19
 
+    @pytest.mark.callable_coverage("resident_assert_boundary", executor="execute_rts")
+    @pytest.mark.callable_coverage("georam_select", executor="execute_rts")
     def test_boundary_assertion_checks_port_decimal_and_mirror(self) -> None:
         """resident_assert_boundary should fail when the caller state drifts."""
         dll = _dll_path()

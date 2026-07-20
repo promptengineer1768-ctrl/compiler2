@@ -146,6 +146,7 @@ def _seed_data_stream(emu: C64Emu6502, stream: int, generation: int) -> DataStat
 class TestDataRead:
     """READ statement data stream tests."""
 
+    @pytest.mark.callable_coverage("data_read", executor="execute_rts")
     def test_data_read_advances_cursor_and_stores_bytes(self) -> None:
         """READ consumes nonzero DATA bytes, stores them, and stops at marker."""
         emu = _new_emu()
@@ -173,6 +174,7 @@ class TestDataRead:
         assert _carry_is_set(emu)
         assert _read_word(emu, state.data_ptr) == stream + 2
 
+    @pytest.mark.callable_coverage("data_read", executor="execute_rts")
     def test_data_read_rejects_stale_generation_without_store(self) -> None:
         """READ fails when DATA generation no longer matches source generation."""
         emu = _new_emu()
@@ -197,6 +199,7 @@ class TestDataRead:
 class TestDataRestore:
     """RESTORE statement tests."""
 
+    @pytest.mark.callable_coverage("data_restore", executor="execute_rts")
     def test_data_restore_without_target_uses_saved_start(self) -> None:
         """Targetless RESTORE resets cursor to the published DATA start."""
         emu = _new_emu()
@@ -210,6 +213,7 @@ class TestDataRestore:
         assert not _carry_is_set(emu)
         assert _read_word(emu, state.data_ptr) == 0x1820
 
+    @pytest.mark.callable_coverage("data_restore", executor="execute_rts")
     def test_data_restore_with_line_target_sets_cursor(self) -> None:
         """RESTORE with a resolved target cursor publishes that cursor."""
         emu = _new_emu()
