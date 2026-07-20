@@ -78,11 +78,18 @@ class TestGeneratedMemoryMap:
     """Cross-artifact checks for the generated linked image layout."""
 
     def test_segments_are_sorted_and_non_overlapping(self) -> None:
-        """Segments must appear in ascending order and not overlap."""
+        """Segments must appear in ascending order and not overlap.
+
+        geoRAM XIP pages legitimately link at the shared $DE00 window base, so
+        they are excluded from the linear-order/overlap check; every other
+        segment must ascend without overlap.
+        """
         segments = _parse_segments(_load_text(COMPILER_MAP))
         previous_end = -1
         previous_name = "<start>"
         for segment in segments:
+            if segment["name"].startswith("GEORAM_PAGE") or segment["start"] == 0xDE00:
+                continue
             assert segment["start"] > previous_end, (
                 f"{segment['name']} starts at {segment['start']:04X}, "
                 f"overlapping {previous_name} ending at {previous_end:04X}"
@@ -111,6 +118,11 @@ class TestGeneratedMemoryMap:
             end = int(segment["end"])
             assert end < 0xFFF9
             if name.startswith("GEORAM_PAGE") or start == 0xDE00:
+                continue
+            # IO_COLD links in the I/O window ($D000) but is a geoRAM-backed cold
+            # pack excluded from the loader-resident payload (see
+            # extract_segments.GEORAM_BACKED_SEGMENTS); it is not payload.
+            if name == "IO_COLD" or 0xD000 <= start <= 0xDFFF:
                 continue
             if name in cold_high or start >= 0xE000:
                 # Named cold-high segments and any other RAM_HIGH placement.

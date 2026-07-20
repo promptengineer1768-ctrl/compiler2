@@ -279,8 +279,8 @@ if ($C1541Path) {
 }
 if ($LASTEXITCODE -ne 0) { throw "D64 packaging failed." }
 
-& $Python tools/phase1_for_benchmark.py --json-out "$OutDir/phase1_for_benchmark.json"
-if ($LASTEXITCODE -ne 0) { throw "Phase 1 FOR benchmark report generation failed." }
+& $Python tools/phase1_for_benchmark.py --measure-native-fixture --json-out "$OutDir/phase1_for_benchmark.json"
+if ($LASTEXITCODE -ne 0) { throw "Phase 1 FOR benchmark measurement failed." }
 
 & $Python `
     tools/generate_build_reports.py --build-dir $OutDir
@@ -296,5 +296,15 @@ if ($LASTEXITCODE -ne 0) { throw "Build manifest generation failed." }
 
 & $Python tools/validate_build.py --all
 if ($LASTEXITCODE -ne 0) { throw "Post-build validation failed." }
+
+# 8. Callable coverage report (T10.4). Generates build/test_coverage.json from
+#    the production/test entry manifests. Coverage completeness is asserted by
+#    tests/system/test_test_harness.py::TestCallableCoverage, not by failing the
+#    build, so the report artifact is always produced for downstream audit.
+Write-Host "`n=== Generating callable coverage report ===" -ForegroundColor Green
+& $Python tools/test_harness.py --validate-coverage
+if ($LASTEXITCODE -ne 0) {
+    Write-Warning "Callable coverage incomplete (see build/test_coverage.json); the TestCallableCoverage suite tracks the remaining entries."
+}
 
 Write-Host "`nBuild completed successfully!" -ForegroundColor Green

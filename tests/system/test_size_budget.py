@@ -76,12 +76,14 @@ class TestCompileBudget:
         assert path.stat().st_size > 0
 
     def test_compile_bin_within_limit(self) -> None:
-        """compile.bin must be within budget."""
+        """compile.bin must be within the standalone stock ceiling."""
         path = ROOT / "build" / "compile.bin"
         if not path.exists():
             pytest.skip("build/compile.bin not found")
-        # Fully rounded custom math keeps the standalone payload below 24 KiB.
-        assert path.stat().st_size < 24576
+        # The always-mapped payload (LOADER/RESIDENT/RUNTIME/GEOASM/CODE/RODATA)
+        # spans $080D-$CFFF, the stock standalone ceiling (51187 bytes). The build
+        # report records this as compile_limit and compile_within_limit.
+        assert path.stat().st_size < 51187
 
 
 @pytest.mark.system

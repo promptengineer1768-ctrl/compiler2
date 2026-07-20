@@ -68,11 +68,14 @@ loaded. A graphics-mode
 export may use `$D000-$D7FF` RAM beneath I/O only through the documented banking
 gates and only when the graphics memory contract permits it.
 
-The current development ceiling for `build/compile.bin` is 48 KiB. The image
-must include the always-mapped RUNTIME, GEOASM, and CODE segments so absolute
-calls from the resident editor and geoRAM XIP entry stubs reach real code
-(expression evaluation, PRINT, wedge, math). Expansion still holds arenas,
-program store, and page-packed entry directories.
+The current development ceiling for `build/compile.bin` is the stock standalone
+span `$080D-$CFFF` (51187 bytes), recorded as `compile_limit` in
+`build/size_report.json` and enforced by `validate_build.py`. The image must
+include the always-mapped RUNTIME, GEOASM, and CODE segments so absolute calls
+from the resident editor and geoRAM XIP entry stubs reach real code (expression
+evaluation, PRINT, wedge, math). Expansion still holds arenas, program store, and
+page-packed entry directories. (An earlier note approximated this as "48 KiB";
+the exact linked ceiling is 51187 bytes.)
 
 ## geoRAM
 

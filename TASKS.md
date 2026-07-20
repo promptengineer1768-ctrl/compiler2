@@ -2453,10 +2453,10 @@ status, not missing behavior.
 - [x] Implement generated reference validation
 - [x] Implement stale file detection
 - [x] Implement build fingerprint computation
-- [~] Generate and validate `build/compiler.bin`
+- [x] Generate and validate `build/compiler.bin`
 - [x] Generate and validate `build/compiler.map`
 - [x] Generate and validate `build/compiler.lbl`
-- [~] Generate and validate `build/build_manifest.json`
+- [x] Generate and validate `build/build_manifest.json`
 - [x] Generate and validate `build/loader_manifest.json`
 - [x] Generate and validate `build/size_report.json`
 
@@ -2537,7 +2537,15 @@ python tools/validate_build.py --budgets
 - [x] Implement `collect_assembly_entries` — coverage matrix
 - [x] Implement `replay_boundary` — boundary replay
 - [x] Implement `run_smoke_selection` / `run_full_selection`
-- [~] Validate every callable has unit coverage
+- [~] Validate every callable has unit coverage — `build/phase1_for_benchmark.json`
+  now records a measured Phase 1 FOR/NEXT result (1 C64 jiffy, `status: pass`,
+  `build.ps1` runs `phase1_for_benchmark.py --measure-native-fixture`); `build.ps1`
+  emits `build/test_coverage.json` via `tools/test_harness.py --validate-coverage`.
+  Remaining gap: 0 of 402 production callables carry the required
+  `@pytest.mark.callable_coverage("entry", executor=...)` direct-execution claim,
+  so `TestCallableCoverage::test_all_routines_have_tests` still fails. Every
+  production callable needs a real direct unit test annotated with that marker;
+  this is a large dedicated effort tracked here rather than weakened.
 
 **REFACTOR phase:**
 - [x] Verify all system tests pass

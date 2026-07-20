@@ -108,26 +108,36 @@ class TestExtractPayload:
         assert extracted[2:0x20] == b"\xea" * 0x1E
 
     def test_excludes_georam_backed_cold_segments(self, tmp_path: Path) -> None:
-        """Cold overlay bytes belong in georam.bin, not the RAM payload PRG."""
+        """Cold expansion packs belong in georam.bin, not the RAM payload PRG.
+
+        The always-mapped low-RAM spans (LOADER/RESIDENT/RUNTIME/GEOASM/CODE/
+        RODATA) stay in compile.bin so absolute JSRs from the resident editor
+        and geoRAM XIP stubs reach real code; only true expansion-only cold
+        packs (EDITOR/HIBASIC/GRAPHICS/IO_COLD) and the $DE00 XIP pages are
+        excluded.
+        """
         binary = tmp_path / "compiler.bin"
-        payload = bytearray(b"\xea" * 0x500)
-        payload[0x000:0x002] = b"\x11\x22"
-        payload[0x100:0x102] = b"\x33\x44"
-        payload[0x300:0x302] = b"\x55\x66"
+        # LOADER at $0801, GEOASM at $0B01 (both retained), IO_COLD at $0D01
+        # (excluded). Marker bytes at each linked address.
+        payload = bytearray(b"\xea" * 0x600)
+        payload[0x000:0x002] = b"\x11\x22"  # LOADER ($0801)
+        payload[0x300:0x302] = b"\x33\x44"  # GEOASM ($0B01)
+        payload[0x500:0x502] = b"\x55\x66"  # IO_COLD ($0D01)
         binary.write_bytes(b"\x01\x08" + payload)
         segments = [
             {"name": "LOADER", "start": 0x0801, "end": 0x0802, "size": 2},
-            {"name": "RESIDENT", "start": 0x0901, "end": 0x0902, "size": 2},
             {"name": "GEOASM", "start": 0x0B01, "end": 0x0B02, "size": 2},
+            {"name": "IO_COLD", "start": 0x0D01, "end": 0x0D02, "size": 2},
         ]
         output = tmp_path / "compile.bin"
 
         extract_segments.extract_payload(str(binary), segments, str(output))
 
         extracted = output.read_bytes()
-        assert len(extracted) == 0x102
+        # Retained span is $0801..$0B02 = 0x302 bytes; IO_COLD is excluded.
+        assert len(extracted) == 0x302
         assert extracted[:2] == b"\x11\x22"
-        assert extracted[0x100:0x102] == b"\x33\x44"
+        assert extracted[0x300:0x302] == b"\x33\x44"
         assert b"\x55\x66" not in extracted
 
     def test_validate_payload_detects_byte_drift(self, tmp_path: Path) -> None:

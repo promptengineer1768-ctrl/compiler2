@@ -396,9 +396,7 @@ class TestCrossArtifactValidators:
             in errors
         )
 
-        layout = json.loads(
-            (tmp_path / "reu_layout.json").read_text(encoding="utf-8")
-        )
+        layout = json.loads((tmp_path / "reu_layout.json").read_text(encoding="utf-8"))
         # restore dual then claim live execution
         generate_expansion_contracts.write(tmp_path)
         layout = json.loads(layout_path.read_text(encoding="utf-8"))
@@ -436,6 +434,7 @@ class TestCrossArtifactValidators:
                             "name": "token_init",
                             "target_placement": "expansion_xip",
                             "conformance": "conforming",
+                            "xip_page": 2,
                         }
                     ]
                 }
@@ -451,7 +450,9 @@ class TestCrossArtifactValidators:
             routine_directory_path=directory_path,
         )
 
-        assert any("direct jsr to expansion_xip routine token_init" in e for e in errors)
+        assert any(
+            "direct jsr to expansion_xip routine token_init" in e for e in errors
+        )
         assert any(
             "conforming expansion_xip routine lacks geoRAM entry" in e for e in errors
         )
