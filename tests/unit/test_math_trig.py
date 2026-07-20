@@ -1,4 +1,4 @@
-﻿"""Unit tests for trigonometric math routines (math_trig.asm).
+"""Unit tests for trigonometric math routines (math_trig.asm).
 
 Tests verify SIN, COS, TAN, ATN, ACS, and ASN functions against stock
 BASIC V2 values and legacy project Python proxy accuracy fixtures.
@@ -106,7 +106,6 @@ def _load_compiler_image(emu: C64Emu6502) -> None:
     if hibasic_path.exists():
         emu.write_mem_range(0xE000, hibasic_path.read_bytes())
         emu.write_mem(0x0001, 0x35)
-    setattr(emu, "_compiler2_real_bytes_only", True)
 
 
 def _load_float_from_fac1(emu: C64Emu6502, zp_fac1: int) -> float:

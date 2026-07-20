@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "audit_date": "2026-07-18",
+  "purpose": "Records completion claims invalidated by the Phase 14 conformance audit. A claim remains invalidated until its named production evidence is current and passing.",
+  "claims": [
+    {
+      "id": "CCL-001",
+      "scope": "T9.1-T9.3",
+      "claim": "Loader, compiler initialization, and compressor integration are production-complete.",
+      "status": "invalidated",
+      "requirements": ["R2", "R2.1", "R8", "R8.3", "R8.4", "RREU-5"],
+      "evidence": [
+        {"kind": "build", "path": "build/pre_migration_baseline.json", "status": "failing", "reason": "Baseline captures current artifacts but e2e_execution is not_captured and keyword matrix implementation is incomplete."},
+        {"kind": "architecture", "path": "src/arena/overlay_dispatch.asm", "status": "failing", "reason": "REU overlay execution path is absent."}
+      ],
+      "affected_task_sections": ["T9.1", "T9.2", "T9.3"],
+      "invalidated_checklist_items": [
+        {"section": "T9.1", "task": "Implement REU detect / fingerprint skip-reload / dual D64 install path"}
+      ]
+    },
+    {
+      "id": "CCL-002",
+      "scope": "T9.4, T10.1-T10.3, T12.1-T12.2",
+      "claim": "The release artifacts are current, validated, and within their memory budgets.",
+      "status": "invalidated",
+      "requirements": ["R7.1", "R7.3", "R12.1"],
+      "evidence": [
+        {"kind": "link", "path": "build/compiler.cfg", "status": "failing", "reason": "Release packaging and budgets remain under Phase 14 recovery; compressor/high-RAM path is not accepted as complete."},
+        {"kind": "artifact", "path": "build/build_manifest.json", "status": "failing", "reason": "A clean build fingerprint exists, but expansion-native and dual-device release acceptance criteria remain unmet."}
+      ],
+      "affected_task_sections": ["T9.4", "T10.1", "T10.2", "T10.3", "T12.1", "T12.2"],
+      "invalidated_checklist_items": [
+        {"section": "T10.1", "task": "Generate and validate `build/compiler.bin`"},
+        {"section": "T10.1", "task": "Generate and validate `build/build_manifest.json`"},
+        {"section": "T10.3", "task": "Validate resident byte budget within limit"},
+        {"section": "T10.3", "task": "Validate standalone COMPILE budget"},
+        {"section": "T12.2", "task": "Move cold helpers to geoRAM (no eligible resident cold helpers; generated report records keep-resident decisions)"}
+      ]
+    },
+    {
+      "id": "CCL-003",
+      "scope": "T10.4, T11.1-T11.5, T13.1",
+      "claim": "The test harness, VICE E2E suite, hardware coverage, and smoke selection prove production behavior.",
+      "status": "invalidated",
+      "requirements": ["R3", "R3.1", "R3.2", "R13", "R13.1"],
+      "evidence": [
+        {"kind": "e2e", "path": "build/pre_migration_baseline.json", "status": "skipped", "reason": "No accepted VICE execution capture exists; bounded keyword-matrix execution did not complete."},
+        {"kind": "coverage", "path": "tests/e2e/cases/keyword_matrix.yaml", "status": "failing", "reason": "Only 20 of 81 keyword/mode cells are implemented."}
+      ],
+      "affected_task_sections": ["T10.4", "T11.1", "T11.2", "T11.3", "T11.4", "T11.5", "T13.1"],
+      "invalidated_checklist_items": [
+        {"section": "T10.4", "task": "Validate every callable has unit coverage"},
+        {"section": "T11.2", "task": "Validate all BASIC V2 keywords covered with real VICE captures"},
+        {"section": "T11.2", "task": "Verify all E2E tests pass with no placeholder catalog fixtures marked as"},
+        {"section": "T11.3", "task": "Validate all BASIC V3.5 keywords covered with real Plus/4 VICE captures"},
+        {"section": "T11.3", "task": "Verify all E2E tests pass with no placeholder catalog fixtures marked as"},
+        {"section": "T11.4", "task": "Verify all IEEE E2E tests pass with reviewed oracle fixtures, not catalog"},
+        {"section": "T13.1", "task": "Mark stable E2E tests as `smoke`"},
+        {"section": "T13.1", "task": "Validate smoke selection covers all critical paths"},
+        {"section": "T13.1", "task": "Validate smoke selection runs in < 60 seconds"},
+        {"section": "T13.1", "task": "Verify smoke selection is stable across runs"}
+      ]
+    },
+    {
+      "id": "CCL-004",
+      "scope": "Expansion-native execution across Phases 9-13",
+      "claim": "Compiler/editor code executes via the expansion-native dispatcher on both geoRAM and REU profiles.",
+      "status": "invalidated",
+      "requirements": ["R8", "R8.4", "RREU-5", "RREU-9"],
+      "evidence": [
+        {"kind": "xip_path", "path": "build/xip_path_audit.json", "status": "failing", "reason": "68 direct jsr/jmp calls target expansion_xip symbols (token/parser/IR/codegen/math/graphics); conforming geoRAM directory coverage is present after hygiene fix."},
+        {"kind": "placement", "path": "build/compiler.map", "status": "failing", "reason": "Many geoasm-classified bodies still execute as low-RAM mirrors; only page-bound pilots use GEORAM_PAGE segments with gate entry."}
+      ],
+      "affected_task_sections": ["T9.1", "T9.2", "T10.1", "T11.1", "T12.1"],
+      "invalidated_checklist_items": [
+        {"section": "T12.1", "task": "Add geoRAM page budget tracking to build"}
+      ]
+    }
+  ]
+}

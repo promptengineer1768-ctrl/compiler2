@@ -74,7 +74,6 @@ def _new_emulator(*, georam_kib: int | None, kernal_stubs: bool = False) -> Any:
     payload = (ROOT / "build" / "compiler.bin").read_bytes()
     load_address = payload[0] | (payload[1] << 8)
     emu.write_mem_range(load_address, payload[2:])
-    setattr(emu, "_compiler2_real_bytes_only", True)
     emu.set_georam_enabled(False)
     if georam_kib is not None:
         emu.load_georam(b"\x00" * georam_kib * 1024)
@@ -121,7 +120,11 @@ class TestLoaderCore:
 
         assert (state.p & 0x01) == 0
         assert (state.x, state.y) == (0x00, 0x08)
-        assert emu.read_mem(0x0001) == 0x30
+        # The detector canonically selects the full memory map (LORAM/HIRAM/
+        # CHAREN all visible) before probing; on real hardware a CPU `sta $01`
+        # leaves the port at CPU_PORT_CANONICAL ($35), which is the expected
+        # settled state after detection.
+        assert emu.read_mem(0x0001) == 0x35
 
     def test_memory_paging_selects_the_requested_four_kib_page(self) -> None:
         """Four-KiB page five maps to GeoRAM block one, page sixteen."""
@@ -153,8 +156,8 @@ class TestLoaderCore:
         count = _load_symbol_address("georam_stage_page_count")
         assert count - stage == 2 + 2 * 256
 
-    def test_entry_contains_detection_and_compiler_init_handoff(self) -> None:
-        """The fixed loader page must detect, install, restore mapping, then jump to init."""
+    def test_entry_contains_detection_and_compiler_bootstrap_handoff(self) -> None:
+        """The loader enters the pre-gate bootstrap, never an XIP mirror directly."""
         entry = _load_symbol_address("loader_entry")
         code = _linked_bytes(entry, 0x100 - (entry & 0xFF))
 
@@ -165,7 +168,7 @@ class TestLoaderCore:
             code, 0x20, _load_symbol_address("loader_restore_banking")
         )
         assert _contains_absolute_transfer(
-            code, 0x4C, _load_symbol_address("compiler_init")
+            code, 0x4C, _load_symbol_address("compiler_bootstrap")
         )
 
     def test_loader_detect_prefers_georam_when_both_present(self) -> None:
@@ -253,9 +256,9 @@ class TestLoaderCore:
         emu.write_mem(_load_symbol_address("expansion_image_fingerprint"), candidate)
         emu.write_mem(_load_symbol_address("loader_sequence_phase"), 0)
 
-        # Plant RTS at compiler_init so the non-returning handoff returns without
-        # init_clear_bss wiping loader/expansion BSS (which would hide skip success).
-        emu.write_mem(_load_symbol_address("compiler_init"), 0x60)
+        # Plant RTS at the loader-facing bootstrap so the non-returning handoff
+        # returns without clearing loader/expansion BSS in this focused test.
+        emu.write_mem(_load_symbol_address("compiler_bootstrap"), 0x60)
         state = _run(emu, "loader_entry", 1_000_000)
         phase = emu.read_mem(_load_symbol_address("loader_sequence_phase"))
         assert phase != 0xFF

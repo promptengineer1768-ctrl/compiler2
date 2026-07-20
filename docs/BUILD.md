@@ -173,8 +173,8 @@ build/
   loader_manifest.json
   reu_loader_manifest.json
   routine_directory.json
-  overlay_directory.json
-  reu_layout.json
+  overlay_directory.json       # geoRAM XIP directory from linked placements
+  reu_layout.json              # dual REU planned records; patch-only honesty
   arena_layout.json
   runtime_abi.json
   production_entries.json
@@ -257,6 +257,22 @@ Packaging must validate:
 - D64 directory filenames and file types for `BASICV3`, `GEORAM`, and `REU`;
 - agreement with `loader_manifest.json` and `reu_loader_manifest.json`.
 
+### Dual-device expansion contracts (`overlay_directory.json` / `reu_layout.json`)
+
+`tools/generate_expansion_contracts.py` derives both contracts from the linked
+`routine_directory.json` and the packaged REU patch manifest:
+
+- `overlay_directory.json` lists every linked geoRAM page/entry.
+- `reu_layout.json` remains **patch-only** until live DMA-to-XIP is shipped:
+  `implementation_status` is `patch_only_no_reu_xip_overlays`, and live
+  `overlays` / `slot_classes` stay empty.
+- The same file **must** include one dual `routine_records` entry per geoRAM
+  page (same routine id/name, linear REU page start = `(block*64+page)*256`,
+  planned primary miss slot `$CE00`, `execution_status: not_live`).
+- `validate_build.validate_expansion_contracts` rejects fabricated live
+  overlays and requires dual-record agreement with the linked directory
+  (RREU-5.17 readiness without claiming REU XIP execution).
+
 Compression may be added only behind a versioned format and round-trip
 verification. The uncompressed linked images remain authoritative for maps,
 symbols, and debugging.
@@ -291,6 +307,10 @@ System contract tests validate:
 - canonical banking assumptions;
 - map/listing/label/manifest consistency;
 - routine-directory and geoRAM image consistency;
+- expansion-native XIP path contracts (`tools/xip_path_audit.py` via
+  `validate_build.py --all` / `--xip-path`): no direct `jsr`/`jmp` to
+  `expansion_xip` symbols, and every placement-policy entry with
+  `conformance: conforming` has a generated geoRAM directory record;
 - keyword trie structure, dialect/abbreviation acceptance, bounded lookup
   report, and tokenizer timing;
 - `API.md` production-entry completeness and calling-convention consistency;
@@ -304,6 +324,11 @@ System contract tests validate:
 - absence of stale or undeclared generated files;
 - compressed GEORAM sidecar integrity and round-trip verification;
 - loader size budget including `georam_stream_reader.asm`.
+
+`python tools/validate_build.py` (default) and `python tools/validate_build.py
+--all` are read-only: they never rewrite or re-sign `build_manifest.json` or
+the build fingerprint. Use `--write-manifest` only from the release packaging
+path after a successful build.
 
 Build success means these contracts pass. Producing `basicv3.prg` alone is not
 sufficient.

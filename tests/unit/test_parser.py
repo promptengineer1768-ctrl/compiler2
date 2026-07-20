@@ -32,7 +32,11 @@ NODE_ARRAY_REF = 0x06
 STMT_PRINT = 0x01
 STMT_FOR = 0x02
 STMT_GOSUB = 0x03
+STMT_LET = 0x04
+STMT_NEXT = 0x05
+STMT_END = 0x06
 STMT_NONE = 0x00
+PRINT_FLAG_TRAILING_SEMICOLON = 0x01
 
 FLAG_HAS_COMPARISON = 0x01
 FLAG_TERM_PRECEDENCE = 0x02
@@ -56,12 +60,16 @@ def _dll_path() -> Path:
     return path
 
 
-def _symbol_address(symbol: str) -> int:
+def _routine_record(symbol: str) -> dict[str, object]:
     data = json.loads(
         (ROOT / "build" / "routine_directory.json").read_text(encoding="utf-8")
     )
-    raw = data["routines"][symbol]["address"]
-    assert raw.startswith("$")
+    return data["routines"][symbol]
+
+
+def _symbol_address(symbol: str) -> int:
+    raw = _routine_record(symbol)["address"]
+    assert isinstance(raw, str) and raw.startswith("$")
     return int(raw[1:], 16)
 
 
@@ -73,22 +81,41 @@ def _new_emu(source: bytes) -> C64Emu6502:
     if C64Emu6502 is None:
         pytest.skip("Emulator binding unavailable")
     emu = C64Emu6502(lib_path=_dll_path())
-    setattr(emu, "_compiler2_real_bytes_only", True)
     payload = (ROOT / "build" / "compiler.bin").read_bytes()
     load_addr = payload[0] | (payload[1] << 8)
     emu.write_mem_range(load_addr, payload[2:])
+    georam_path = ROOT / "build" / "georam.bin"
+    if not georam_path.exists():
+        pytest.fail("build/georam.bin not found. Run build.ps1 first.")
+    image = georam_path.read_bytes()
+    assert image[:2] == b"\x00\xde"
     emu.set_georam_enabled(True)
+    backing_size = len(emu.export_georam())
+    payload_bytes = image[2:]
+    assert backing_size >= len(payload_bytes)
+    emu.load_georam(payload_bytes + bytes(backing_size - len(payload_bytes)))
     emu.write_mem(0x0000, 0x2F)
-    emu.write_mem(0x0001, 0x30)
+    emu.write_mem(0x0001, 0x35)
+    emu.execute(_symbol_address("ctx_init"), 50_000)
     emu.write_mem_range(SOURCE_ADDR, source + b"\x00")
-    emu.set_x(SOURCE_ADDR & 0xFF)
-    emu.set_y(SOURCE_ADDR >> 8)
     return emu
 
 
 def _execute(emu: C64Emu6502, routine: str) -> bool:
-    """Execute one real parser routine and return its carry/error result."""
-    emu.execute(_symbol_address(routine), 5000)
+    """Enter a page-bound parser routine through the group-0 XY gate.
+
+    Parser routines are geoRAM-paged (layer=georam); they must be reached with
+    the production XIP gate, which banks in the routine's page, passes X/Y as
+    the source pointer, and returns the callee's carry/error result.
+    """
+    record = _routine_record(routine)
+    assert record.get("layer") == "georam", f"{routine} is not a geoRAM routine"
+    routine_id = int(record["id"])
+    assert routine_id < 0x100
+    emu.set_a(routine_id & 0xFF)
+    emu.set_x(SOURCE_ADDR & 0xFF)
+    emu.set_y(SOURCE_ADDR >> 8)
+    emu.execute(_symbol_address("georam_call_group_0_xy"), 50_000)
     return bool(emu.get_state().p & 0x01)
 
 
@@ -127,6 +154,10 @@ class TestParser:
             (b" print a", STMT_PRINT),
             (b"FOR I=1 TO 10 STEP 2", STMT_FOR),
             (b"GOSUB 100", STMT_GOSUB),
+            (b"LET A=5", STMT_LET),
+            (b"A=5", STMT_LET),
+            (b"NEXT", STMT_NEXT),
+            (b"NEXT I", STMT_NEXT),
         ):
             emu = _new_emu(source)
             assert not _execute(emu, "parse_statement")
@@ -142,6 +173,45 @@ class TestParser:
         emu = _new_emu(source)
         assert _execute(emu, "parse_line")
         assert _parser_state(emu)[1] == STMT_NONE
+
+    def test_colon_multi_statement_line(self) -> None:
+        """Colon-separated statements produce multiple IR_STMT records."""
+        emu = _new_emu(b"A=1:PRINT A")
+        assert not _execute(emu, "parse_line")
+        assert _parser_state(emu)[0] == NODE_LINE
+        records = _ir_records(emu)
+        stmts = [r for r in records if r[0] == IR_STMT]
+        assert len(stmts) >= 2
+        assert stmts[0][1] == STMT_LET
+        assert stmts[1][1] == STMT_PRINT
+
+    def test_print_trailing_semicolon_sets_the_ir_newline_flag(self) -> None:
+        """PRINT value; must preserve its no-newline behavior into codegen."""
+        emu = _new_emu(b'PRINT ".";')
+        assert not _execute(emu, "parse_line")
+        assert _ir_records(emu) == [
+            (0x0A, 7, 1, 0),
+            (IR_STMT, STMT_PRINT, 0, PRINT_FLAG_TRAILING_SEMICOLON),
+            (IR_END, 0, 0, 0),
+        ]
+
+    def test_rem_and_terminal_end_are_real_parser_productions(self) -> None:
+        """REM consumes its body; END emits the stored-program stop statement."""
+        emu = _new_emu(b"10 REM NOELS RETRO LAB BASIC BENCHMARK")
+        assert not _execute(emu, "parse_line")
+        assert _parser_state(emu) == (NODE_LINE, STMT_NONE, 0)
+        assert _ir_records(emu) == [(IR_END, 0, 0, 0)]
+
+        emu = _new_emu(b"65 END")
+        assert not _execute(emu, "parse_line")
+        assert _parser_state(emu) == (NODE_LINE, STMT_END, 0)
+        assert _ir_records(emu) == [
+            (IR_STMT, STMT_END, 0, 0),
+            (IR_END, 0, 0, 0),
+        ]
+
+        emu = _new_emu(b"END:PRINT 1")
+        assert _execute(emu, "parse_line")
 
     def test_expression_precedence_and_comparison(self) -> None:
         emu = _new_emu(b"1+2*3")

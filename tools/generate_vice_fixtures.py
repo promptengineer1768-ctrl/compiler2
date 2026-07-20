@@ -366,6 +366,49 @@ def _scenario_fixture_id(scenario: dict[str, object]) -> str:
     return f"{profile}-{reference_mode}-{keyword}"
 
 
+def keyword_matrix_cases(group: str = "group1") -> tuple[FixtureCase, ...]:
+    """Build capture cases from the keyword E2E matrix catalog.
+
+    compile-mode cells reuse program fixtures and are not captured twice.
+    Only stock-oracle cells are returned.
+    """
+    # Import after ROOT is on sys.path so tests package resolves.
+    from tests.e2e.keyword_matrix import iter_fixture_capture_jobs
+
+    cases: list[FixtureCase] = []
+    for job in iter_fixture_capture_jobs(group):  # type: ignore[arg-type]
+        cases.append(
+            FixtureCase(
+                str(job["case_id"]),
+                str(job["profile"]),
+                str(job["reference_mode"]),
+                tuple(job["source_lines"]),
+            )
+        )
+    return tuple(cases)
+
+
+def missing_matrix_cases(group: str = "group1") -> tuple[FixtureCase, ...]:
+    """Return keyword-matrix cases whose fixture file is missing or catalog-only."""
+    missing: list[FixtureCase] = []
+    for case in keyword_matrix_cases(group):
+        directory = (
+            "c64_basicv2" if case.profile == "basicv2" else "plus4_basicv35"
+        )
+        path = FIXTURE_ROOT / directory / f"{case.case_id}.json"
+        if not path.exists():
+            missing.append(case)
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            missing.append(case)
+            continue
+        if data.get("normalization_rules") == "catalog-v1":
+            missing.append(case)
+    return tuple(missing)
+
+
 def main() -> int:
     """Generate selected stock fixtures."""
     parser = argparse.ArgumentParser()
@@ -377,8 +420,33 @@ def main() -> int:
         action="store_true",
         help="capture cases derived from Phase 11 stock E2E scenario tables",
     )
+    parser.add_argument(
+        "--from-keyword-matrix",
+        action="store_true",
+        help="capture cases from tests/e2e/cases/keyword_matrix.yaml",
+    )
+    parser.add_argument(
+        "--group",
+        choices=("group1", "group2", "group3"),
+        default="group1",
+        help="keyword matrix group when using --from-keyword-matrix",
+    )
+    parser.add_argument(
+        "--missing-only",
+        action="store_true",
+        help="with --from-keyword-matrix, only capture fixtures that are absent",
+    )
     args = parser.parse_args()
-    source_cases = scenario_cases() if args.from_e2e_scenarios else CASES
+    if args.from_keyword_matrix:
+        source_cases = (
+            missing_matrix_cases(args.group)
+            if args.missing_only
+            else keyword_matrix_cases(args.group)
+        )
+    elif args.from_e2e_scenarios:
+        source_cases = scenario_cases()
+    else:
+        source_cases = CASES
     selected = [
         case
         for case in source_cases

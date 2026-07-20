@@ -20,8 +20,24 @@
     jmp target
 .endmacro
 
+; A resident codec helper may temporarily map a program-data page at $DE00.
+; Its caller can be executing from that same window, so it must restore the
+; page captured by __program_stream_probe before it returns.  Preserve the
+; complete public result (A and flags); X/Y are documented scratch registers.
+.macro program_stream_return_to_code
+    php
+    pha
+    ldx program_stream_code_block
+    lda program_stream_code_page
+    jsr georam_select
+    pla
+    plp
+    rts
+.endmacro
+
 .import arena_handle_valid
 .import arena_select_page
+.import georam_select
 
 .segment "BSS"
 __program_codec_checksum: .res 1
@@ -43,6 +59,9 @@ program_stream_record_length: .res 2
 program_stream_selected_page: .res 1
 program_stream_page_valid: .res 1
 program_stream_target_page: .res 1
+; Selection to restore before a resident helper returns to an XIP caller.
+program_stream_code_block: .res 1
+program_stream_code_page: .res 1
 program_codec_copy_count: .res 1
 program_stream_validation_start: .res 2
 program_codec_output_descriptor: .res 8
@@ -90,6 +109,12 @@ SCAN_MODE_DATA_STRING = 4
 .proc __program_stream_probe
     stx program_stream_descriptor
     sty program_stream_descriptor+1
+    ; This helper runs in resident RAM, but it is also entered from XIP pages.
+    ; Capture that executable mapping before any arena validation remaps $DE00.
+    lda zp_gr_block
+    sta program_stream_code_block
+    lda zp_gr_page
+    sta program_stream_code_page
     lda #$00
     sta program_stream_page_valid
     stx zp_expr_ptr1
@@ -154,7 +179,12 @@ SCAN_MODE_DATA_STRING = 4
     bcs @error
     lda program_stream_target_page
     sta program_stream_selected_page
-    lda #$01
+    ; No data-page mapping may survive the return to an XIP caller.  The byte
+    ; helpers select their data page explicitly and invalidate this cache.
+    ldx program_stream_code_block
+    lda program_stream_code_page
+    jsr georam_select
+    lda #$00
     sta program_stream_page_valid
     ldx program_stream_descriptor
     ldy program_stream_descriptor+1
@@ -164,6 +194,11 @@ SCAN_MODE_DATA_STRING = 4
 @invalid:
     jmp @error
 @error:
+    ldx program_stream_code_block
+    lda program_stream_code_page
+    jsr georam_select
+    lda #$00
+    sta program_stream_page_valid
     ldx program_stream_descriptor
     ldy program_stream_descriptor+1
     lda #ERR_ILLEGAL_QUANTITY
@@ -382,7 +417,24 @@ SCAN_MODE_DATA_STRING = 4
 .endproc
 
 ; Replace normalized record lengths with canonical absolute BASIC links after
-; the $0801 load address has been prepended.
+; the $0801 load address has been prepended.  This is placed with the V2
+; encoder entry: the resident orchestration keeps page 8 selected while it
+; calls this helper, so the linked-line rewrite itself executes from geoRAM.
+.segment "GEORAM_PAGE_8"
+
+; program_encode_stock
+; Inputs/outputs: X/Y = arena-backed whole-program descriptor.
+; Prepends $0801 and canonically rebuilds every linked-line pointer.
+; Clobbers: A, X, Y. Zero page: expression pointer workspace.
+.export program_encode_stock
+program_encode_stock:
+    jsr __program_stream_probe
+    bcs @error
+    jsr __program_stream_set_v2_base
+    jmp __program_stream_encode_stock
+@error:
+    rts
+
 .proc __program_stream_canonicalize_stock
     lda #$02
     sta program_stream_index
@@ -452,6 +504,136 @@ SCAN_MODE_DATA_STRING = 4
     rts
 .endproc
 
+.assert * - program_encode_stock <= $FA, error, "program codec page 8 exceeds geoRAM page"
+
+.segment "CODE"
+
+; Shared setup for the BASIC 3.5 encoder.  It runs from resident RAM while
+; page 10 remains the caller's executable mapping, then transfers only the
+; page-sensitive canonical link rewrite back to that XIP page.
+.proc __program_stream_encode_basic35_prepare
+    lda #$00
+    sta program_stream_validation_start
+    sta program_stream_validation_start+1
+    jsr __program_stream_validate_normalized
+    bcs @error
+    jsr __program_stream_clone_for_encode
+    bcs @error
+    jsr __program_stream_load_start
+    lda #$02
+    jsr __program_stream_shift_right
+    bcs @error
+    lda #$00
+    sta program_stream_index
+    sta program_stream_index+1
+    lda program_codec_load_lo
+    sta program_stream_value
+    jsr __program_stream_write
+    bcs @error
+    inc program_stream_index
+    lda program_codec_load_hi
+    sta program_stream_value
+    jsr __program_stream_write
+    bcs @error
+    ldx #$00
+    lda #$0A
+    jsr georam_select
+    jmp __program_stream_canonicalize_basic35
+@error:
+    lda #ERR_SYNTAX
+    sec
+    rts
+.endproc
+
+; Page 10 owns the Plus/4 encoder.  Its link rewrite is deliberately local:
+; a normal-RAM caller must never jump into the V2 page-8 body.
+.segment "GEORAM_PAGE_10"
+
+; program_encode_basic35
+; Inputs/outputs: X/Y = arena-backed whole-program descriptor.
+; Prepends $1001 and canonically rebuilds Plus/4 linked-line pointers.
+; Clobbers: A, X, Y. Zero page: expression pointer workspace.
+.export program_encode_basic35
+program_encode_basic35:
+    jsr __program_stream_probe
+    bcs @error
+    jsr __program_stream_set_plus4_base
+    jsr __program_stream_encode_basic35_prepare
+    rts
+@error:
+    rts
+
+.proc __program_stream_canonicalize_basic35
+    lda #$02
+    sta program_stream_index
+    lda #$00
+    sta program_stream_index+1
+@line:
+    lda program_stream_index
+    sta program_stream_link
+    lda program_stream_index+1
+    sta program_stream_link+1
+    jsr __program_stream_read
+    jcs @error
+    sta program_stream_record_length
+    jsr __program_stream_inc_index
+    jsr __program_stream_read
+    jcs @error
+    sta program_stream_record_length+1
+    jsr __program_stream_inc_index
+    ora program_stream_record_length
+    bne @record
+    lda program_stream_index
+    cmp program_stream_length
+    jne @error
+    lda program_stream_index+1
+    cmp program_stream_length+1
+    jne @error
+    jmp __program_stream_store_length
+@record:
+    clc
+    lda program_stream_index
+    adc program_stream_record_length
+    sta program_stream_scan
+    lda program_stream_index+1
+    adc program_stream_record_length+1
+    sta program_stream_scan+1
+    jcs @error
+    clc
+    lda program_stream_scan
+    adc #$FF
+    sta program_stream_record_length
+    lda program_stream_scan+1
+    adc program_codec_link_base_hi
+    sta program_stream_record_length+1
+    lda program_stream_link
+    sta program_stream_index
+    lda program_stream_link+1
+    sta program_stream_index+1
+    lda program_stream_record_length
+    sta program_stream_value
+    jsr __program_stream_write
+    jcs @error
+    jsr __program_stream_inc_index
+    lda program_stream_record_length+1
+    sta program_stream_value
+    jsr __program_stream_write
+    jcs @error
+    lda program_stream_scan
+    sta program_stream_index
+    lda program_stream_scan+1
+    sta program_stream_index+1
+    jmp @line
+@error:
+    lda #ERR_SYNTAX
+    sec
+    rts
+.endproc
+
+.assert * - program_encode_basic35 <= $FA, error, "program codec page 10 exceeds geoRAM page"
+
+.segment "CODE"
+
 ; Clone a logical program into the dedicated codec output arena. An input
 ; already owned by that arena is reused; every other input remains unchanged.
 .proc __program_stream_clone_for_encode
@@ -462,7 +644,7 @@ SCAN_MODE_DATA_STRING = 4
     cmp #PROGRAM_CODEC_OUTPUT_GENERATION
     bne @clone
     clc
-    rts
+    program_stream_return_to_code
 @clone:
     ; Preflight the complete destination extent.
     lda program_stream_length
@@ -566,11 +748,11 @@ SCAN_MODE_DATA_STRING = 4
     sta program_stream_start_page
     sta program_stream_page_valid
     clc
-    rts
+    program_stream_return_to_code
 @error:
     lda #ERR_OUT_OF_DATA
     sec
-    rts
+    program_stream_return_to_code
 .endproc
 
 __program_stream_encode_stock:
@@ -603,6 +785,24 @@ __program_stream_encode_stock:
 @error:
     lda #ERR_SYNTAX
     sec
+    rts
+
+; The C2P1 decoder is a cold codec path.  Keep its complete validation and
+; publication decision tree together in its assigned XIP page; callers enter
+; it through the geoRAM dispatcher, never through a resident mirror.
+.segment "GEORAM_PAGE_11"
+
+; program_decode_extended
+; Inputs/outputs: X/Y = arena-backed whole-program descriptor.
+; Decode validates and removes the C2P1 envelope.  Clobbers A, X, Y; uses the
+; expression-pointer workspace.  C set reports a malformed stream.
+.export program_decode_extended
+program_decode_extended:
+    jsr __program_stream_probe
+    bcs @error
+    jsr __program_stream_decode_extended
+    rts
+@error:
     rts
 
 .proc __program_stream_validate_extended
@@ -669,49 +869,7 @@ __program_stream_encode_stock:
     lda program_stream_link+1
     cmp program_stream_length+1
     bne @error
-    lda #$09
-    ldx #$00
-    jsr __program_stream_read_ax
-    bcs @error
-    bne @error
-    ldx #$0A
-@reserved:
-    txa
-    pha
-    lda #$00
-    tax
-    pla
-    jsr __program_stream_read_ax
-    bcs @error
-    bne @error
-    ldx program_stream_index
-    inx
-    cpx #$10
-    bcc @reserved
-    lda #$00
-    sta __program_codec_checksum
-    lda #$10
-    sta program_stream_index
-    lda #$00
-    sta program_stream_index+1
-@checksum:
-    jsr __program_stream_index_before_length
-    bcs @checksum_done
-    jsr __program_stream_read
-    bcs @error
-    clc
-    adc __program_codec_checksum
-    sta __program_codec_checksum
-    jsr __program_stream_inc_index
-    jmp @checksum
-@checksum_done:
-    lda #$08
-    ldx #$00
-    jsr __program_stream_read_ax
-    bcs @error
-    cmp __program_codec_checksum
-    bne @error
-    clc
+    jsr __program_stream_validate_extended_tail
     rts
 @error:
     lda #ERR_SYNTAX
@@ -751,6 +909,23 @@ __program_stream_decode_extended:
 @error:
     lda #ERR_SYNTAX
     sec
+    rts
+
+; Return to resident helpers after the XIP-local decode body.  The following
+; encoder owns a separate page because it mutates and scans independently.
+.segment "GEORAM_PAGE_12"
+
+; program_encode_extended
+; Inputs/outputs: X/Y = arena-backed whole-program descriptor.
+; Encode prepends a canonical C2P1 envelope.  Clobbers A, X, Y; uses the
+; expression-pointer workspace.  C set reports invalid input or capacity.
+.export program_encode_extended
+program_encode_extended:
+    jsr __program_stream_probe
+    bcs @error
+    jsr __program_stream_encode_extended
+    rts
+@error:
     rts
 
 __program_stream_encode_extended:
@@ -838,6 +1013,63 @@ __program_stream_encode_extended:
     .byte 'C', '2', 'P', '1', $01, $01, $00, $00
     .byte $00, $00, $00, $00, $00, $00, $00, $00
 
+.segment "CODE"
+
+; The fixed reserved-byte and checksum tail is shared data validation.  The
+; XIP page performs the envelope's identity, version, and exact body-length
+; checks before this helper runs; keeping this loop resident lets the complete
+; public decoder fit its single executable page.
+.proc __program_stream_validate_extended_tail
+    lda #$09
+    ldx #$00
+    jsr __program_stream_read_ax
+    bcs @error
+    bne @error
+    ldx #$0A
+@reserved:
+    txa
+    pha
+    lda #$00
+    tax
+    pla
+    jsr __program_stream_read_ax
+    bcs @error
+    bne @error
+    ldx program_stream_index
+    inx
+    cpx #$10
+    bcc @reserved
+    lda #$00
+    sta __program_codec_checksum
+    lda #$10
+    sta program_stream_index
+    lda #$00
+    sta program_stream_index+1
+@checksum:
+    jsr __program_stream_index_before_length
+    bcs @checksum_done
+    jsr __program_stream_read
+    bcs @error
+    clc
+    adc __program_codec_checksum
+    sta __program_codec_checksum
+    jsr __program_stream_inc_index
+    jmp @checksum
+@checksum_done:
+    lda #$08
+    ldx #$00
+    jsr __program_stream_read_ax
+    bcs @error
+    cmp __program_codec_checksum
+    bne @error
+    clc
+    rts
+@error:
+    lda #ERR_SYNTAX
+    sec
+    rts
+.endproc
+
 .proc __program_stream_load_start
     lda program_stream_descriptor
     sta zp_expr_ptr1
@@ -851,32 +1083,37 @@ __program_stream_encode_extended:
 
 ; Select the page containing program_stream_index and return its byte in A.
 .proc __program_stream_read
+    lda zp_gr_block
+    sta program_stream_code_block
+    lda zp_gr_page
+    sta program_stream_code_page
     lda program_stream_index+1
     clc
     adc program_stream_start_page
     bcs @error
     sta program_stream_target_page
-    lda program_stream_page_valid
-    beq @select
-    lda program_stream_target_page
-    cmp program_stream_selected_page
-    beq @read
-@select:
     lda program_stream_target_page
     ldx program_stream_arena
     ldy program_stream_generation
     jsr arena_select_page
     bcs @error
-    lda program_stream_target_page
-    sta program_stream_selected_page
-    lda #$01
-    sta program_stream_page_valid
-@read:
     ldy program_stream_index
     lda $DE00,y
+    sta program_stream_value
+    ldx program_stream_code_block
+    lda program_stream_code_page
+    jsr georam_select
+    lda #$00
+    sta program_stream_page_valid
+    lda program_stream_value
     clc
     rts
 @error:
+    ldx program_stream_code_block
+    lda program_stream_code_page
+    jsr georam_select
+    lda #$00
+    sta program_stream_page_valid
     lda #ERR_ILLEGAL_QUANTITY
     sec
     rts
@@ -884,42 +1121,37 @@ __program_stream_encode_extended:
 
 ; Write program_stream_value at program_stream_index.
 .proc __program_stream_write
+    lda zp_gr_block
+    sta program_stream_code_block
+    lda zp_gr_page
+    sta program_stream_code_page
     lda program_stream_index+1
     clc
     adc program_stream_start_page
     bcs @error
-    pha
-    lda program_stream_page_valid
-    beq @select_saved
-    pla
-    cmp program_stream_selected_page
-    beq @write
-    pha
-@select_saved:
-    pla
-    pha
     ldx program_stream_arena
     ldy program_stream_generation
     jsr arena_select_page
-    bcs @error_stack
-    pla
-    sta program_stream_selected_page
-    lda #$01
-    sta program_stream_page_valid
-    jmp @write
-@write:
+    bcs @error
     ldy program_stream_index
     lda program_stream_value
     sta $DE00,y
+    ldx program_stream_code_block
+    lda program_stream_code_page
+    jsr georam_select
+    lda #$00
+    sta program_stream_page_valid
     clc
     rts
 @error:
+    ldx program_stream_code_block
+    lda program_stream_code_page
+    jsr georam_select
+    lda #$00
+    sta program_stream_page_valid
     lda #ERR_ILLEGAL_QUANTITY
     sec
     rts
-@error_stack:
-    pla
-    jmp @error
 .endproc
 
 .proc __program_stream_inc_index
@@ -957,101 +1189,34 @@ __program_stream_encode_extended:
     rts
 .endproc
 
+; program_decode_stock
+; Inputs/outputs: X/Y = arena-backed whole-program descriptor.
+; Removes the BASIC V2 $0801 load address only after validating the program.
+; Clobbers: A, X, Y. Zero page: expression pointer workspace.
+; program_encode_stock
+; Inputs/outputs: X/Y = arena-backed whole-program descriptor.
+; Prepends $0801 and canonically rebuilds every linked-line pointer.
+; Clobbers: A, X, Y. Zero page: expression pointer workspace.
+; program_select_save_format
+; Inputs: X/Y = arena-backed normalized logical program descriptor.
+; Outputs: A = SAVE_FORMAT_V2 / SAVE_FORMAT_BASICV35 / SAVE_FORMAT_C2P1, C=error.
+; Scans tokens outside REM, string, and DATA contexts. Priority: C2 > 3.5 > V2.
+; Clobbers: A, X, Y. Zero page: expression pointer workspace.
+; program_classify_file is a cold read-only codec operation.  Its entry and
+; complete decision tree execute from the generated geoRAM page 6 (routine
+; ID 335).  It may call the shared descriptor/page-selection helpers in RAM,
+; but never has a resident mirror of its own.
+.segment "GEORAM_PAGE_6"
+
 ; program_classify_file
 ; Inputs: X/Y = arena-backed whole-program descriptor.
-; Outputs: A=0 stock or A=1 extended, C=1 on invalid descriptor/format.
+; Outputs: A=0 V2, A=1 C2P1, A=2 Plus/4; C=1 on invalid descriptor/format.
 ; Clobbers: A, X, Y. Zero page: expression pointer workspace.
 .export program_classify_file
 program_classify_file:
     jsr __program_stream_probe
     bcs @error
     jmp __program_stream_classify
-@error:
-    rts
-
-; program_decode_stock
-; Inputs/outputs: X/Y = arena-backed whole-program descriptor.
-; Removes the BASIC V2 $0801 load address only after validating the program.
-; Clobbers: A, X, Y. Zero page: expression pointer workspace.
-.export program_decode_stock
-program_decode_stock:
-    jsr __program_stream_probe
-    bcs @error
-    jsr __program_stream_set_v2_base
-    jmp __program_stream_decode_stock
-@error:
-    rts
-
-; program_encode_stock
-; Inputs/outputs: X/Y = arena-backed whole-program descriptor.
-; Prepends $0801 and canonically rebuilds every linked-line pointer.
-; Clobbers: A, X, Y. Zero page: expression pointer workspace.
-.export program_encode_stock
-program_encode_stock:
-    jsr __program_stream_probe
-    bcs @error
-    jsr __program_stream_set_v2_base
-    jmp __program_stream_encode_stock
-@error:
-    rts
-
-; program_decode_basic35
-; Inputs/outputs: X/Y = arena-backed whole-program descriptor.
-; Validates Plus/4 $1001 linked-line PRG and normalizes to logical records.
-; Clobbers: A, X, Y. Zero page: expression pointer workspace.
-.export program_decode_basic35
-program_decode_basic35:
-    jsr __program_stream_probe
-    bcs @error
-    jsr __program_stream_set_plus4_base
-    jmp __program_stream_decode_stock
-@error:
-    rts
-
-; program_encode_basic35
-; Inputs/outputs: X/Y = arena-backed whole-program descriptor.
-; Prepends $1001 and canonically rebuilds Plus/4 linked-line pointers.
-; Clobbers: A, X, Y. Zero page: expression pointer workspace.
-.export program_encode_basic35
-program_encode_basic35:
-    jsr __program_stream_probe
-    bcs @error
-    jsr __program_stream_set_plus4_base
-    jmp __program_stream_encode_stock
-@error:
-    rts
-
-; program_decode_extended / program_encode_extended
-; Inputs/outputs: X/Y = arena-backed whole-program descriptor.
-; Decode validates and removes the C2P1 envelope. Encode prepends a canonical
-; C2P1 envelope around the logical stream, cloning non-scratch input first.
-; Clobbers: A, X, Y. Zero page: expression pointer workspace.
-.export program_decode_extended
-program_decode_extended:
-    jsr __program_stream_probe
-    bcs @error
-    jmp __program_stream_decode_extended
-@error:
-    rts
-
-.export program_encode_extended
-program_encode_extended:
-    jsr __program_stream_probe
-    bcs @error
-    jmp __program_stream_encode_extended
-@error:
-    rts
-
-; program_select_save_format
-; Inputs: X/Y = arena-backed normalized logical program descriptor.
-; Outputs: A = SAVE_FORMAT_V2 / SAVE_FORMAT_BASICV35 / SAVE_FORMAT_C2P1, C=error.
-; Scans tokens outside REM, string, and DATA contexts. Priority: C2 > 3.5 > V2.
-; Clobbers: A, X, Y. Zero page: expression pointer workspace.
-.export program_select_save_format
-program_select_save_format:
-    jsr __program_stream_probe
-    bcs @error
-    jmp __program_stream_select_save_format
 @error:
     rts
 
@@ -1065,18 +1230,22 @@ __program_stream_classify:
     cmp #$04
     bcc @error
 @select:
-    lda program_stream_start_page
-    ldx program_stream_arena
-    ldy program_stream_generation
-    jsr arena_select_page
+    ; Do not select a data page directly here: this routine itself executes
+    ; at $DE00.  The stream helpers restore this routine's XIP mapping before
+    ; returning, including their error path.
+    lda #$00
+    ldx #$00
+    jsr __program_stream_read_ax
     bcs @error
-    lda $DE00
     cmp #'C'
     beq @extended
     ; Both V2 and Plus/4 PRG headers begin with $01.
     cmp #$01
     bne @error
-    lda $DE01
+    lda #$01
+    ldx #$00
+    jsr __program_stream_read_ax
+    bcs @error
     cmp #STOCK_BASICV2_LOAD_HI
     beq @v2
     cmp #STOCK_BASICV35_LOAD_HI
@@ -1091,13 +1260,22 @@ __program_stream_classify:
     clc
     rts
 @extended:
-    lda $DE01
+    lda #$01
+    ldx #$00
+    jsr __program_stream_read_ax
+    bcs @error
     cmp #'2'
     bne @error
-    lda $DE02
+    lda #$02
+    ldx #$00
+    jsr __program_stream_read_ax
+    bcs @error
     cmp #'P'
     bne @error
-    lda $DE03
+    lda #$03
+    ldx #$00
+    jsr __program_stream_read_ax
+    bcs @error
     cmp #'1'
     bne @error
     lda #$01
@@ -1108,6 +1286,12 @@ __program_stream_classify:
     sec
     rts
 
+; Keep this entry path page-local.  A routine in the mapped $DE00 page must
+; not silently spill into the following physical page.
+.assert * - program_classify_file <= $FA, error, "program_classify_file exceeds geoRAM page 6"
+
+.segment "CODE"
+
 ; Read byte at A/X offset (low/high) into A.
 .proc __program_stream_read_ax
     sta program_stream_index
@@ -1115,8 +1299,11 @@ __program_stream_classify:
     jmp __program_stream_read
 .endproc
 
-; Validate the linked-line stream for the active load base without changing it.
-.proc __program_stream_validate_stock
+; The header probe is resident so the shared Plus/4 decoder can use it too.
+; It deliberately leaves the caller's geoRAM code page selected before entering
+; the page-7 linked-line validator below.
+.segment "CODE"
+.proc __program_stream_validate_stock_prepare
     jsr __program_stream_load_start
     lda program_stream_length+1
     bne @length_ok
@@ -1130,6 +1317,83 @@ __program_stream_classify:
     jcs @error
     cmp program_codec_load_lo
     jne @error
+    jmp __program_stream_validate_stock
+@error:
+    lda #ERR_SYNTAX
+    sec
+    rts
+.endproc
+
+; Page 9 owns the BASIC 3.5 decoder.  This resident preamble is entered from
+; that XIP page and deliberately jumps back to its page-local traversal while
+; page 9 remains selected.  It must not jump into the V2 page-7 validator.
+.proc __program_stream_validate_basic35_prepare
+    jsr __program_stream_load_start
+    lda program_stream_length+1
+    bne @length_ok
+    lda program_stream_length
+    cmp #$04
+    jcc @error
+@length_ok:
+    lda #$00
+    ldx #$00
+    jsr __program_stream_read_ax
+    jcs @error
+    cmp program_codec_load_lo
+    jne @error
+    jmp __program_stream_validate_basic35
+@error:
+    lda #ERR_SYNTAX
+    sec
+    rts
+.endproc
+
+; Compare the just-consumed linked-line offset with the stock absolute link.
+; This arithmetic is shared resident glue; the page-7 routine owns the stream
+; traversal and all page-sensitive byte reads.
+.proc __program_stream_validate_stock_link
+    ; Expected pointer is load + (next stream offset - 2) = (load-2) + offset.
+    clc
+    lda program_stream_index
+    adc #$FF
+    sta program_stream_scan
+    lda program_stream_index+1
+    adc program_codec_link_base_hi
+    sta program_stream_scan+1
+    lda program_stream_scan
+    cmp program_stream_link
+    bne @error
+    lda program_stream_scan+1
+    cmp program_stream_link+1
+    bne @error
+    clc
+    rts
+@error:
+    sec
+    rts
+.endproc
+
+; Page 7 owns the public V2 decode entry and its linked-line validation pass.
+; Both execute while the dispatcher keeps this mapping selected.  The
+; remaining stream transforms are deliberately resident shared helpers, which
+; never remap the code page and therefore safely return into this page.
+.segment "GEORAM_PAGE_7"
+
+; program_decode_stock
+; Inputs/outputs: X/Y = arena-backed whole-program descriptor.
+; Removes the BASIC V2 $0801 load address only after validating the program.
+; Clobbers: A, X, Y. Zero page: expression pointer workspace.
+.export program_decode_stock
+program_decode_stock:
+    jsr __program_stream_probe
+    bcs @error
+    jsr __program_stream_set_v2_base
+    jmp __program_stream_decode_stock
+@error:
+    rts
+
+; Validate the linked-line stream for the active load base without changing it.
+.proc __program_stream_validate_stock
     lda #$01
     ldx #$00
     jsr __program_stream_read_ax
@@ -1206,20 +1470,8 @@ __program_stream_classify:
     jsr __program_stream_inc_index
     cmp #$00
     bne @body
-    ; Expected pointer is load + (next stream offset - 2) = (load-2) + offset.
-    clc
-    lda program_stream_index
-    adc #$FF
-    sta program_stream_scan
-    lda program_stream_index+1
-    adc program_codec_link_base_hi
-    sta program_stream_scan+1
-    lda program_stream_scan
-    cmp program_stream_link
-    bne @error
-    lda program_stream_scan+1
-    cmp program_stream_link+1
-    bne @error
+    jsr __program_stream_validate_stock_link
+    jcs @error
     jmp @line
 @error:
     lda #ERR_SYNTAX
@@ -1227,8 +1479,138 @@ __program_stream_classify:
     rts
 .endproc
 
+.assert * - program_decode_stock <= $FA, error, "program codec page 7 exceeds geoRAM page"
+
+; program_decode_basic35 is independent of the V2 page-7 entry.  A resident
+; wrapper cannot tail-jump into an XIP page, so the complete public Plus/4
+; entry and its page-sensitive linked-line traversal live in its assigned
+; page 9 and are entered only through the geoRAM dispatcher.
+.segment "GEORAM_PAGE_9"
+
+; program_decode_basic35
+; Inputs/outputs: X/Y = arena-backed whole-program descriptor.
+; Validates Plus/4 $1001 linked-line PRG and normalizes to logical records.
+; Clobbers: A, X, Y. Zero page: expression pointer workspace.
+.export program_decode_basic35
+program_decode_basic35:
+    jsr __program_stream_probe
+    bcs @error
+    jsr __program_stream_set_plus4_base
+    jsr __program_stream_validate_basic35_prepare
+    bcs @error
+    jmp __program_stream_decode_stock_validated
+@error:
+    rts
+
+; Page-local linked-line validator for the active Plus/4 load base.
+.proc __program_stream_validate_basic35
+    lda #$01
+    ldx #$00
+    jsr __program_stream_read_ax
+    jcs @error
+    cmp program_codec_load_hi
+    jne @error
+    lda #$00
+    sta program_stream_prev_line
+    sta program_stream_prev_line+1
+    sta program_stream_have_line
+    lda #$02
+    sta program_stream_index
+    lda #$00
+    sta program_stream_index+1
+@line:
+    jsr __program_stream_index_before_length
+    jcs @error
+    jsr __program_stream_read
+    jcs @error
+    sta program_stream_link
+    jsr __program_stream_inc_index
+    jsr __program_stream_index_before_length
+    jcs @error
+    jsr __program_stream_read
+    jcs @error
+    sta program_stream_link+1
+    jsr __program_stream_inc_index
+    ora program_stream_link
+    bne @record
+    lda program_stream_index
+    cmp program_stream_length
+    jne @error
+    lda program_stream_index+1
+    cmp program_stream_length+1
+    jne @error
+    clc
+    rts
+@record:
+    jsr __program_stream_index_before_length
+    bcs @error
+    jsr __program_stream_read
+    bcs @error
+    sta __program_codec_line_lo
+    jsr __program_stream_inc_index
+    jsr __program_stream_index_before_length
+    bcs @error
+    jsr __program_stream_read
+    bcs @error
+    sta __program_codec_line_hi
+    jsr __program_stream_inc_index
+    lda program_stream_have_line
+    beq @ordered
+    lda __program_codec_line_hi
+    cmp program_stream_prev_line+1
+    bcc @error
+    bne @ordered
+    lda __program_codec_line_lo
+    cmp program_stream_prev_line
+    bcc @error
+    beq @error
+@ordered:
+    lda __program_codec_line_lo
+    sta program_stream_prev_line
+    lda __program_codec_line_hi
+    sta program_stream_prev_line+1
+    lda #$01
+    sta program_stream_have_line
+@body:
+    jsr __program_stream_index_before_length
+    bcs @error
+    jsr __program_stream_read
+    bcs @error
+    jsr __program_stream_inc_index
+    cmp #$00
+    bne @body
+    jsr __program_stream_validate_stock_link
+    jcs @error
+    jmp @line
+@error:
+    lda #ERR_SYNTAX
+    sec
+    rts
+.endproc
+
+.assert * - program_decode_basic35 <= $FA, error, "program codec page 9 exceeds geoRAM page"
+
+.segment "CODE"
+
 ; Classify a token byte in A for SAVE format selection.
 ; Sets SAVE_FLAG_C2 / SAVE_FLAG_BASIC35 in program_codec_save_flags.
+.segment "GEORAM_PAGE_13"
+
+; program_select_save_format
+; Inputs: X/Y = arena-backed normalized logical program descriptor.
+; Outputs: A = SAVE_FORMAT_V2 / SAVE_FORMAT_BASICV35 / SAVE_FORMAT_C2P1,
+; C=error.  Clobbers A, X, Y; uses expression-pointer workspace.
+.export program_select_save_format
+program_select_save_format:
+    jsr __program_stream_probe
+    bcs @done_error
+    jsr __program_stream_select_save_format
+    rts
+@done_error:
+    lda #ERR_SYNTAX
+    sec
+    rts
+
 .proc __program_codec_classify_token
     cmp #TOKEN_C2_COMPILE
     beq @c2
@@ -1254,7 +1636,10 @@ __program_stream_classify:
     rts
 .endproc
 
-; Scan normalized logical program for SAVE format class.
+; Scan normalized logical program for SAVE format class.  This whole state
+; machine belongs to the assigned XIP page, including the public dispatcher
+; entry and token classifier, so no resident format-selection mirror remains.
+
 __program_stream_select_save_format:
     jsr __program_stream_load_start
     lda #$00
@@ -1304,94 +1689,12 @@ __program_stream_select_save_format:
     lda #SCAN_MODE_NORMAL
     sta program_codec_scan_mode
 @body:
-    lda program_stream_scan
-    ora program_stream_scan+1
-    bne @body_more
-    jmp @line
-@body_more:
-    jsr __program_stream_index_before_length
+    jsr __program_stream_scan_body
     jcs @done_error
-    jsr __program_stream_read
-    jcs @done_error
-    sta program_stream_value
-    jsr __program_stream_inc_index
-    ; Decrement remaining body counter.
-    lda program_stream_scan
-    bne @dec_lo
-    dec program_stream_scan+1
-@dec_lo:
-    dec program_stream_scan
-    lda program_codec_scan_mode
-    cmp #SCAN_MODE_REM
-    bne @not_rem_mode
-    jmp @body
-@not_rem_mode:
-    cmp #SCAN_MODE_STRING
-    beq @in_string
-    cmp #SCAN_MODE_DATA_STRING
-    beq @in_data_string
-    cmp #SCAN_MODE_DATA
-    beq @in_data
-    ; NORMAL
-    lda program_stream_value
-    cmp #'"'
-    bne @not_quote
-    lda #SCAN_MODE_STRING
-    sta program_codec_scan_mode
-    jmp @body
-@not_quote:
-    cmp #TOKEN_REM
-    bne @not_rem
-    lda #SCAN_MODE_REM
-    sta program_codec_scan_mode
-    jmp @body
-@not_rem:
-    cmp #TOKEN_DATA
-    bne @not_data
-    lda #SCAN_MODE_DATA
-    sta program_codec_scan_mode
-    jmp @body
-@not_data:
-    cmp #$80
-    bcs @token
-    jmp @body
-@token:
-    jsr __program_codec_classify_token
-    ; Early exit if C2-only already found.
     lda program_codec_save_flags
     and #SAVE_FLAG_C2
     bne @finish
-    jmp @body
-@in_string:
-    lda program_stream_value
-    cmp #'"'
-    bne @string_cont
-    lda #SCAN_MODE_NORMAL
-    sta program_codec_scan_mode
-@string_cont:
-    jmp @body
-@in_data_string:
-    lda program_stream_value
-    cmp #'"'
-    bne @data_string_cont
-    lda #SCAN_MODE_DATA
-    sta program_codec_scan_mode
-@data_string_cont:
-    jmp @body
-@in_data:
-    lda program_stream_value
-    cmp #'"'
-    bne @data_colon
-    lda #SCAN_MODE_DATA_STRING
-    sta program_codec_scan_mode
-    jmp @body
-@data_colon:
-    cmp #':'
-    bne @data_cont
-    lda #SCAN_MODE_NORMAL
-    sta program_codec_scan_mode
-@data_cont:
-    jmp @body
+    jmp @line
 @finish:
     lda program_codec_save_flags
     and #SAVE_FLAG_C2
@@ -1414,6 +1717,113 @@ __program_stream_select_save_format:
     lda #ERR_SYNTAX
     sec
     rts
+
+.assert * - program_select_save_format <= $FA, error, "program_select_save_format exceeds geoRAM page 13"
+
+.segment "CODE"
+
+; Scan one normalized line body after the XIP selector has established the
+; record bounds and lexical mode.  This shared normal-RAM helper contains no
+; public codec operation or format decision; page 13 retains descriptor
+; validation, record framing, format priority, and final result selection.
+.proc __program_stream_scan_body
+@body:
+    lda program_stream_scan
+    ora program_stream_scan+1
+    bne :+
+    jmp @done
+:
+    jsr __program_stream_index_before_length
+    bcc :+
+    jmp @error
+:
+    jsr __program_stream_read
+    bcc :+
+    jmp @error
+:
+    sta program_stream_value
+    jsr __program_stream_inc_index
+    lda program_stream_scan
+    bne @dec_lo
+    dec program_stream_scan+1
+@dec_lo:
+    dec program_stream_scan
+    lda program_codec_scan_mode
+    cmp #SCAN_MODE_REM
+    beq @body
+    cmp #SCAN_MODE_STRING
+    beq @in_string
+    cmp #SCAN_MODE_DATA_STRING
+    beq @in_data_string
+    cmp #SCAN_MODE_DATA
+    beq @in_data
+    lda program_stream_value
+    cmp #'"'
+    beq @start_string
+    cmp #TOKEN_REM
+    beq @start_rem
+    cmp #TOKEN_DATA
+    beq @start_data
+    cmp #$80
+    bcc @body
+    jsr __program_codec_classify_token
+    lda program_codec_save_flags
+    and #SAVE_FLAG_C2
+    beq @body
+    clc
+    rts
+@start_string:
+    lda #SCAN_MODE_STRING
+    sta program_codec_scan_mode
+    jmp @body
+@start_rem:
+    lda #SCAN_MODE_REM
+    sta program_codec_scan_mode
+    jmp @body
+@start_data:
+    lda #SCAN_MODE_DATA
+    sta program_codec_scan_mode
+    jmp @body
+@in_string:
+    lda program_stream_value
+    cmp #'"'
+    beq :+
+    jmp @body
+:
+    lda #SCAN_MODE_NORMAL
+    sta program_codec_scan_mode
+    jmp @body
+@in_data_string:
+    lda program_stream_value
+    cmp #'"'
+    beq :+
+    jmp @body
+:
+    lda #SCAN_MODE_DATA
+    sta program_codec_scan_mode
+    jmp @body
+@in_data:
+    lda program_stream_value
+    cmp #'"'
+    beq @data_string
+    cmp #':'
+    beq :+
+    jmp @body
+:
+    lda #SCAN_MODE_NORMAL
+    sta program_codec_scan_mode
+    jmp @body
+@data_string:
+    lda #SCAN_MODE_DATA_STRING
+    sta program_codec_scan_mode
+    jmp @body
+@done:
+    clc
+    rts
+@error:
+    sec
+    rts
+.endproc
 
 ; Move [source,length) to destination zero, where source is A (0, 2, or 16).
 .proc __program_stream_shift_left
@@ -1465,8 +1875,17 @@ __program_stream_select_save_format:
 .endproc
 
 __program_stream_decode_stock:
-    jsr __program_stream_validate_stock
+    jsr __program_stream_validate_stock_prepare
     bcs @error
+    jmp __program_stream_decode_stock_validated
+@error:
+    lda #ERR_SYNTAX
+    sec
+    rts
+
+; Decode transform after an XIP page has already validated the active
+; V2/3.5 linked-line stream.  This resident tail never changes $DE00.
+__program_stream_decode_stock_validated:
     lda #$02
     jsr __program_stream_shift_left
     bcs @error

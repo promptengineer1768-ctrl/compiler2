@@ -33,6 +33,10 @@ if ($Validate) {
     return
 }
 
+# A release build never consumes stale objects or generated reports.
+& $Python tools/build_output.py --project-root $Root --output-dir $OutDir
+if ($LASTEXITCODE -ne 0) { throw "Build output preparation failed." }
+
 # 2. Run ZP allocation
 Write-Host "`n=== Allocating Zero Page ===" -ForegroundColor Green
 & $Python tools/zp_alloc.py
@@ -112,12 +116,42 @@ $PrgBytes[1] = 0x08
     "$OutDir/compiler.bin" `
     "$OutDir/georam.bin" `
     --labels "$OutDir/compiler.lbl" `
-    --routine-directory "$OutDir/routine_directory.json"
+    --routine-directory "$OutDir/routine_directory.json" `
+    --linked-georam "$OutDir/georam.bin"
 if ($LASTEXITCODE -ne 0) { throw "geoRAM payload population failed." }
 
 # Extract segments
 & $Python tools/extract_segments.py "$OutDir/compiler.map" "$OutDir/compiler.bin" "$OutDir/compile.bin"
 if ($LASTEXITCODE -ne 0) { throw "Segment extraction failed." }
+
+# Package hibasic.bin as a PRG loadable at $E000 (program_lines / LET helpers).
+$HibasicBin = Join-Path $Root "$OutDir/hibasic.bin"
+$HibasicPrg = Join-Path $Root "$OutDir/hibasic.prg"
+if (Test-Path $HibasicBin) {
+    $Hb = [System.IO.File]::ReadAllBytes($HibasicBin)
+    $HbPrg = New-Object byte[] ($Hb.Length + 2)
+    $HbPrg[0] = 0x00
+    $HbPrg[1] = 0xE0
+    [Array]::Copy($Hb, 0, $HbPrg, 2, $Hb.Length)
+    [System.IO.File]::WriteAllBytes($HibasicPrg, $HbPrg)
+    Write-Host "Packaged hibasic.prg ($($Hb.Length) bytes -> `$E000)" -ForegroundColor Green
+}
+
+# The bounded RAM-under-I/O cold overlay is staged at $0200 then copied through
+# the resident gate to $D000; it is never loaded directly over live I/O.
+$IoBasicBin = Join-Path $Root "$OutDir/iobasic.bin"
+$IoBasicPrg = Join-Path $Root "$OutDir/iobasic.prg"
+if (Test-Path $IoBasicBin) {
+    $Io = [System.IO.File]::ReadAllBytes($IoBasicBin)
+    if ($Io.Length -gt 255) { throw "iobasic.bin exceeds the $0200 staging page." }
+    $IoPrg = New-Object byte[] ($Io.Length + 2)
+    $IoPrg[0] = 0x00
+    $IoPrg[1] = 0x02
+    [Array]::Copy($Io, 0, $IoPrg, 2, $Io.Length)
+    [System.IO.File]::WriteAllBytes($IoBasicPrg, $IoPrg)
+    Write-Host "Packaged iobasic.prg ($($Io.Length) bytes -> `$0200 staging)" -ForegroundColor Green
+}
+
 # Stage & pack
 & $Python tools/prepare_compressor_segments.py "$OutDir/compile.bin" "$OutDir/basicv3.prg"
 if ($LASTEXITCODE -ne 0) { throw "Compressor segment staging failed." }
@@ -183,6 +217,11 @@ if ($UseCompressor) {
 $ReuPath = Join-Path $Root "$OutDir/reu.bin"
 & $Python tools/package_d64.py --write-reu-patch $PackageGeoram $ReuPath
 if ($LASTEXITCODE -ne 0) { throw "REU patch generation failed." }
+
+# The overlay directory is derived from the linked geoRAM routine directory;
+# the current REU sidecar is explicitly recorded as a patch-only layout.
+& $Python tools/generate_expansion_contracts.py --build-dir $OutDir
+if ($LASTEXITCODE -ne 0) { throw "Expansion contract generation failed." }
 $PreferenceRecord = Join-Path $Root "$OutDir/expansion_preference.json"
 @{
     schema_version = 1
@@ -252,7 +291,10 @@ Write-Host "`n=== Generating reference documents ===" -ForegroundColor Green
 & $Python tools/generate_reference.py
 if ($LASTEXITCODE -ne 0) { throw "Reference documents generation failed." }
 
-& $Python tools/validate_build.py
+& $Python tools/validate_build.py --write-manifest
+if ($LASTEXITCODE -ne 0) { throw "Build manifest generation failed." }
+
+& $Python tools/validate_build.py --all
 if ($LASTEXITCODE -ne 0) { throw "Post-build validation failed." }
 
 Write-Host "`nBuild completed successfully!" -ForegroundColor Green

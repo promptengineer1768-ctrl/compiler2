@@ -151,6 +151,8 @@ def merge_generated_segments(policy: Dict[str, Any], num_georam_pages: int) -> s
             file_part = ", file = %O"
         elif area["name"] == "RAM_HIGH":
             file_part = ', file = "build/hibasic.bin"'
+        elif area["name"] == "IO":
+            file_part = ', file = "build/iobasic.bin"'
         else:
             file_part = ""
         lines.append(
@@ -198,8 +200,8 @@ def merge_generated_segments(policy: Dict[str, Any], num_georam_pages: int) -> s
             "    EDITOR_PINNED: load = RAM_HIGH, type = rw, define = yes;",
             "    HIBASIC: load = RAM_HIGH, type = ro, define = yes;",
             "    EDITOR: load = RAM_HIGH, type = ro;",
-            "    WEDGE: load = RAM_HIGH, type = ro;",
-            "    COMPRESSOR: load = RAM_HIGH, type = ro, define = yes;",
+            "    WEDGE: load = RAM_HIGH, type = ro, define = yes;",
+            "    IO_COLD: load = IO, type = ro, define = yes;",
         ]
     )
 

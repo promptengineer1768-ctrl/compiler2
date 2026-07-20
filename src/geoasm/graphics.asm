@@ -130,34 +130,6 @@ graphics_enter:
     sec
     rts
 
-; graphics_exit — A=exit reason (reserved); restore text/colors/ceiling
-.export graphics_exit
-graphics_exit:
-    lda #D011_TEXT
-    sta VIC_CTRL1
-    lda #D016_TEXT
-    sta VIC_CTRL2
-    lda #D018_TEXT
-    sta VIC_MEM
-    lda CIA2_DDRA
-    ora #$03
-    sta CIA2_DDRA
-    lda CIA2_PRA
-    ora #$03                 ; VIC bank 0
-    sta CIA2_PRA
-    lda #0
-    sta VIC_BORDER
-    sta VIC_SPR_EN
-    sta graphics_mode
-    sta graphics_active
-    lda #$0e
-    sta VIC_BG0
-    lda #<MEM_TOP_TEXT
-    sta graphics_dynamic_ceiling
-    lda #>MEM_TOP_TEXT
-    sta graphics_dynamic_ceiling+1
-    jmp graphics_set_canonical
-
 ; graphics_matrix_copy — X/Y → record: src.w, dest.w, len.w; C=error
 ; Copies through ram_under_io_copy_in in CHUNK-byte slices (IRQ between).
 .export graphics_matrix_copy
@@ -269,6 +241,9 @@ graphics_matrix_copy:
 
 ; graphics_validate_bounds — X/Y → desc: kind, x_lo, x_hi, y; C=out-of-bounds
 ; kind 0=pixel (0..319,0..199); 1/2=matrix/color cell (0..39,0..24)
+; Pure cold compiler validation executes from a dedicated XIP page.  Callers
+; pass the routine ID through georam_call_group_n_xy so X/Y survive the gate.
+.segment "GEORAM_PAGE_45"
 .export graphics_validate_bounds
 graphics_validate_bounds:
     stx zp_ptr1
@@ -306,15 +281,62 @@ graphics_validate_bounds:
     cmp #<MAX_X+1
     bcs @bad
 @ok:
-    jsr graphics_set_canonical
+    jsr graphics_validate_set_canonical
     clc
     rts
 @bad:
-    jsr graphics_set_canonical
+    jsr graphics_validate_set_canonical
     sec
     rts
 
+; Page-local: an XIP entry cannot JSR to the low-RAM graphics helper.
+graphics_validate_set_canonical:
+    lda #CPU_PORT_CANONICAL
+    sta CPU_PORT
+    rts
+
+.assert * - graphics_validate_bounds <= $FA, error, "graphics_validate_bounds exceeds geoRAM page 45"
+
+; graphics_exit — A=exit reason (reserved/ignored by gate setup); restore
+; text/colors/ceiling.  Cold path only: enter via georam_call_group_n with
+; X = GEORAM_ROUTINE_ID_GRAPHICS_EXIT (group-1 local index is the low byte).
+.segment "GEORAM_PAGE_52"
+.export graphics_exit
+graphics_exit:
+    lda #D011_TEXT
+    sta VIC_CTRL1
+    lda #D016_TEXT
+    sta VIC_CTRL2
+    lda #D018_TEXT
+    sta VIC_MEM
+    lda CIA2_DDRA
+    ora #$03
+    sta CIA2_DDRA
+    lda CIA2_PRA
+    ora #$03                 ; VIC bank 0
+    sta CIA2_PRA
+    lda #0
+    sta VIC_BORDER
+    sta VIC_SPR_EN
+    sta graphics_mode
+    sta graphics_active
+    lda #$0e
+    sta VIC_BG0
+    lda #<MEM_TOP_TEXT
+    sta graphics_dynamic_ceiling
+    lda #>MEM_TOP_TEXT
+    sta graphics_dynamic_ceiling+1
+    ; Fall through: page-local canonical $01 restore (no low-RAM jsr).
+graphics_exit_set_canonical:
+    lda #CPU_PORT_CANONICAL
+    sta CPU_PORT
+    clc
+    rts
+
+.assert * - graphics_exit <= $FA, error, "graphics_exit exceeds geoRAM page 52"
+
 ; Shared: force $01 = canonical Compiler 2 mapping.
+.segment "GRAPHICS"
 graphics_set_canonical:
     lda #CPU_PORT_CANONICAL
     sta CPU_PORT

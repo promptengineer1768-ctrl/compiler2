@@ -45,12 +45,7 @@ def _dll_path() -> Path:
 
 
 def _load_symbol_address(symbol_name: str) -> int:
-    """Resolve a symbol from the label file first, then the routine directory.
-
-    geoRAM directory entries keep a window-relative ``$DE00`` address. Linked
-    WEDGE-segment code is also present in ``compiler.bin`` at its RAM address,
-    which is what these direct unit tests execute.
-    """
+    """Resolve a non-XIP symbol from the label file or routine directory."""
     map_path = ROOT / "build" / "compiler.lbl"
     if map_path.exists():
         pattern = rf"^\s*al\s+([0-9A-Fa-f]{{6}})\s+\.{re.escape(symbol_name)}\s*$"
@@ -85,11 +80,24 @@ def _new_emu() -> Any:
         emu.write_mem(0x0001, 0x35)
     if hasattr(emu, "set_georam_enabled"):
         emu.set_georam_enabled(True)
+    georam_path = ROOT / "build" / "georam.bin"
+    if not georam_path.exists():
+        pytest.fail("build/georam.bin not found. Run build.ps1 first.")
+    georam_image = georam_path.read_bytes()
+    assert georam_image[:2] == b"\x00\xde"
+    # Preserve the emulator's configured capacity (the image only covers
+    # installed pages) while making the actual linked XIP bytes executable.
+    backing_size = len(emu.export_georam())
+    image_payload = georam_image[2:]
+    assert backing_size >= len(image_payload)
+    emu.load_georam(image_payload + bytes(backing_size - len(image_payload)))
     if hasattr(emu, "set_sp"):
         emu.set_sp(0xFF)
     # Bypass conftest post-hooks so assertions observe real production side effects.
-    setattr(emu, "_compiler2_real_bytes_only", True)
     install_kernal_stubs(emu)
+    # The installed path initializes the geoRAM context stack before any
+    # group-1 call.  These tests invoke the same gate directly.
+    emu.execute(_load_symbol_address("ctx_init"), 50_000)
     # Default disk device used by SETLFS/LOAD/wedge.
     emu.write_mem(0xBA, 8)
     return emu
@@ -104,6 +112,21 @@ def _write_command(emu: Any, text: bytes, addr: int = RECORD_ADDR) -> None:
 
 
 def _call(emu: Any, symbol: str, *, a: int = 0, x: int = 0, y: int = 0) -> Any:
+    directory = ROOT / "build" / "routine_directory.json"
+    if directory.exists():
+        record = json.loads(directory.read_text(encoding="utf-8")).get(
+            "routines", {}
+        ).get(symbol)
+        if isinstance(record, dict) and record.get("layer") == "georam":
+            # Never execute $DE00 directly: only the gate selects the linked
+            # page and restores the caller mapping after the XIP return.
+            routine_id = int(record["id"])
+            assert 0x100 <= routine_id <= 0x1FF
+            emu.set_a(routine_id & 0xFF)
+            emu.set_x(x)
+            emu.set_y(y)
+            emu.execute(_load_symbol_address("georam_call_group_n_xy"), 50_000)
+            return emu.get_state()
     emu.set_a(a)
     emu.set_x(x)
     emu.set_y(y)

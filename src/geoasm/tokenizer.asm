@@ -55,8 +55,12 @@ keyword_candidate_end:
 token_match_offset:
     .res 1
 
-.segment "GEOASM"
-
+; token_init — cold line setup for the expansion-native tokenizer.
+; Inputs: X/Y = zero-terminated source pointer.
+; Outputs: C clear. Side effects: resets tokenizer BSS state for a new line.
+; Clobbers: A. Zero page: none.  Callers must enter through
+; georam_call_group_0_xy (group-0 directory ID) so X/Y survive the gate.
+.segment "GEORAM_PAGE_51"
 .export token_init
 token_init:
     stx token_source_ptr
@@ -71,6 +75,10 @@ token_init:
     sta token_keyword_dialect
     clc
     rts
+
+.assert * - token_init <= $FA, error, "token_init exceeds geoRAM page 51"
+
+.segment "GEOASM"
 
 .export token_next
 token_next:

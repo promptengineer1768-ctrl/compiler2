@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Compiler 2 routine placement policy",
+  "type": "object",
+  "required": ["manifest_version", "source_manifest", "policy", "routines"],
+  "properties": {
+    "manifest_version": {"const": "1.0"},
+    "source_manifest": {"const": "manifests/routines.json"},
+    "policy": {
+      "type": "object",
+      "required": [
+        "classification_rule", "allowed_target_placements",
+        "approved_exception_policy"
+      ]
+    },
+    "routines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "routine_id", "name", "module", "current_placement",
+          "target_placement", "classification", "conformance",
+          "porting_strategy", "normative_anchor", "evidence",
+          "verification", "notes"
+        ],
+        "properties": {
+          "routine_id": {"type": "integer", "minimum": 0},
+          "name": {"type": "string", "minLength": 1},
+          "module": {"type": "string", "minLength": 1},
+          "current_placement": {"$ref": "#/$defs/placement"},
+          "target_placement": {"$ref": "#/$defs/placement"},
+          "classification": {"$ref": "#/$defs/placement"},
+          "conformance": {"enum": ["conforming", "migration_required"]},
+          "porting_strategy": {
+            "enum": ["retain", "relocate", "repack", "split", "xip_rewrite"]
+          },
+          "normative_anchor": {"type": "string", "minLength": 1},
+          "evidence": {"type": "string", "minLength": 1},
+          "verification": {"type": "string", "minLength": 1},
+          "notes": {"type": "string", "minLength": 1},
+          "normal_ram_reason": {"type": "string", "minLength": 1},
+          "normal_ram_byte_cost": {"type": "integer", "minimum": 1},
+          "normal_ram_byte_cost_basis": {"type": "string", "minLength": 1},
+          "owner": {"type": "string", "minLength": 1},
+          "review_test": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "$defs": {
+    "placement": {
+      "enum": [
+        "resident_pinned", "loader", "runtime_abi", "compiled_code",
+        "expansion_xip"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

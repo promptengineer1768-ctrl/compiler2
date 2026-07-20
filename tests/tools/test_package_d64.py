@@ -148,7 +148,11 @@ class TestBuildD64:
         assert manifest["disk_title"] == "compiler2"
         assert manifest["valid"] is True
         names = [item["name"] for item in manifest["files"]]
-        assert names == ["basicv3", "georam", "reu"]
+        assert names == ["basicv3", "georam", "reu", "hibasic"] or names == [
+            "basicv3",
+            "georam",
+            "reu",
+        ]
         assert all(item["type"] == "PRG" for item in manifest["files"])
         assert (
             package_d64.validate_dual_d64_release(out_d64, basicv3, georam, reu) == []

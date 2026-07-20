@@ -25,7 +25,18 @@ Generate the checked-in C64 BASIC V2 and Plus/4 BASIC 3.5 observations with:
 python tools/generate_vice_fixtures.py
 python tools/generate_vice_fixtures.py --profile basicv2
 python tools/generate_vice_fixtures.py --case basicv35-program-WHILE
+# Keyword matrix (group priority order; missing stock oracles only):
+python tools/generate_vice_fixtures.py --from-keyword-matrix --group group1 --missing-only
 ```
+
+Product E2E against the matrix runs with:
+
+```powershell
+python -m pytest tests/e2e/test_keyword_matrix.py -v
+```
+
+Group order is group1 → group2 → group3. Within a group, capture stock
+oracles first, then product tests in immediate → program → compile order.
 
 The harness starts a fresh supervised emulator for every case, tokenizes stock
 BASIC source with an explicitly configured `petcat.exe`, autostarts the

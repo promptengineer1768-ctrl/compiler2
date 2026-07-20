@@ -110,6 +110,80 @@ def _verify_georam_sidecar(
             )
 
 
+def _sidecar_manifest(sidecar: Path, runtime_output: Path) -> dict[str, object]:
+    """Describe one emitted CGS1 sidecar from its binary directory.
+
+    Args:
+        sidecar: Headerless CGS1 sidecar emitted by the compressor.
+        runtime_output: Loadable runtime-only compressor output.
+
+    Returns:
+        Runtime manifest compatible with the compressor's JSON contract.
+
+    Raises:
+        ValueError: If the CGS1 header or directory is malformed.
+    """
+    data = sidecar.read_bytes()
+    if data[:2] == b"\x00\xde":
+        data = data[2:]
+    if len(data) < 28 or data[:4] != b"CGS1":
+        raise ValueError("compressed geoRAM sidecar has no CGS1 header")
+
+    def u16(offset: int) -> int:
+        return int.from_bytes(data[offset : offset + 2], "little")
+
+    def u32(offset: int) -> int:
+        return int.from_bytes(data[offset : offset + 4], "little")
+
+    chunk_count = u16(6)
+    directory_end = 28 + chunk_count * 23
+    if u16(4) != 1 or u32(24) != len(data) or directory_end > len(data):
+        raise ValueError("compressed geoRAM sidecar has malformed CGS1 metadata")
+
+    chunks: list[dict[str, int]] = []
+    packed_offset = directory_end
+    for index in range(chunk_count):
+        offset = 28 + index * 23
+        packed_size = u32(offset + 11)
+        if packed_offset + packed_size > len(data):
+            raise ValueError("compressed geoRAM sidecar chunk exceeds the file")
+        chunks.append(
+            {
+                "logical_start": u32(offset + 3),
+                "unpacked_size": u32(offset + 7),
+                "packed_offset": packed_offset,
+                "packed_size": packed_size,
+                "block": data[offset],
+                "page": u16(offset + 1),
+                "packed_crc32": u32(offset + 15),
+                "unpacked_crc32": u32(offset + 19),
+            }
+        )
+        packed_offset += packed_size
+    if packed_offset != len(data):
+        raise ValueError("compressed geoRAM sidecar has trailing chunk data")
+
+    return {
+        "runtime_output": str(runtime_output),
+        "runtime_only": True,
+        "runtime_segments": [],
+        "sidecars": [
+            {
+                "segment": "georam",
+                "path": str(sidecar),
+                "c64_name": "GEORAM",
+                "destination_kind": "georam",
+                "required_device_size_kib": u32(8),
+                "page_size": u16(12),
+                "unpacked_size": u32(16),
+                "unpacked_crc32": u32(20),
+                "packed_size": len(data),
+                "chunks": chunks,
+            }
+        ],
+    }
+
+
 def build_artifacts(root: Path, build_dir: Path, compressor_root: Path) -> None:
     """Build compressed PRG and CGS1 sidecar artifacts.
 
@@ -140,6 +214,7 @@ def build_artifacts(root: Path, build_dir: Path, compressor_root: Path) -> None:
     )
     metadata = build_dir / "GEORAM_compressed.json"
     sidecar_driver = build_dir / "georam_sidecar_loader.prg"
+    sidecar_metadata = build_dir / "georam_sidecar_metadata.prg"
     emitted_sidecar = build_dir / "GEORAM"
     emitted_sidecar.unlink(missing_ok=True)
     normalized = build_dir / "GEORAM_compressed.prg"
@@ -150,8 +225,12 @@ def build_artifacts(root: Path, build_dir: Path, compressor_root: Path) -> None:
             "--pack",
             "--cfg",
             str(georam_cfg),
+            "--runtime-only",
+            "--metadata-output",
+            str(sidecar_metadata),
             "--manifest-output",
             str(metadata),
+            "--verbose",
             "-o",
             str(sidecar_driver),
         ],
@@ -168,9 +247,10 @@ def build_artifacts(root: Path, build_dir: Path, compressor_root: Path) -> None:
     georam_payload = (build_dir / "segments" / "georam_payload.bin").read_bytes()
     _verify_georam_sidecar(unpacker, normalized, georam_payload, root)
 
-    if not metadata.exists():
-        raise FileNotFoundError("compressor did not emit the GEORAM sidecar manifest")
-    manifest = json.loads(metadata.read_text(encoding="utf-8"))
+    if metadata.exists():
+        manifest = json.loads(metadata.read_text(encoding="utf-8"))
+    else:
+        manifest = _sidecar_manifest(normalized, sidecar_driver)
     sidecars = manifest.get("sidecars")
     if not isinstance(sidecars, list) or len(sidecars) != 1:
         raise ValueError("GEORAM sidecar manifest must contain one sidecar")

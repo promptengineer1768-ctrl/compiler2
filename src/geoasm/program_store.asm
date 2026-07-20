@@ -17,6 +17,7 @@
 
 .import arena_handle_valid
 .import arena_select_page
+.import georam_restore_xip_code
 
 .macro jcs target
     bcc *+5
@@ -104,7 +105,157 @@ program_store_new_length:   .res 2
 program_store_delta:        .res 2
 program_store_found:        .res 1
 
+; Public read-side adapter workspace.  This is metadata only: published
+; program bytes remain in the tokenized-program arena.
+program_store_copy_left:      .res 2
+program_store_copy_target:    .res 1
+program_store_copy_index:     .res 1
+.export program_store_selected_line_number
+program_store_selected_line_number: .res 2
+
 .segment "GEOASM"
+
+; program_store_line_count
+; Purpose: return the number of records in the published normalized stream.
+; Inputs: none. Outputs: A=count, C=0; C=1/A=error.
+; Clobbers: A, X, Y. Side effects: none.
+; Zero page: zp_expr_ptr1.
+.export program_store_line_count
+program_store_line_count:
+    jsr program_store_ensure_ready
+    jcs @error
+    ldx #<__program_store_published
+    ldy #>__program_store_published
+    jsr program_store_probe_src
+    jcs @error
+    jsr program_store_validate_src
+    jcs @error
+    lda #$00
+    sta program_store_src_index
+    sta program_store_src_index+1
+    sta program_store_copy_index
+@record:
+    jsr program_store_read_src
+    jcs @error
+    sta program_store_record_len
+    jsr program_store_inc_src
+    jsr program_store_read_src
+    jcs @error
+    sta program_store_record_len+1
+    jsr program_store_inc_src
+    lda program_store_record_len
+    ora program_store_record_len+1
+    beq @done
+    inc program_store_copy_index
+    beq @error
+    lda program_store_src_index
+    clc
+    adc program_store_record_len
+    sta program_store_src_index
+    lda program_store_src_index+1
+    adc program_store_record_len+1
+    sta program_store_src_index+1
+    jmp @record
+@done:
+    lda program_store_copy_index
+    clc
+    rts
+@error:
+    lda #ERR_ILLEGAL_QUANTITY
+    sec
+    rts
+
+; program_store_copy_line_body_at
+; Purpose: copy one published line body (including its NUL) into caller RAM.
+; Inputs: A=zero-based sorted line index, X/Y=destination pointer (at least
+;         81 bytes for editor input). Outputs: C=0; C=1/A=error.
+; Clobbers: A, X, Y. Side effects: selects arena pages only.
+; Zero page: zp_expr_ptr1.
+.export program_store_copy_line_body_at
+program_store_copy_line_body_at:
+    sta program_store_copy_target
+    stx zp_dest
+    sty zp_dest+1
+    jsr program_store_ensure_ready
+    jcs @error
+    ldx #<__program_store_published
+    ldy #>__program_store_published
+    jsr program_store_probe_src
+    jcs @error
+    jsr program_store_validate_src
+    jcs @error
+    lda #$00
+    sta program_store_src_index
+    sta program_store_src_index+1
+    sta program_store_copy_index
+@record:
+    jsr program_store_read_src
+    jcs @error
+    sta program_store_record_len
+    jsr program_store_inc_src
+    jsr program_store_read_src
+    jcs @error
+    sta program_store_record_len+1
+    jsr program_store_inc_src
+    lda program_store_record_len
+    ora program_store_record_len+1
+    jeq @error
+    lda program_store_copy_index
+    cmp program_store_copy_target
+    beq @copy
+    lda program_store_src_index
+    clc
+    adc program_store_record_len
+    sta program_store_src_index
+    lda program_store_src_index+1
+    adc program_store_record_len+1
+    sta program_store_src_index+1
+    inc program_store_copy_index
+    bne @record
+    jmp @error
+@copy:
+    ; Skip line number, then copy record_length-2 body bytes (incl. NUL).
+    jsr program_store_read_src
+    jcs @error
+    sta program_store_selected_line_number
+    jsr program_store_inc_src
+    jsr program_store_read_src
+    jcs @error
+    sta program_store_selected_line_number+1
+    jsr program_store_inc_src
+    lda program_store_record_len
+    sec
+    sbc #$02
+    sta program_store_copy_left
+    lda program_store_record_len+1
+    sbc #$00
+    sta program_store_copy_left+1
+    ldy #$00
+@byte:
+    lda program_store_copy_left
+    ora program_store_copy_left+1
+    beq @done
+    jsr program_store_read_src
+    jcs @error
+    sta (zp_dest),y
+    jsr program_store_inc_src
+    inc zp_dest
+    bne :+
+    inc zp_dest+1
+:
+    lda program_store_copy_left
+    bne :+
+    dec program_store_copy_left+1
+:
+    dec program_store_copy_left
+    jmp @byte
+@done:
+    clc
+    rts
+@error:
+    lda #ERR_ILLEGAL_QUANTITY
+    sec
+    rts
 
 ; Select the source byte's page and return the byte in A.
 .proc program_store_read_src
@@ -118,9 +269,13 @@ program_store_found:        .res 1
     bcs @error
     ldy program_store_src_index
     lda $DE00,y
+    pha
+    jsr georam_restore_xip_code
+    pla
     clc
     rts
 @error:
+    jsr georam_restore_xip_code
     lda #ERR_ILLEGAL_QUANTITY
     sec
     rts
@@ -139,9 +294,11 @@ program_store_found:        .res 1
     ldy program_store_dst_index
     lda program_store_value
     sta $DE00,y
+    jsr georam_restore_xip_code
     clc
     rts
 @error:
+    jsr georam_restore_xip_code
     lda #ERR_ILLEGAL_QUANTITY
     sec
     rts
@@ -229,9 +386,11 @@ program_store_found:        .res 1
     ldy program_store_src_generation
     jsr arena_select_page
     jcs @error
+    jsr georam_restore_xip_code
     clc
     rts
 @error:
+    jsr georam_restore_xip_code
     lda #ERR_ILLEGAL_QUANTITY
     sec
     rts
@@ -1012,6 +1171,7 @@ program_store_found:        .res 1
 ; Side effects: clones the complete published PS payload to arena 9.
 ; Clobbers: A, X, Y. Flags: C reports failure.
 ; Zero page: zp_expr_ptr1.
+.segment "GEORAM_PAGE_14"
 .export program_tx_begin
 program_tx_begin:
     jsr program_store_ensure_ready
@@ -1070,6 +1230,7 @@ program_tx_begin:
 ; Side effects: mutates only the dedicated staging arena.
 ; Clobbers: A, X, Y. Flags: C reports failure.
 ; Zero page: zp_expr_ptr1.
+.segment "GEORAM_PAGE_15"
 .export program_tx_put_line
 program_tx_put_line:
     stx program_store_request_ptr
@@ -1152,6 +1313,7 @@ program_tx_put_line:
 ; Side effects: mutates only the dedicated staging arena.
 ; Clobbers: A, X, Y. Flags: C reports failure.
 ; Zero page: zp_expr_ptr1.
+.segment "GEORAM_PAGE_16"
 .export program_tx_delete_line
 program_tx_delete_line:
     stx program_store_request_ptr
@@ -1210,6 +1372,7 @@ program_tx_delete_line:
 ; generation, then invalidates the PT.
 ; Clobbers: A, X, Y. Flags: C reports failure.
 ; Zero page: zp_expr_ptr1.
+.segment "GEORAM_PAGE_17"
 .export program_tx_commit
 program_tx_commit:
     stx program_store_request_ptr
@@ -1254,6 +1417,7 @@ program_tx_commit:
 ; Side effects: invalidates PT; published descriptor/payload/generation unchanged.
 ; Clobbers: A, X, Y. Flags: C reports failure.
 ; Zero page: none.
+.segment "GEORAM_PAGE_18"
 .export program_tx_abort
 program_tx_abort:
     stx program_store_request_ptr
@@ -1272,6 +1436,8 @@ program_tx_abort:
     lda #ERR_ILLEGAL_QUANTITY
     sec
     rts
+
+.segment "GEOASM"
 
 ; program_replace_from_load
 ; Purpose: transactionally replace publication from a decoded normalized PS.

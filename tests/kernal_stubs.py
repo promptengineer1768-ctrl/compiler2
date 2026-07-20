@@ -8,6 +8,8 @@ actual KERNAL and device implementations.
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
 from typing import Protocol
 
 KERNAL_SCNKEY = 0xFF9F
@@ -29,17 +31,17 @@ KERNAL_STOP = 0xFFE1
 KERNAL_GETIN = 0xFFE4
 KERNAL_UDTIM = 0xFFEA
 
-# Place stub bodies above the full RAM_HIGH install image (hibasic.bin ends
-# near $F8C9: EDITOR_PINNED + HIBASIC + EDITOR + WEDGE + COMPRESSOR). Workspace
-# bytes sit in the free gap; code starts at $F900 and must stay below $FFF9.
-KERNAL_STUB_CODE_BASE = 0xF900
-KERNAL_STUB_STRIDE = 0x50
-KERNAL_STUB_INPUT = 0xF8D0
-KERNAL_STUB_OUTPUT = 0xF8D1
-KERNAL_STUB_LAST_A = 0xF8D2
-KERNAL_STUB_LAST_X = 0xF8D3
-KERNAL_STUB_LAST_Y = 0xF8D4
-KERNAL_STUB_LAST_PORT = 0xF8D5
+# Place tightly packed stub bodies above the linked compiler image and below
+# the I/O window. The fixture validates this boundary against compiler.map so
+# normal-RAM growth cannot silently overwrite production code.
+KERNAL_STUB_CODE_BASE = 0xCB00
+KERNAL_STUB_INPUT = 0xCEF0
+KERNAL_STUB_OUTPUT = 0xCEF1
+KERNAL_STUB_LAST_A = 0xCEF2
+KERNAL_STUB_LAST_X = 0xCEF3
+KERNAL_STUB_LAST_Y = 0xCEF4
+KERNAL_STUB_LAST_PORT = 0xCEF5
+COMPILER_MAP = Path(__file__).resolve().parents[1] / "build" / "compiler.map"
 
 
 class _MemoryEmulator(Protocol):
@@ -247,19 +249,31 @@ def _bodies() -> dict[int, bytes]:
 
 def install_kernal_stubs(emu: _MemoryEmulator) -> None:
     """Install byte-level public KERNAL stubs into a no-ROM local emulator."""
+    segments = re.findall(
+        r"^\S+\s+([0-9A-Fa-f]{6})\s+([0-9A-Fa-f]{6})\s+[0-9A-Fa-f]{6}",
+        COMPILER_MAP.read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+    linked_end = max(int(end, 16) for start, end in segments if int(start, 16) < 0xD000)
+    if linked_end >= KERNAL_STUB_CODE_BASE:
+        raise AssertionError(
+            f"compiler image ends at ${linked_end:04X}, colliding with KERNAL "
+            f"stub fixture at ${KERNAL_STUB_CODE_BASE:04X}"
+        )
     emu.write_mem(KERNAL_STUB_INPUT, 0)
     emu.write_mem(KERNAL_STUB_OUTPUT, 0)
     emu.write_mem(KERNAL_STUB_LAST_A, 0)
     emu.write_mem(KERNAL_STUB_LAST_X, 0)
     emu.write_mem(KERNAL_STUB_LAST_Y, 0)
     emu.write_mem(KERNAL_STUB_LAST_PORT, 0)
-    for index, (vector, body) in enumerate(_bodies().items()):
-        target = KERNAL_STUB_CODE_BASE + index * KERNAL_STUB_STRIDE
+    target = KERNAL_STUB_CODE_BASE
+    for vector, body in _bodies().items():
         code = _prefix() + body
-        if len(code) > KERNAL_STUB_STRIDE:
-            raise AssertionError(f"KERNAL stub at ${vector:04X} exceeds its slot")
+        if target + len(code) > KERNAL_STUB_INPUT:
+            raise AssertionError("KERNAL stub fixture exceeds its reserved RAM gap")
         emu.write_mem_range(target, code)
         emu.write_mem_range(vector, bytes((0x4C,)) + _word(target))
+        target += len(code)
 
 
 def install_vector_stub(

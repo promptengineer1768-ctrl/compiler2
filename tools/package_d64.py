@@ -236,6 +236,11 @@ def _build_with_c1541(
     if reu_path and Path(reu_path).exists():
         cmd.extend(["-write", reu_path, "reu"])
 
+    # High-RAM image (program_lines, LET/FOR helpers) at $E000.
+    hibasic_prg = Path(basicv3_path).with_name("hibasic.prg") if basicv3_path else None
+    if hibasic_prg is not None and hibasic_prg.exists():
+        cmd.extend(["-write", str(hibasic_prg), "hibasic"])
+
     subprocess.run(cmd, check=True, capture_output=True)
 
 
@@ -280,6 +285,12 @@ def _build_direct(
         files.append(("GEORAM", georam_path))
     if reu_path and Path(reu_path).exists():
         files.append(("REU", reu_path))
+    hibasic_prg = Path(basicv3_path).with_name("hibasic.prg") if basicv3_path else None
+    if hibasic_prg is not None and hibasic_prg.exists():
+        files.append(("HIBASIC", str(hibasic_prg)))
+    iobasic_prg = Path(basicv3_path).with_name("iobasic.prg") if basicv3_path else None
+    if iobasic_prg is not None and iobasic_prg.exists():
+        files.append(("IOBASIC", str(iobasic_prg)))
 
     for name, path in files:
         data = Path(path).read_bytes()
@@ -416,7 +427,10 @@ def _add_entry(
 
 
 # Dual-device release directory contract (DESIGN2 §2 / REQUIREMENTS §8).
+# The hibasic high-RAM image is optional: a partial fixture may omit it when the
+# companion hibasic.prg is absent, so only the core trio is mandatory.
 REQUIRED_D64_FILES: tuple[str, ...] = ("basicv3", "georam", "reu")
+OPTIONAL_D64_FILES: tuple[str, ...] = ("hibasic",)
 # Sector bounds: basicv3 carries always-mapped RUNTIME/GEOASM/CODE so absolute
 # compile/print/wedge calls resolve; georam ≤64KiB PRG; small REU patch.
 D64_SECTOR_BOUNDS: dict[str, tuple[int, int]] = {
@@ -494,8 +508,9 @@ def validate_d64_contents(disk_title: str, files: list[dict[str, Any]]) -> list[
     if disk_title != "compiler2":
         errors.append(f"D64 disk title must be 'compiler2', got {disk_title!r}")
     names = [entry.get("name") for entry in files]
-    if names != list(REQUIRED_D64_FILES):
-        errors.append(f"D64 directory must be {list(REQUIRED_D64_FILES)}, got {names}")
+    required = set(names) | set(OPTIONAL_D64_FILES)
+    if required != set(REQUIRED_D64_FILES) | set(OPTIONAL_D64_FILES):
+        errors.append(f"D64 directory must be {list(REQUIRED_D64_FILES)} (+optional {list(OPTIONAL_D64_FILES)}), got {names}")
     for entry in files:
         name = str(entry.get("name", ""))
         file_type = entry.get("type")

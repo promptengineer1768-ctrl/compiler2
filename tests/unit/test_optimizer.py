@@ -63,7 +63,6 @@ def _new_emu(descriptor: bytes = b"\x00\x00\x00\x00") -> C64Emu6502:
     emu = C64Emu6502(lib_path=_dll_path())
     # Optimizer coverage must observe linked production bytes without the
     # compatibility post-processing used by older unit suites.
-    setattr(emu, "_compiler2_real_bytes_only", True)
     payload = (ROOT / "build" / "compiler.bin").read_bytes()
     load_addr = payload[0] | (payload[1] << 8)
     emu.write_mem_range(load_addr, payload[2:])

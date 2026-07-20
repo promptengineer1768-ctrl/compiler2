@@ -23,6 +23,7 @@ MAX_CYCLES = 8_000_000
 INPUT_ARENA = 8
 LINE_ARENA = 6
 ARENA_GENERATION = 1
+NOEL_SOURCE = ROOT / "tests" / "performance" / "noels_retro_lab_cbm_v2.bas"
 
 
 def _dll_path() -> Path:
@@ -61,18 +62,57 @@ def _load_symbol_address(symbol_name: str) -> int:
 
 
 def _load_binary(emu: C64Emu6502) -> None:
-    """Load the real linked compiler and enable geoRAM."""
+    """Load the real linked compiler, the geoRAM overlay, and enable it."""
     payload = (ROOT / "build" / "compiler.bin").read_bytes()
     load_address = payload[0] | (payload[1] << 8)
     emu.write_mem_range(load_address, payload[2:])
+    image = (ROOT / "build" / "georam.bin").read_bytes()
+    assert image[:2] == b"\x00\xde"
     emu.set_georam_enabled(True)
+    backing_size = len(emu.export_georam())
+    payload_bytes = image[2:]
+    assert backing_size >= len(payload_bytes)
+    emu.load_georam(payload_bytes + bytes(backing_size - len(payload_bytes)))
+    emu.write_mem(0x0000, 0x2F)
+    emu.write_mem(0x0001, 0x35)
+
+
+def _routine_record(routine: str) -> dict[str, object]:
+    data = json.loads(
+        (ROOT / "build" / "routine_directory.json").read_text(encoding="utf-8")
+    )
+    return data["routines"][routine]
+
+
+def _run_paged(emu: C64Emu6502, routine: str, *, x: int, y: int) -> None:
+    """Reach a geoRAM routine through the production XY XIP gate.
+
+    Routines with id<256 take the group-0 gate (A=id); ids 256..511 take the
+    group-n gate (A=low byte of id), which indexes the group-1 directory.
+    """
+    record = _routine_record(routine)
+    assert record.get("layer") == "georam", f"{routine} is not a geoRAM routine"
+    routine_id = int(record["id"])  # type: ignore[arg-type]
+    assert routine_id < 0x200
+    if routine_id < 0x100:
+        gate = "georam_call_group_0_xy"
+    else:
+        gate = "georam_call_group_n_xy"
+    emu.set_a(routine_id & 0xFF)
+    emu.set_x(x)
+    emu.set_y(y)
+    emu.execute(_load_symbol_address(gate), MAX_CYCLES)
 
 
 def _call(emu: C64Emu6502, routine: str, *, x: int = 0, y: int = 0) -> bool:
     """Execute one production routine and return its carry status."""
-    emu.set_x(x)
-    emu.set_y(y)
-    emu.execute(_load_symbol_address(routine), MAX_CYCLES)
+    record = _routine_record(routine)
+    if record.get("layer") == "georam":
+        _run_paged(emu, routine, x=x, y=y)
+    else:
+        emu.set_x(x)
+        emu.set_y(y)
+        emu.execute(_load_symbol_address(routine), MAX_CYCLES)
     return bool(int(emu.get_state().p) & 1)
 
 
@@ -315,3 +355,36 @@ class TestProgramLifecycle:
                 (20, bytes([0x80])),
             ]
         )
+
+    def test_noel_sized_stored_program_publishes_in_expansion_arena(self) -> None:
+        """A 224-byte entered-source program has no EDITOR_PINNED capacity limit.
+
+        The stored source is represented by the canonical normalized PS stream
+        and is published through the production transaction boundary.  This is
+        deliberately larger than the retired 48-byte interim editor table.
+        """
+        source_lines = NOEL_SOURCE.read_bytes().splitlines(keepends=True)
+        assert sum(len(line) for line in source_lines) == 224
+        normalized_lines: list[tuple[int, bytes]] = []
+        for raw_line in source_lines:
+            line_number, separator, body = raw_line.rstrip(b"\r\n").partition(b" ")
+            assert separator == b" "
+            normalized_lines.append((int(line_number), body + b"\x00"))
+        logical = _normalized_program(normalized_lines)
+        assert len(logical) > 48
+
+        emu = C64Emu6502(lib_path=_dll_path())
+        _load_binary(emu)
+        assert not _call(emu, "arena_init_all")
+
+        descriptor = 0xC300
+        _write_stream(emu, descriptor, logical, arena=INPUT_ARENA)
+        assert not _call(
+            emu,
+            "program_replace_from_load",
+            x=descriptor & 0xFF,
+            y=descriptor >> 8,
+        )
+
+        published = _load_symbol_address("__program_store_published")
+        assert _read_stream(emu, published) == logical

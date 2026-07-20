@@ -98,7 +98,6 @@ def _load_binary(emu: C64Emu6502) -> None:
     payload = bin_path.read_bytes()
     load_addr = payload[0] | (payload[1] << 8)
     emu.write_mem_range(load_addr, payload[2:])
-    setattr(emu, "_compiler2_real_bytes_only", True)
     install_kernal_stubs(emu)
 
 

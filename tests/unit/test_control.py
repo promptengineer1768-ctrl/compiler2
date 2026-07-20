@@ -49,11 +49,22 @@ def _load_binary(emu: C64Emu6502) -> None:
         # $01=$35: HIBASIC RAM at $E000+ visible (control lives there).
         emu.write_mem(0x0001, 0x35)
     emu.set_georam_enabled(True)
+    georam_path = _artifact_root() / "georam.bin"
+    if not georam_path.exists():
+        pytest.fail("georam.bin not found. Run build.ps1 first.")
+    georam_image = georam_path.read_bytes()
+    assert georam_image[:2] == b"\x00\xde"
+    backing_size = len(emu.export_georam())
+    image_payload = georam_image[2:]
+    assert backing_size >= len(image_payload)
+    emu.load_georam(image_payload + bytes(backing_size - len(image_payload)))
     if hasattr(emu, "set_sp"):
         emu.set_sp(0xFF)
     # END/READY paths print through the resident KERNAL bridge ($FFD2). The
     # local emulator has no ROM, so install the shared public-vector stubs.
     install_kernal_stubs(emu)
+    # ctrl_end enters page-bound graphics_exit through the group-1 gate.
+    emu.execute(_load_symbol_address("ctx_init"), 50_000)
 
 
 def _load_symbol_address(symbol_name: str) -> int:

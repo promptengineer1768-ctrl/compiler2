@@ -9,6 +9,7 @@
 
 .include "common/zp.inc"
 .include "common/constants.asm"
+.include "keyword_constants.inc"
 
 .macro jcs target
     bcc :+
@@ -22,8 +23,10 @@
 :
 .endmacro
 
-.import token_init, token_next
+.import token_next
 .import token_source_ptr, token_start, token_last_len, token_keyword_id
+.import georam_call_group_0_xy
+.importzp GEORAM_ROUTINE_ID_TOKEN_INIT
 .import ir_init, ir_finish_line, ir_emit_stmt, ir_emit_expr
 .import ir_emit_var_ref, ir_emit_array_ref
 .import ir_emit_literal_float, ir_emit_literal_str
@@ -33,12 +36,9 @@ TOKEN_EOF        = $00
 TOKEN_IDENTIFIER = $01
 TOKEN_NUMBER     = $02
 TOKEN_STRING     = $03
+TOKEN_REM        = $04
 TOKEN_SYMBOL     = $06
 TOKEN_ERROR      = $FF
-
-BASIC_TOKEN_FOR   = 129
-BASIC_TOKEN_GOSUB = 141
-BASIC_TOKEN_PRINT = 153
 
 NODE_LINE       = $01
 NODE_STATEMENT  = $02
@@ -51,6 +51,11 @@ STMT_NONE  = $00
 STMT_PRINT = $01
 STMT_FOR   = $02
 STMT_GOSUB = $03
+STMT_LET   = $04
+STMT_NEXT  = $05
+STMT_END   = $06
+
+PRINT_FLAG_TRAILING_SEMICOLON = $01
 
 FLAG_HAS_COMPARISON  = $01
 FLAG_TERM_PRECEDENCE = $02
@@ -75,6 +80,9 @@ parse_flags: .res 1
 parse_token: .res 1
 parse_saved_start: .res 1
 parse_saved_len: .res 1
+; Shared target-span scratch for LET and FOR (not live across statements).
+parse_let_start: .res 1
+parse_let_len: .res 1
 parse_arg_count: .res 1
 parse_operator: .res 1
 parse_compare_operator: .res 1
@@ -87,10 +95,11 @@ parse_compare_char: .res 1
 parse_word_char1: .res 1
 parse_word_char2: .res 1
 parse_char_offset: .res 1
+parse_print_flags: .res 1
 
 .segment "GEOASM"
 
-; Parse [line-number] statement and terminate its IR.
+; Parse [line-number] statement[:statement...] and terminate its IR.
 .export parse_line
 parse_line:
     jsr _parse_begin
@@ -105,8 +114,19 @@ parse_line:
 @statement:
     jsr _parse_statement_current
     jcs _parse_error
+@more:
     lda parse_token
-    jne _parse_error
+    beq @finish
+    ; Colon-separated multi-statement line (FOR I=1 TO 3:PRINT I:NEXT).
+    lda #':'
+    jsr _parse_symbol_is
+    jcs _parse_error
+    jsr _parse_advance
+    jcs _parse_error
+    jsr _parse_statement_current
+    jcs _parse_error
+    jmp @more
+@finish:
     jsr ir_finish_line
     jcs _parse_error
     lda #NODE_LINE
@@ -274,10 +294,12 @@ _parse_begin:
     lda #0
     sta parse_flags
     sta parse_last_stmt
+    sta parse_print_flags
     jsr ir_init
     ldx parse_source_ptr
     ldy parse_source_ptr+1
-    jsr token_init
+    lda #<GEORAM_ROUTINE_ID_TOKEN_INIT
+    jsr georam_call_group_0_xy
     jmp _parse_advance
 
 _parse_advance:
@@ -286,6 +308,11 @@ _parse_advance:
     rts
 
 _parse_statement_current:
+    lda parse_token
+    cmp #TOKEN_REM
+    bne @not_rem
+    jmp @rem
+@not_rem:
     lda parse_token
     cmp #TOKEN_IDENTIFIER
     bne @bad
@@ -296,6 +323,18 @@ _parse_statement_current:
     beq @for
     cmp #BASIC_TOKEN_GOSUB
     beq @gosub
+    cmp #BASIC_TOKEN_LET
+    beq @let
+    cmp #BASIC_TOKEN_NEXT
+    beq @next
+    cmp #BASIC_TOKEN_END
+    bne @not_end
+    jmp @end
+@not_end:
+    ; Bare assignment: non-keyword identifier followed by '='.
+    lda token_keyword_id
+    bne @bad
+    jmp _parse_let_target
 @bad:
     sec
     rts
@@ -306,12 +345,21 @@ _parse_statement_current:
     beq @print_bare
     jsr _parse_comparison_current
     bcs @bad
+    lda #';'
+    jsr _parse_symbol_is
+    bcs @print_bare
+    jsr _parse_advance
+    jcs @bad
+    lda parse_token
+    bne @bad
+    lda #PRINT_FLAG_TRAILING_SEMICOLON
+    sta parse_print_flags
 @print_bare:
     lda #STMT_PRINT
     sta parse_last_stmt
     lda #STMT_PRINT
     ldx #0
-    ldy #0
+    ldy parse_print_flags
     jmp ir_emit_stmt
 @for:
     jsr _parse_for_after_keyword
@@ -323,6 +371,91 @@ _parse_statement_current:
 @gosub:
     jsr _parse_gosub_after_keyword
     rts
+@let:
+    jsr _parse_advance
+    bcs @bad
+    lda parse_token
+    cmp #TOKEN_IDENTIFIER
+    bne @bad
+    jmp _parse_let_target
+@next:
+    jsr _parse_advance
+    bcs @bad
+    lda parse_token
+    cmp #TOKEN_IDENTIFIER
+    bne @next_emit
+    lda token_keyword_id
+    bne @next_emit
+    jsr _parse_identifier_valid
+    bcs @bad
+    jsr _parse_advance
+    bcs @bad
+@next_emit:
+    lda #STMT_NEXT
+    sta parse_last_stmt
+    lda #STMT_NEXT
+    ldx #0
+    ldy #0
+    jmp ir_emit_stmt
+@rem:
+    ; token_rem consumes the complete comment body, so only EOF can follow.
+    ; REM produces no executable IR but remains a successful source line.
+    jsr _parse_advance
+    jcs @bad
+    lda parse_token
+    beq :+
+    jmp @bad
+:
+    lda #STMT_NONE
+    sta parse_last_stmt
+    clc
+    rts
+@end:
+    ; This bounded stored-program path accepts END only as the terminal
+    ; statement. Its stop record prevents program_lines_run from dispatching
+    ; later stored lines.
+    jsr _parse_advance
+    jcs @bad
+    lda parse_token
+    beq :+
+    jmp @bad
+:
+    lda #STMT_END
+    sta parse_last_stmt
+    lda #STMT_END
+    ldx #0
+    ldy #0
+    jmp ir_emit_stmt
+
+; Current token is the assignment target identifier.
+; Emits RHS expression IR then IR_STMT LET with target span in X/Y.
+_parse_let_target:
+    jsr _parse_identifier_valid
+    bcs @bad
+    jsr _parse_save_span
+    ; Preserve target span across RHS parse (parse_saved_* is clobbered).
+    lda parse_saved_start
+    sta parse_let_start
+    lda parse_saved_len
+    sta parse_let_len
+    jsr _parse_advance
+    bcs @bad
+    lda #'='
+    jsr _parse_require_symbol
+    bcs @bad
+    jsr _parse_advance
+    bcs @bad
+    jsr _parse_comparison_current
+    bcs @bad
+    lda #STMT_LET
+    sta parse_last_stmt
+    lda #STMT_LET
+    ldx parse_let_start
+    ldy parse_let_len
+    jmp ir_emit_stmt
+@bad:
+    sec
+    rts
 
 _parse_for_after_keyword:
     jsr _parse_advance
@@ -333,6 +466,11 @@ _parse_for_after_keyword:
     jsr _parse_identifier_valid
     bcs @bad
     jsr _parse_save_span
+    ; Preserve loop-var span; RHS literals clobber parse_saved_*.
+    lda parse_saved_start
+    sta parse_let_start
+    lda parse_saved_len
+    sta parse_let_len
     jsr _parse_advance
     bcs @bad
     lda #'='
@@ -361,8 +499,8 @@ _parse_for_after_keyword:
     bcs @bad
 @no_step:
     lda #STMT_FOR
-    ldx parse_saved_start
-    ldy parse_saved_len
+    ldx parse_let_start
+    ldy parse_let_len
     jsr ir_emit_loop
     bcs @bad
     lda #STMT_FOR

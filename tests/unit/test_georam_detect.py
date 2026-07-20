@@ -94,7 +94,6 @@ def _load_binary(emu: C64Emu6502, *, georam_enabled: bool) -> None:
     load_addr = payload[0] | (payload[1] << 8)
     emu.write_mem_range(load_addr, payload[2:])
     emu.set_georam_enabled(georam_enabled)
-    setattr(emu, "_compiler2_real_bytes_only", True)
 
 
 @pytest.mark.unit

@@ -30,11 +30,12 @@
 .import kernal_chkin, kernal_chkout, kernal_clrchn, kernal_chrin, kernal_chrout
 .import kernal_load, kernal_save
 .import arena_select_page
-.import program_select_save_format
-.import program_encode_stock
-.import program_encode_basic35
-.import program_encode_extended
 .import __program_store_published
+.import georam_call_group_n_xy
+.import GEORAM_ROUTINE_ID_PROGRAM_SELECT_SAVE_FORMAT
+.import GEORAM_ROUTINE_ID_PROGRAM_ENCODE_STOCK
+.import GEORAM_ROUTINE_ID_PROGRAM_ENCODE_BASIC35
+.import GEORAM_ROUTINE_ID_PROGRAM_ENCODE_EXTENDED
 
 .segment "BSS"
 rio_request:       .res 2
@@ -190,7 +191,8 @@ rio_load:
 .proc rio_encode_published
     ldx #<__program_store_published
     ldy #>__program_store_published
-    jsr program_select_save_format
+    lda #<(GEORAM_ROUTINE_ID_PROGRAM_SELECT_SAVE_FORMAT - $100)
+    jsr georam_call_group_n_xy
     jcs @error
     sta rio_format
     ldx #<__program_store_published
@@ -206,13 +208,16 @@ rio_load:
     sec
     rts
 @encode_v2:
-    jsr program_encode_stock
+    lda #<(GEORAM_ROUTINE_ID_PROGRAM_ENCODE_STOCK - $100)
+    jsr georam_call_group_n_xy
     rts
 @encode_35:
-    jsr program_encode_basic35
+    lda #<(GEORAM_ROUTINE_ID_PROGRAM_ENCODE_BASIC35 - $100)
+    jsr georam_call_group_n_xy
     rts
 @encode_c2:
-    jsr program_encode_extended
+    lda #<(GEORAM_ROUTINE_ID_PROGRAM_ENCODE_EXTENDED - $100)
+    jsr georam_call_group_n_xy
     rts
 @error:
     sec

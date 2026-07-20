@@ -69,7 +69,6 @@ def _emulator() -> Any:
         emu.set_georam_enabled(True)
     if hasattr(emu, "set_sp"):
         emu.set_sp(0xFF)
-    setattr(emu, "_compiler2_real_bytes_only", True)
     install_kernal_stubs(emu)
     emu.write_mem(0xBA, 8)
     return emu

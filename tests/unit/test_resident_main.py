@@ -11,21 +11,27 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS_ROOT = ROOT.parent / "tools"
-if str(TOOLS_ROOT) not in sys.path:
-    sys.path.insert(0, str(TOOLS_ROOT))
+_DOCS_TOOLS = Path(r"C:\Users\me\Documents\Coding Projects\tools")
+for _tools in (TOOLS_ROOT, _DOCS_TOOLS):
+    if str(_tools) not in sys.path:
+        sys.path.insert(0, str(_tools))
 try:
     from emu6502_c64_bindings import C64Emu6502
 except ImportError:
-    pass
+    C64Emu6502 = None  # type: ignore[misc, assignment]
 
 
 def _dll_path() -> Path:
-    path = ROOT.parent / "tools" / "emu6502.dll"
-    if not path.exists():
-        path = ROOT.parent / "tools" / "msys-emu6502.dll"
-    if not path.exists():
-        pytest.skip("Emulator DLL not found in tools folder.")
-    return path
+    candidates = [
+        ROOT.parent / "tools" / "emu6502.dll",
+        ROOT.parent / "tools" / "msys-emu6502.dll",
+        Path(r"C:\Users\me\Documents\Coding Projects\tools\emu6502.dll"),
+        Path(r"C:\Users\me\Documents\Coding Projects\tools\msys-emu6502.dll"),
+    ]
+    for path in candidates:
+        if path.exists():
+            return path
+    pytest.skip("Emulator DLL not found in tools folder.")
 
 
 def _load_symbol_address(symbol_name: str) -> int:
@@ -116,7 +122,6 @@ class TestResidentMain:
         zp_line_len = _load_zp_address("zp_line_len")
         zp_quotemode = _load_zp_address("zp_quotemode")
         zp_gr_block = _load_zp_address("zp_gr_block")
-        zp_gr_page = _load_zp_address("zp_gr_page")
         resident_input = _load_symbol_address("resident_input_byte")
 
         buffer_addr = 0xC000
@@ -161,12 +166,10 @@ class TestResidentMain:
         emu = C64Emu6502(lib_path=dll)
         _load_binary(emu)
         _load_georam_image(emu)
-        emu._compiler2_real_bytes_only = True
 
         zp_crsr_x = _load_zp_address("zp_crsr_x")
         zp_crsr_y = _load_zp_address("zp_crsr_y")
         zp_linebuf = _load_zp_address("zp_linebuf")
-        zp_line_len = _load_zp_address("zp_line_len")
         zp_quotemode = _load_zp_address("zp_quotemode")
         buffer_addr = 0xC000
 
@@ -191,16 +194,64 @@ class TestResidentMain:
         assert emu.read_mem(0x0401) == 0x18
 
     def test_submit_line_uses_pipeline_for_direct_mode(self) -> None:
-        """Direct-mode submit compiles through the always-mapped pipeline."""
+        """Direct-mode submit enters the line pipeline through the XIP gate."""
         resident_submit_line = _load_symbol_address("resident_submit_line")
-        pipeline_compile_line = _load_symbol_address("pipeline_compile_line")
-        body = _linked_bytes(resident_submit_line, 160)
+        pipeline_id = _load_symbol_address("GEORAM_ROUTINE_ID_PIPELINE_COMPILE_LINE")
+        gate = _load_symbol_address("georam_call_group_n_xy")
+        body = _linked_bytes(resident_submit_line, 220)
 
         assert (
             bytes(
-                [0x20, pipeline_compile_line & 0xFF, pipeline_compile_line >> 8]
+                [
+                    0xA9,
+                    pipeline_id & 0xFF,
+                    0x20,
+                    gate & 0xFF,
+                    gate >> 8,
+                ]
             )
             in body
+        )
+
+    def test_submit_line_wires_direct_and_program_store(self) -> None:
+        """Submit path tokenizes direct commands and stores numbered lines."""
+        resident_submit_line = _load_symbol_address("resident_submit_line")
+        try_direct = _load_symbol_address("resident_try_direct_command")
+        put_line = _load_symbol_address("program_lines_put_linebuf")
+        direct_exec_id = _load_symbol_address(
+            "GEORAM_ROUTINE_ID_DIRECT_EXECUTE_COMMAND"
+        )
+        gate = _load_symbol_address("georam_call_group_n_xy")
+        token_init_id = _load_symbol_address("GEORAM_ROUTINE_ID_TOKEN_INIT")
+        token_gate = _load_symbol_address("georam_call_group_0_xy")
+        body = _linked_bytes(resident_submit_line, 220)
+        try_body = _linked_bytes(try_direct, 160)
+
+        assert bytes([0x20, try_direct & 0xFF, try_direct >> 8]) in body
+        assert bytes([0x20, put_line & 0xFF, put_line >> 8]) in body
+        assert (
+            bytes(
+                [
+                    0xA9,
+                    token_init_id & 0xFF,
+                    0x20,
+                    token_gate & 0xFF,
+                    token_gate >> 8,
+                ]
+            )
+            in try_body
+        )
+        assert (
+            bytes(
+                [
+                    0xA9,
+                    direct_exec_id & 0xFF,
+                    0x20,
+                    gate & 0xFF,
+                    gate >> 8,
+                ]
+            )
+            in try_body
         )
 
     def test_enter_degraded_sets_flag_and_shows_error(self) -> None:

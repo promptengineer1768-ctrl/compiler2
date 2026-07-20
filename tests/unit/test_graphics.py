@@ -99,11 +99,49 @@ def _load_binary(emu: C64Emu6502) -> None:
         emu.write_mem_range(0xE000, hibasic.read_bytes())
     if hasattr(emu, "set_georam_enabled"):
         emu.set_georam_enabled(True)
+    georam_path = ROOT / "build" / "georam.bin"
+    if not georam_path.exists():
+        pytest.fail("build/georam.bin not found. Run build.ps1 first.")
+    image = georam_path.read_bytes()
+    assert image[:2] == b"\x00\xde"
+    backing_size = len(emu.export_georam())
+    assert backing_size >= len(image) - 2
+    emu.load_georam(image[2:] + bytes(backing_size - (len(image) - 2)))
     emu.write_mem(CPU_PORT, 0x35)
     emu.write_mem(0x0000, 0x2F)
+    # Unit calls below use the production group-1 XIP gate.
+    emu.execute(_load_symbol_address("ctx_init"), 5_000_000)
+
+
+def _page_bound_xip_page(symbol: str) -> int | None:
+    """Return explicit xip_page for a page-bound body, else None."""
+    routines = json.loads((ROOT / "manifests" / "routines.json").read_text())[
+        "routines"
+    ]
+    for routine in routines:
+        if routine.get("name") == symbol and routine.get("xip_page") is not None:
+            return int(routine["xip_page"])
+    return None
 
 
 def _run(emu: C64Emu6502, symbol: str, cycles: int = 200_000) -> int:
+    directory = json.loads((ROOT / "build" / "routine_directory.json").read_text())
+    record = directory.get("routines", {}).get(symbol)
+    # Only page-bound XIP bodies execute at $DE00; unported geoasm entries may
+    # still have a directory record while the real body remains in low RAM.
+    if (
+        isinstance(record, dict)
+        and record.get("layer") == "georam"
+        and _page_bound_xip_page(symbol) is not None
+    ):
+        routine_id = int(record["id"])
+        assert 0x100 <= routine_id <= 0x1FF
+        # The XY gate leaves X/Y as supplied by the test and gets the routine
+        # ID in A, exactly like a production caller.
+        emu.set_a(routine_id & 0xFF)
+        rc = emu.execute(_load_symbol_address("georam_call_group_n_xy"), cycles)
+        assert rc == StopCondition.RTS, f"{symbol} XIP gate did not RTS (rc={rc})"
+        return cast(int, rc)
     rc = emu.execute(_load_symbol_address(symbol), cycles)
     assert rc == StopCondition.RTS, f"{symbol} did not RTS (rc={rc})"
     return cast(int, rc)
@@ -327,8 +365,6 @@ class TestGraphicsValidateBounds:
         """Top-left and bottom-right pixels are valid; one past is not."""
         emu = C64Emu6502(lib_path=_dll_path())
         _load_binary(emu)
-        addr = _load_symbol_address("graphics_validate_bounds")
-
         for x, y, expect_c in (
             (0, 0, 0),
             (319, 199, 0),
@@ -339,8 +375,7 @@ class TestGraphicsValidateBounds:
             _write_descriptor(emu, kind=0, x=x, y=y)
             emu.set_x(DESC_ADDR & 0xFF)
             emu.set_y((DESC_ADDR >> 8) & 0xFF)
-            rc = emu.execute(addr, 5_000)
-            assert rc == StopCondition.RTS
+            _run(emu, "graphics_validate_bounds", cycles=5_000)
             carry = emu.get_state().p & 0x01
             assert carry == expect_c, f"pixel ({x},{y}) carry={carry}"
             assert emu.read_mem(CPU_PORT) == 0x35
@@ -349,8 +384,6 @@ class TestGraphicsValidateBounds:
         """Matrix cells accept 0..39 / 0..24 only."""
         emu = C64Emu6502(lib_path=_dll_path())
         _load_binary(emu)
-        addr = _load_symbol_address("graphics_validate_bounds")
-
         for x, y, expect_c in (
             (0, 0, 0),
             (39, 24, 0),
@@ -360,6 +393,5 @@ class TestGraphicsValidateBounds:
             _write_descriptor(emu, kind=1, x=x, y=y)
             emu.set_x(DESC_ADDR & 0xFF)
             emu.set_y((DESC_ADDR >> 8) & 0xFF)
-            rc = emu.execute(addr, 5_000)
-            assert rc == StopCondition.RTS
+            _run(emu, "graphics_validate_bounds", cycles=5_000)
             assert (emu.get_state().p & 0x01) == expect_c

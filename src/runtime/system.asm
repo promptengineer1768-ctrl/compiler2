@@ -188,6 +188,22 @@ system_ti_load:
 system_ti_store:
     jmp kernal_settim
 
+; system_ti_div60 - Return the live jiffy clock divided by 60.
+; Outputs: A/X/Y = 24-bit unsigned quotient, low/middle/high.  This narrow
+; helper is shared by the Noel ``TI/60`` lowering and deliberately reuses the
+; existing 24-bit clock divider rather than introducing another time path.
+.export system_ti_div60
+system_ti_div60:
+    jsr kernal_rdtim
+    sta system_jiffy
+    stx system_jiffy+1
+    sty system_jiffy+2
+    jsr _system_div60
+    lda system_jiffy
+    ldx system_jiffy+1
+    ldy system_jiffy+2
+    rts
+
 ; system_ti_string_load - Convert the current 60 Hz clock to a destination SD.
 ; Input: X/Y=destination SD pointer. Output: C=error.
 .export system_ti_string_load

@@ -7,6 +7,7 @@
 
 .include "common/zp.inc"
 .include "common/constants.asm"
+.include "keyword_constants.inc"
 
 .import screen_line_input
 .import screen_put_petscii
@@ -22,17 +23,25 @@
 .import resident_line_capture
 .import kernal_getin
 .import kernal_chrout
-.import georam_call_group_n
 .import georam_verify_mirror
 .import vectors_prior_irq
 .import vectors_prior_nmi
 .import vectors_installed
 .import nmi_invalidate_cont
-.import pipeline_compile_line
 .import codegen_buffer
 .import wedge_dispatch_development
-; Generated low-byte group-1 index; tables live in georam_gate.asm.
-.import GEORAM_ROUTINE_ID_EDITOR_SUBMIT_LINE
+.import token_next
+.import token_keyword_id
+.import token_last_type
+.import program_lines_put_linebuf
+.import georam_call_group_n_xy
+.import georam_call_group_0_xy
+.import GEORAM_ROUTINE_ID_PIPELINE_COMPILE_LINE
+.import GEORAM_ROUTINE_ID_DIRECT_EXECUTE_COMMAND
+.importzp GEORAM_ROUTINE_ID_TOKEN_INIT
+
+; Tokenizer type for identifiers (matches tokenizer.asm).
+TOKEN_TYPE_IDENTIFIER = $01
 
 ; Stock BASIC map pointers (BASIC_ZP / c64rom declare.s).
 BASIC_TEMPPT = $16
@@ -60,6 +69,8 @@ resident_saved_p:         .res 1
 resident_degraded:        .res 1
 .export resident_quit_done
 resident_quit_done:       .res 1
+; 2-byte direct-command record: [token_id, 0] for bare NEW/LIST/RUN/CLR/...
+resident_direct_record:   .res 2
 
 .segment "RESIDENT"
 
@@ -288,16 +299,17 @@ resident_submit_line:
     ; DOS wedge prefixes are recognized ahead of tokenization.
     jsr resident_try_wedge
     bcc @done
-    ; Numbered program lines still go through the expansion editor service.
+    ; Numbered program lines: store PETSCII body in the interim line table.
     jsr resident_line_is_numbered
     bcs @program_line
-    ; Direct mode: compile the PETSCII line through the always-mapped pipeline
-    ; and execute the scratch native buffer (PRINT, expressions, wedge handled
-    ; above). Position the KERNAL cursor under the command line first so CHROUT
-    ; does not overwrite the typed statement.
+    ; Direct-only commands (NEW/LIST/RUN/CLR/QUIT/...) via tokenizer front door.
+    jsr resident_try_direct_command
+    bcc @done
+    ; Temporary statements (PRINT, assignments, etc.): always-mapped pipeline.
     ldx zp_linebuf
     ldy zp_linebuf+1
-    jsr pipeline_compile_line
+    lda #<GEORAM_ROUTINE_ID_PIPELINE_COMPILE_LINE
+    jsr georam_call_group_n_xy
     bcs @fail
     jsr resident_kernal_cursor_below
     jsr codegen_buffer
@@ -308,11 +320,9 @@ resident_submit_line:
     cli
     jmp @done
 @program_line:
-    jsr resident_assert_boundary
+    jsr program_lines_put_linebuf
     bcs @fail
-    ldx #<GEORAM_ROUTINE_ID_EDITOR_SUBMIT_LINE
-    jsr georam_call_group_n
-    bcs @fail
+    jmp @done
 @done:
     lda zp_line_len
     sta resident_last_submit_len
@@ -327,6 +337,72 @@ resident_submit_line:
 @fail:
     sec
     rts
+
+; resident_try_direct_command - Tokenize and dispatch bare direct-only keywords.
+; On match: builds [token_id, 0], runs direct_execute_command, returns C=0
+; (handled — success or command error; do not also compile).
+; On non-match (temporary statement / bare assignment): returns C=1 so the
+; caller falls through to pipeline_compile_line.
+; Input: zp_linebuf / zp_line_len. Output: C clear if handled.
+; Clobbers: A, X, Y.
+.export resident_try_direct_command
+resident_try_direct_command:
+    ldx zp_linebuf
+    ldy zp_linebuf+1
+    lda #<GEORAM_ROUTINE_ID_TOKEN_INIT
+    jsr georam_call_group_0_xy
+    jsr token_next
+    ; Require an identifier with a keyword id in the direct-only set.
+    lda token_last_type
+    cmp #TOKEN_TYPE_IDENTIFIER
+    bne @not_direct
+    lda token_keyword_id
+    beq @not_direct
+    cmp #BASIC_TOKEN_RUN
+    beq @dispatch
+    cmp #BASIC_TOKEN_LIST
+    beq @dispatch
+    cmp #BASIC_TOKEN_CLR
+    beq @dispatch
+    cmp #BASIC_TOKEN_NEW
+    beq @dispatch
+    cmp #BASIC_TOKEN_QUIT
+    beq @dispatch
+    cmp #BASIC_TOKEN_LOAD
+    beq @dispatch
+    cmp #BASIC_TOKEN_SAVE
+    beq @dispatch
+    cmp #BASIC_TOKEN_VERIFY
+    beq @dispatch
+    cmp #BASIC_TOKEN_CONT
+    beq @dispatch
+    cmp #BASIC_TOKEN_COMPILE
+    beq @dispatch
+    cmp #BASIC_TOKEN_BASIC
+    beq @dispatch
+    cmp #BASIC_TOKEN_FPMODE
+    beq @dispatch
+@not_direct:
+    sec
+    rts
+@dispatch:
+    sta resident_direct_record
+    lda #0
+    sta resident_direct_record+1
+    jsr resident_kernal_cursor_below
+    ldx #<resident_direct_record
+    ldy #>resident_direct_record
+    lda #<GEORAM_ROUTINE_ID_DIRECT_EXECUTE_COMMAND
+    jsr georam_call_group_n_xy
+    ; Restore canonical map after command side effects (CLR/LIST/IO).
+    ; QUIT never returns. Treat any command outcome as handled.
+    cld
+    lda #CPU_PORT_CANONICAL
+    sta $01
+    cli
+    clc
+    rts
+
 
 ; resident_try_wedge - If the line starts with $ @ / !, run the wedge core.
 ; Output: C clear when handled; C set when the line is not a wedge command.

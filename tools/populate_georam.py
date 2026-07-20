@@ -17,7 +17,6 @@ GEORAM_LOAD_ADDRESS = b"\x00\xde"
 COLD_SEGMENTS = (
     "COMPILER",
     "EDITOR",
-    "COMPRESSOR",
     "GRAPHICS",
     "RUNTIME",
     "GEOASM",
@@ -82,6 +81,7 @@ def _overlay_directory_routines(
     labels_path: Path,
     routine_directory_path: Path,
     hibasic: bytes = b"",
+    linked_xip: bytes = b"",
 ) -> int:
     """Overlay linked routine bytes at their generated geoRAM placements.
 
@@ -113,7 +113,18 @@ def _overlay_directory_routines(
                 f"offset {destination}"
             )
         address = labels[name]
-        if address >= 0xE000:
+        if 0xDE00 <= address <= 0xDEFF:
+            # ld65 emits every GEORAM_PAGE_n memory area into its separate
+            # sidecar, all with the CPU-visible address $DE00.  The generated
+            # directory is therefore the only unambiguous physical source
+            # coordinate; never attempt to locate these bytes in compiler.bin.
+            source = destination
+            if source >= len(linked_xip):
+                raise ValueError(
+                    f"linked geoRAM page bytes missing for routine: {name}"
+                )
+            source_image = linked_xip
+        elif address >= 0xE000:
             source = address - 0xE000
             if source < 0 or source >= len(hibasic):
                 raise ValueError(f"linked label for {name} falls outside hibasic image")
@@ -150,6 +161,7 @@ def populate(
     labels_path: Path | None = None,
     routine_directory_path: Path | None = None,
     hibasic_path: Path | None = None,
+    linked_georam_path: Path | None = None,
 ) -> None:
     """Write linked cold/compiler bytes into a padded geoRAM PRG.
 
@@ -164,6 +176,9 @@ def populate(
         labels_path: Optional ca65 label file for directory overlays.
         routine_directory_path: Optional routine directory for overlays.
         hibasic_path: Optional HIBASIC binary (defaults beside compiler).
+        linked_georam_path: Raw linker GEORAM_PAGE output.  These page bytes
+            are authoritative for real XIP labels at $DE00 and are preserved
+            at their generated physical page placements.
     """
     matches = {
         match.group(1): (int(match.group(2), 16), int(match.group(4), 16))
@@ -182,11 +197,25 @@ def populate(
         hibasic_path = compiler_path.with_name("hibasic.bin")
     if hibasic_path.exists():
         hibasic = hibasic_path.read_bytes()
+    linked_xip = b""
+    if linked_georam_path is not None:
+        if not linked_georam_path.exists():
+            raise FileNotFoundError(
+                f"linked geoRAM page image not found: {linked_georam_path}"
+            )
+        linked_xip = linked_georam_path.read_bytes()
+        if len(linked_xip) > GEORAM_MAX_PAYLOAD_SIZE:
+            raise ValueError(
+                "linked geoRAM page image exceeds 512 KiB budget: "
+                f"{len(linked_xip)} bytes"
+            )
     linked = bytearray()
     for name in COLD_SEGMENTS:
         start, size = matches[name]
         # Segments linked into RAM_HIGH ($E000+) are materialized in hibasic.bin
-        # (HIBASIC, and cold EDITOR/WEDGE/COMPRESSOR/GRAPHICS when placed there).
+        # (HIBASIC and its cold EDITOR/WEDGE/GRAPHICS residents).  IO_COLD is
+        # deliberately absent: it has its own $0200-staged iobasic sidecar and
+        # is copied behind the I/O window by the resident RAM-under-I/O gate.
         if start >= 0xE000 or name == "HIBASIC":
             first = start - 0xE000
             last = first + size
@@ -209,11 +238,11 @@ def populate(
 
     # Directory overlays may land beyond the linear cold pack; size the
     # payload for the higher of linear content and max placement end.
-    provisional_size = payload_size_for(len(linked))
+    provisional_size = payload_size_for(max(len(linked), len(linked_xip)))
     if labels_path is not None and routine_directory_path is not None:
         # Probe max placement so we allocate enough room before overlaying.
         directory = json.loads(routine_directory_path.read_text(encoding="utf-8"))
-        max_end = len(linked)
+        max_end = max(len(linked), len(linked_xip))
         for name, record in directory.get("routines", {}).items():
             if record.get("layer") != "georam":
                 continue
@@ -231,6 +260,9 @@ def populate(
 
     payload = bytearray(provisional_size)
     payload[: len(linked)] = linked
+    # This must follow the legacy linear cold pack: its initial bytes overlap
+    # page 0 onward, while XIP code has fixed physical directory placements.
+    payload[: len(linked_xip)] = linked_xip
     if labels_path is not None and routine_directory_path is not None:
         _overlay_directory_routines(
             payload,
@@ -239,6 +271,7 @@ def populate(
             labels_path,
             routine_directory_path,
             hibasic=hibasic,
+            linked_xip=linked_xip,
         )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_bytes(GEORAM_LOAD_ADDRESS + payload)
@@ -252,6 +285,7 @@ def main() -> None:
     parser.add_argument("output_path", type=Path)
     parser.add_argument("--labels", type=Path)
     parser.add_argument("--routine-directory", type=Path)
+    parser.add_argument("--linked-georam", type=Path)
     args = parser.parse_args()
     populate(
         args.map_path,
@@ -260,6 +294,7 @@ def main() -> None:
         args.labels,
         args.routine_directory,
         None,
+        args.linked_georam,
     )
 
 

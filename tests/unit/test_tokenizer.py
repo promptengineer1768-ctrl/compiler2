@@ -71,6 +71,17 @@ def _load_binary(emu: C64Emu6502) -> None:
     payload = (ROOT / "build" / "compiler.bin").read_bytes()
     load_addr = payload[0] | (payload[1] << 8)
     emu.write_mem_range(load_addr, payload[2:])
+    georam_path = ROOT / "build" / "georam.bin"
+    if not georam_path.exists():
+        pytest.fail("build/georam.bin not found. Run build.ps1 first.")
+    image = georam_path.read_bytes()
+    assert image[:2] == b"\x00\xde"
+    if hasattr(emu, "set_georam_enabled"):
+        emu.set_georam_enabled(True)
+    backing_size = len(emu.export_georam())
+    payload_bytes = image[2:]
+    assert backing_size >= len(payload_bytes)
+    emu.load_georam(payload_bytes + bytes(backing_size - len(payload_bytes)))
 
 
 def _load_map_address(symbol: str) -> int:
@@ -95,19 +106,31 @@ def _load_map_address(symbol: str) -> int:
     return _ADDRESS_CACHE[symbol]
 
 
+def _call_token_init(emu: C64Emu6502, source_addr: int) -> None:
+    """Enter page-bound token_init through the group-0 XY gate."""
+    directory = json.loads(
+        (ROOT / "build" / "routine_directory.json").read_text(encoding="utf-8")
+    )
+    record = directory["routines"]["token_init"]
+    assert record.get("layer") == "georam"
+    routine_id = int(record["id"])
+    assert routine_id < 0x100
+    emu.set_a(routine_id & 0xFF)
+    emu.set_x(source_addr & 0xFF)
+    emu.set_y(source_addr >> 8)
+    emu.execute(_symbol_address("georam_call_group_0_xy"), 10000)
+
+
 def _new_emu(source: bytes) -> C64Emu6502:
     if C64Emu6502 is None:
         pytest.skip("Emulator binding unavailable")
     emu = C64Emu6502(lib_path=_dll_path())
-    setattr(emu, "_compiler2_real_bytes_only", True)
     _load_binary(emu)
-    emu.set_georam_enabled(True)
     emu.write_mem(0x0000, 0x2F)
-    emu.write_mem(0x0001, 0x30)
+    emu.write_mem(0x0001, 0x35)
+    emu.execute(_symbol_address("ctx_init"), 50_000)
     emu.write_mem_range(SOURCE_ADDR, source + b"\x00")
-    emu.set_x(SOURCE_ADDR & 0xFF)
-    emu.set_y(SOURCE_ADDR >> 8)
-    emu.execute(_symbol_address("token_init"), 10000)
+    _call_token_init(emu, SOURCE_ADDR)
     return emu
 
 

@@ -68,14 +68,31 @@ def _load_symbol_address(symbol_name: str) -> int:
 def _new_emulator() -> C64Emu6502:
     """Load the linked production image into a fresh C64 emulator."""
     emu = C64Emu6502(lib_path=_dll_path())
-    emu._compiler2_real_bytes_only = True
     emu.set_rom_overlay_enabled(True)
     emu.write_mem(0x0000, 0x2F)
     emu.write_mem(0x0001, 0x35)
     payload = (ROOT / "build" / "compiler.bin").read_bytes()
     load_addr = payload[0] | (payload[1] << 8)
     emu.write_mem_range(load_addr, payload[2:])
+    emu.set_georam_enabled(True)
+    georam = (ROOT / "build" / "georam.bin").read_bytes()
+    assert georam[:2] == b"\x00\xde"
+    backing = len(emu.export_georam())
+    assert backing >= len(georam) - 2
+    emu.load_georam(georam[2:] + bytes(backing - (len(georam) - 2)))
+    emu.execute(_load_symbol_address("ctx_init"), 10_000)
     return emu
+
+
+def _run_xip(emu: C64Emu6502, routine: str) -> None:
+    """Invoke an init page through the installed production geoRAM gate."""
+    directory = json.loads((ROOT / "build" / "routine_directory.json").read_text())
+    record = directory["routines"][routine]
+    assert record["layer"] == "georam"
+    routine_id = int(record["id"])
+    assert 0 <= routine_id <= 0xFF
+    emu.set_x(routine_id & 0xFF)
+    emu.execute(_load_symbol_address("georam_call_group_0"), 500_000)
 
 
 @pytest.mark.unit
@@ -90,8 +107,9 @@ class TestCompilerInit:
         )["routines"]
         contract = next(item for item in routines if item["name"] == "compiler_init")
         assert contract["return_kind"] == "non_returning"
+        assert contract["layer"] == "geoasm"
+        assert contract["xip_page"] == 46
         assert contract["calls"] == [
-            "init_clear_bss",
             "compiler_state_machine",
             "init_arenas",
             "init_editor",
@@ -109,7 +127,12 @@ class TestCompilerInit:
         emu.write_mem_range(start, bytes([0xA5]) * size)
         emu.write_mem(start + size, 0xC3)
 
-        emu.execute(_load_symbol_address("init_clear_bss"), 500_000)
+        # Clearing BSS destroys a gate context by definition, so this cold
+        # routine is executed from its real selected XIP bytes directly.  The
+        # loader-facing compiler_bootstrap performs this operation pre-gate.
+        emu.write_mem(0xDFFF, 0)
+        emu.write_mem(0xDFFE, 47)
+        emu.execute(0xDE00, 500_000)
 
         assert bytes(emu.read_mem(start + offset) for offset in range(size)) == bytes(
             size
@@ -117,10 +140,36 @@ class TestCompilerInit:
         assert emu.read_mem(start - 1) == 0x3C
         assert emu.read_mem(start + size) == 0xC3
 
+    def test_init_editor_clears_the_separately_loaded_pinned_metadata(self) -> None:
+        """Cold editor init clears RAM_HIGH rw state without touching HIBASIC code."""
+        emu = _new_emulator()
+        start = _load_symbol_address("__EDITOR_PINNED_LOAD__")
+        size = _load_symbol_address("__EDITOR_PINNED_SIZE__")
+        # $E000-1 is $DFFF, the geoRAM block register rather than ordinary
+        # RAM.  Establish it through the production selection gate so the
+        # context stack owns the selection it must restore; a raw emulator
+        # write would intentionally bypass that contract.
+        emu.set_x(0x3C)
+        emu.set_a(0x2D)
+        emu.execute(_load_symbol_address("georam_select"), 10_000)
+        emu.write_mem_range(start, bytes([0xA5]) * size)
+        # First executable HIBASIC byte, immediately after the writable
+        # EDITOR_PINNED extent.  This is the genuine adjacent-memory guard.
+        emu.write_mem(start + size, 0xC3)
+
+        _run_xip(emu, "init_editor")
+
+        assert bytes(emu.read_mem(start + offset) for offset in range(size)) == bytes(
+            size
+        )
+        assert emu.read_mem(0xDFFF) == 0x3C
+        assert emu.read_mem(0xDFFE) == 0x2D
+        assert emu.read_mem(start + size) == 0xC3
+
     def test_init_arenas_constructs_the_real_typed_directory(self) -> None:
         """init_arenas delegates to the production arena constructor."""
         emu = _new_emulator()
-        emu.execute(_load_symbol_address("init_arenas"), 500_000)
+        _run_xip(emu, "init_arenas")
         state = emu.get_state()
         assert not (int(state.p) & 0x01)
         assert emu.read_mem(_load_symbol_address("init_arena_state")) == 1
@@ -275,7 +324,7 @@ class TestCompilerStateMachine:
 def test_init_editor_sets_cold_start_state() -> None:
     """Editor initialization sets the default row and clears mode state."""
     emu = _new_emulator()
-    emu.execute(_load_symbol_address("init_editor"), 500_000)
+    _run_xip(emu, "init_editor")
     state_addr = _load_symbol_address("init_editor_state")
     assert bytes(emu.read_mem(state_addr + index) for index in range(4)) == bytes(
         [5, 0, 0, 0]
@@ -287,9 +336,15 @@ def test_init_editor_sets_cold_start_state() -> None:
 def test_init_enter_main_loop_records_tail_entry() -> None:
     """Main-loop entry records entry, enables IRQs, and tail-jumps resident_main."""
     emu = _new_emulator()
+    directory = json.loads((ROOT / "build" / "routine_directory.json").read_text())
+    record = directory["routines"]["init_enter_main_loop"]
+    assert record["layer"] == "georam"
+    assert record["page"] == 50
     entry = _load_symbol_address("init_enter_main_loop")
     marker = _load_symbol_address("init_main_loop_entered")
     resident = _load_symbol_address("resident_main")
+    emu.write_mem(0xDFFF, int(record["block"]))
+    emu.write_mem(0xDFFE, int(record["page"]))
     assert bytes(emu.read_mem(entry + offset) for offset in range(9)) == bytes(
         [
             0xA9,

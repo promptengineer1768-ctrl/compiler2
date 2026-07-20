@@ -15,7 +15,9 @@
 .include "common/zp.inc"
 .include "common/constants.asm"
 
-.import editor_ready_transition, graphics_exit, hibasic_graphics_restore, inspect_shell
+.import hibasic_graphics_restore, inspect_shell, georam_call_group_n
+.import GEORAM_ROUTINE_ID_EDITOR_READY_TRANSITION
+.import GEORAM_ROUTINE_ID_GRAPHICS_EXIT
 .import math_add, math_cmp, math_int_to_float
 
 CTRL_STACK_BYTES = 34
@@ -662,11 +664,14 @@ ctrl_stop:
 ctrl_end:
     pha
     jsr ctrl_reset
-    jsr graphics_exit
+    ldx #<GEORAM_ROUTINE_ID_GRAPHICS_EXIT
+    jsr georam_call_group_n
     jsr hibasic_graphics_restore
     pla
     bne @standalone
-    jmp editor_ready_transition
+    ldx #<GEORAM_ROUTINE_ID_EDITOR_READY_TRANSITION
+    jsr georam_call_group_n
+    rts
 @standalone:
     jmp inspect_shell
 

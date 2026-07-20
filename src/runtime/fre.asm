@@ -30,8 +30,10 @@ fre_profile: .res 1
 fre_export_bytes: .res 3
 fre_ready: .res 1
 
-; HIBASIC ($E000+): frees late CODE/RAM budget; visible under $01=$35.
-.segment "HIBASIC"
+; FRE is a small always-callable runtime service.  Keeping it in the normal
+; CODE image releases scarce HIBASIC install space for the loader-facing
+; decompressor, without adding a banking dependency to FRE itself.
+.segment "IO_COLD"
 
 ; fre_init - Default to expansion profile with stock export free baseline.
 ; Inputs: none. Outputs: C clear. Clobbers: A.

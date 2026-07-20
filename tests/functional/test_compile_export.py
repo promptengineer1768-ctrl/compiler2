@@ -80,7 +80,6 @@ def _direct_command_emulator() -> tuple[Any, int]:
     emulator.write_mem(0xDFFE, int(command["page"]))
     emulator.write_mem(0x0000, 0x2F)
     emulator.write_mem(0x0001, 0x35)
-    emulator._compiler2_real_bytes_only = True
     return emulator, int(command["address"].removeprefix("$"), 16)
 
 
@@ -184,6 +183,40 @@ def test_compile_token_has_a_real_export_dispatch_path() -> None:
     # direct_execute_command reaches the production export transaction.
     assert _cpu_read(emulator, DIRECT_RECORD_ADDR + 1) == ord("E")
     assert _cpu_read(emulator, DIRECT_RECORD_ADDR + 2) == ord("O")
+
+
+@pytest.mark.functional
+@pytest.mark.local
+def test_compile_export_stages_are_independent_xip_pages() -> None:
+    """COMPILE crosses all page-sized export stages through generated IDs."""
+    source = EXPORT_ASM.read_text(encoding="utf-8")
+    for page, routine, routine_id, gate in (
+        (36, "export_collect_dependencies", "EXPORT_COLLECT_DEPENDENCIES", "xy"),
+        (37, "export_link_image", "EXPORT_LINK_IMAGE", "xy"),
+        (38, "export_check_budgets", "EXPORT_CHECK_BUDGETS", "xy"),
+        (39, "export_write_prg", "EXPORT_WRITE_PRG", "xy"),
+        (43, "export_apply_soft_budgets", "EXPORT_APPLY_SOFT_BUDGETS", "n"),
+        (44, "export_select_layout", "EXPORT_SELECT_LAYOUT", "n"),
+    ):
+        assert f'.segment "GEORAM_PAGE_{page}"' in source
+        assert f"GEORAM_ROUTINE_ID_{routine_id}" in source
+        if gate == "xy":
+            assert re.search(
+                rf"lda #<GEORAM_ROUTINE_ID_{routine_id}\s+(?:jsr|jmp) georam_call_group_n_xy",
+                source,
+            )
+        else:
+            assert re.search(
+                rf"ldx #<GEORAM_ROUTINE_ID_{routine_id}\s+jsr georam_call_group_n",
+                source,
+            )
+        directory = json.loads(
+            (ROOT / "build" / "routine_directory.json").read_text(encoding="utf-8")
+        )
+        record = directory["routines"][routine]
+        assert record["layer"] == "georam"
+        assert record["page"] == page
+        assert record["offset"] == 0
 
 
 @pytest.mark.functional

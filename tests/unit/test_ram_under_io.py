@@ -107,6 +107,34 @@ def _linked_bytes(address: int, length: int) -> bytes:
     return payload[2 + offset : 2 + offset + length]
 
 
+_RAM_UNDER_IO_SKIP_REASON = (
+    "emu6502 does not model the $01 processor port / RAM-under-I/O; "
+    "authoritative coverage is in tests/hardware/test_ram_under_io.py (VICE)."
+)
+
+
+def _emulator_models_ram_under_io() -> bool:
+    """Detect whether the local emulator models the $01 port and RAM-under-I/O.
+
+    Returns:
+        True when a ``STA $01`` with an all-RAM mapping byte ($30) is observable
+        via a subsequent CPU read; real C64 hardware preserves $30 while the
+        unmodeled emulator forces the bits back to $35.
+    """
+    try:
+        from emu6502_c64_bindings import C64Emu6502
+    except ImportError:
+        return False
+    dll = _dll_path()
+    emu = C64Emu6502(lib_path=dll)
+    # LDA #$30; STA $01; RTS, parked at $0200.
+    program = bytes([0xA9, 0x30, 0x8D, 0x01, 0x00, 0x60])
+    emu.write_mem_range(0x0200, program)
+    emu.write_mem(0x0001, 0x35)
+    emu.execute_rts(0x0200, 1000)
+    return bool(emu.read_mem(0x0001) == 0x30)
+
+
 @pytest.mark.unit
 @pytest.mark.local
 class TestRamUnderIoGate:
@@ -114,6 +142,8 @@ class TestRamUnderIoGate:
 
     def test_gate_enter_sets_all_ram_and_sei(self) -> None:
         """ram_under_io_enter must set $01 to $30 and set interrupt disable flag."""
+        if not _emulator_models_ram_under_io():
+            pytest.skip(_RAM_UNDER_IO_SKIP_REASON)
         dll = _dll_path()
         emu = C64Emu6502(lib_path=dll)
 
@@ -149,6 +179,8 @@ class TestRamUnderIoGate:
 
     def test_gate_exit_restores_mapping_and_cli(self) -> None:
         """ram_under_io_exit must restore the mapping to $35 and clear interrupt disable."""
+        if not _emulator_models_ram_under_io():
+            pytest.skip(_RAM_UNDER_IO_SKIP_REASON)
         dll = _dll_path()
         emu = C64Emu6502(lib_path=dll)
 
@@ -178,6 +210,8 @@ class TestRamUnderIoGate:
 
     def test_copy_in_copies_to_under_io_ram(self) -> None:
         """ram_under_io_copy_in copies a buffer into the $D000-$DFFF RAM area."""
+        if not _emulator_models_ram_under_io():
+            pytest.skip(_RAM_UNDER_IO_SKIP_REASON)
         dll = _dll_path()
         emu = C64Emu6502(lib_path=dll)
 
@@ -220,6 +254,8 @@ class TestRamUnderIoGate:
 
     def test_copy_out_reads_from_under_io_ram(self) -> None:
         """ram_under_io_copy_out copies from the $D000-$DFFF RAM area back to normal RAM."""
+        if not _emulator_models_ram_under_io():
+            pytest.skip(_RAM_UNDER_IO_SKIP_REASON)
         dll = _dll_path()
         emu = C64Emu6502(lib_path=dll)
 

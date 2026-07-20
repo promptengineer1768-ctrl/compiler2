@@ -17,3 +17,8 @@ venv/
 # Editor/OS noise
 .DS_Store
 Thumbs.db
+
+# One-off diagnostic / probe scripts (throwaway; not build inputs)
+/debug_*.py
+/tools/_vice_*.py
+/tools/_dis_hang.py

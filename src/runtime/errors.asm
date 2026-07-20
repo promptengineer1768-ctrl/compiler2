@@ -14,7 +14,9 @@
 .include "common/zp.inc"
 .include "common/constants.asm"
 
-.import ctrl_reset, editor_ready_transition, graphics_exit
+.import ctrl_reset, georam_call_group_n
+.import GEORAM_ROUTINE_ID_EDITOR_READY_TRANSITION
+.import GEORAM_ROUTINE_ID_GRAPHICS_EXIT
 .import kernal_chrout, kernal_clrchn
 
 .segment "BSS"
@@ -216,8 +218,8 @@ _err_format:
 ; clobbered by the message path.
 _err_unwind:
     jsr kernal_clrchn
-    lda #0
-    jsr graphics_exit
+    ldx #<GEORAM_ROUTINE_ID_GRAPHICS_EXIT
+    jsr georam_call_group_n
     ldy #0
 @emit:
     cpy err_message_length
@@ -229,7 +231,8 @@ _err_unwind:
 @newline:
     lda #$0d
     jsr kernal_chrout
-    jsr editor_ready_transition
+    ldx #<GEORAM_ROUTINE_ID_EDITOR_READY_TRANSITION
+    jsr georam_call_group_n
     jsr ctrl_reset
     lda err_saved_code
     sec

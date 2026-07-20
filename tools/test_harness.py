@@ -6,6 +6,7 @@ Provides coverage verification and generates requirements matrix reports.
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
 import subprocess
@@ -59,18 +60,113 @@ def collect_assembly_entries(
 
 
 def collect_covered_entries(tests_dir: str, entry_names: set[str]) -> set[str]:
-    """Find callable names explicitly referenced by direct unit tests."""
-    import re
+    """Return entries backed by explicit production-byte test evidence.
 
-    source = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in sorted(Path(tests_dir).glob("test_*.py"))
+    A name appearing in a test's prose, fixture, or assertion is not evidence
+    that the assembled entry was executed.  Direct callable coverage is
+    therefore opt-in: a test must use ``pytest.mark.callable_coverage`` and
+    name the helper which performs the linked-byte invocation.  The marked
+    test must actually call that helper.
+
+    Args:
+        tests_dir: Directory containing direct unit tests.
+        entry_names: Callable names allowed by the generated entry manifests.
+
+    Returns:
+        Callable names with at least one structurally valid execution claim.
+    """
+    return set(collect_callable_execution_evidence(tests_dir, entry_names))
+
+
+def collect_callable_execution_evidence(
+    tests_dir: str, entry_names: set[str]
+) -> dict[str, list[dict[str, str]]]:
+    """Collect explicit direct-execution claims from unit-test ASTs.
+
+    The accepted form is ``@pytest.mark.callable_coverage("entry",
+    executor="_call")`` on a test function whose body calls ``_call``.  This
+    gate is deliberately conservative: it rejects the old name-search scheme
+    and records evidence locations for later runtime instrumentation.
+
+    Args:
+        tests_dir: Directory containing direct unit tests.
+        entry_names: Callable names allowed by the generated entry manifests.
+
+    Returns:
+        Mapping from callable name to deterministic evidence records.
+    """
+    evidence: dict[str, list[dict[str, str]]] = {}
+    for path in sorted(Path(tests_dir).rglob("test_*.py")):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))
+        except SyntaxError as error:
+            raise ValueError(f"cannot inspect callable coverage: {path}: {error}") from error
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for decorator in node.decorator_list:
+                claim = _callable_coverage_claim(decorator)
+                if claim is None:
+                    continue
+                name, executor = claim
+                if name not in entry_names:
+                    raise ValueError(
+                        f"callable coverage names unknown entry '{name}' in {path}:{node.lineno}"
+                    )
+                if not _function_calls_name(node, executor):
+                    raise ValueError(
+                        f"callable coverage for '{name}' in {path}:{node.lineno} "
+                        f"does not call executor '{executor}'"
+                    )
+                evidence.setdefault(name, []).append(
+                    {
+                        "test": f"{path.as_posix()}::{node.name}",
+                        "executor": executor,
+                        "kind": "declared_direct_execution",
+                    }
+                )
+    return {name: evidence[name] for name in sorted(evidence)}
+
+
+def _callable_coverage_claim(decorator: ast.expr) -> tuple[str, str] | None:
+    """Parse one explicit ``pytest.mark.callable_coverage`` decorator."""
+    if not isinstance(decorator, ast.Call) or len(decorator.args) != 1:
+        return None
+    function = decorator.func
+    if not (
+        isinstance(function, ast.Attribute)
+        and function.attr == "callable_coverage"
+        and isinstance(function.value, ast.Attribute)
+        and function.value.attr == "mark"
+        and isinstance(function.value.value, ast.Name)
+        and function.value.value.id == "pytest"
+        and isinstance(decorator.args[0], ast.Constant)
+        and isinstance(decorator.args[0].value, str)
+    ):
+        return None
+    executor = next(
+        (
+            keyword.value.value
+            for keyword in decorator.keywords
+            if keyword.arg == "executor"
+            and isinstance(keyword.value, ast.Constant)
+            and isinstance(keyword.value.value, str)
+        ),
+        None,
     )
-    return {
-        name
-        for name in entry_names
-        if re.search(rf"(?<![A-Za-z0-9_]){re.escape(name)}(?![A-Za-z0-9_])", source)
-    }
+    if not executor:
+        raise ValueError("callable_coverage requires executor='direct_call_helper'")
+    return decorator.args[0].value, executor
+
+
+def _function_calls_name(node: ast.FunctionDef | ast.AsyncFunctionDef, name: str) -> bool:
+    """Return whether a function body directly calls a named executor."""
+    return any(
+        isinstance(child, ast.Call)
+        and isinstance(child.func, ast.Name)
+        and child.func.id == name
+        for child in ast.walk(node)
+    )
 
 
 def validate_callable_coverage(
@@ -87,17 +183,19 @@ def validate_callable_coverage(
     ):
         data = json.loads(Path(path).read_text(encoding="utf-8"))
         names.update(str(entry["name"]) for entry in data.get(key, []))
+    evidence = collect_callable_execution_evidence(tests_dir, names)
     matrix = collect_assembly_entries(
         production_entries_path,
         test_entries_path,
-        collect_covered_entries(tests_dir, names),
+        set(evidence),
     )
     report = {
-        "schema_version": "1.0",
+        "schema_version": "2.0",
         "total_routines": len(matrix["entries"]),
         "covered_routines": len(matrix["entries"]) - len(matrix["uncovered"]),
         "uncovered_routines": matrix["uncovered"],
         "entries": matrix["entries"],
+        "evidence": evidence,
     }
     destination = Path(output_path)
     destination.parent.mkdir(parents=True, exist_ok=True)

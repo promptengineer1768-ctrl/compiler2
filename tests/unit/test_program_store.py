@@ -60,20 +60,84 @@ def _load_symbol_address(symbol_name: str) -> int:
     pytest.fail(f"Symbol {symbol_name!r} not found in linked outputs.")
 
 
+GEORAM_WINDOW = 0xDE00
+GEORAM_PAGE = 0xDFFE
+GEORAM_BLOCK = 0xDFFF
+
+
 def _load_binary(emu: C64Emu6502) -> None:
-    """Load the real linked compiler and enable geoRAM."""
+    """Load the real linked compiler plus the geoRAM image and enable geoRAM."""
     payload = (ROOT / "build" / "compiler.bin").read_bytes()
     load_address = payload[0] | (payload[1] << 8)
     emu.write_mem_range(load_address, payload[2:])
+    georam_path = ROOT / "build" / "georam.bin"
+    if not georam_path.exists():
+        pytest.fail("build/georam.bin not found. Run build.ps1 first.")
+    image = georam_path.read_bytes()
+    assert image[:2] == b"\x00\xde"
     emu.set_georam_enabled(True)
+    backing_size = len(emu.export_georam())
+    payload_bytes = image[2:]
+    assert backing_size >= len(payload_bytes)
+    emu.load_georam(payload_bytes + bytes(backing_size - len(payload_bytes)))
+
+
+def _load_routine_record(symbol: str) -> dict[str, object]:
+    """Return the routine_directory.json entry for one routine."""
+    data = json.loads(
+        (ROOT / "build" / "routine_directory.json").read_text(encoding="utf-8")
+    )
+    record = data["routines"][symbol]
+    assert isinstance(record, dict)
+    return record
+
+
+def _run_paged(emu: C64Emu6502, routine: str, *, x: int, y: int) -> None:
+    """Reach a geoRAM routine through the production XY XIP gate.
+
+    The program-store transaction routines take their pointer arguments in
+    X/Y and leave the caller's X/Y (or a returned descriptor) intact, with A
+    free. They are geoRAM-paged overlays (offset 0) that also select arena
+    data pages during execution, so they must be entered through the real XIP
+    gate, which maps the code page, preserves the callee carry, and safely
+    restores the window -- exactly as production geoasm code reaches them.
+
+    Routine IDs below 256 take the group-0 gate (A=id); IDs 256..511 take the
+    group-n gate (A=low byte of id), which indexes the group-1 directory.
+    """
+    record = _load_routine_record(routine)
+    assert record.get("layer") == "georam", f"{routine} is not a geoRAM routine"
+    routine_id_obj = record["id"]
+    assert isinstance(routine_id_obj, int)
+    routine_id = routine_id_obj
+    assert routine_id < 0x200
+    if routine_id < 0x100:
+        gate = "georam_call_group_0_xy"
+        emu.set_a(routine_id & 0xFF)
+    else:
+        gate = "georam_call_group_n_xy"
+        emu.set_a(routine_id & 0xFF)
+    emu.set_x(x)
+    emu.set_y(y)
+    emu.execute(_load_symbol_address(gate), MAX_CYCLES)
 
 
 def _call(emu: C64Emu6502, routine: str, *, a: int = 0, x: int = 0, y: int = 0) -> bool:
-    """Execute one production routine and return its carry status."""
-    emu.set_a(a)
-    emu.set_x(x)
-    emu.set_y(y)
-    emu.execute(_load_symbol_address(routine), MAX_CYCLES)
+    """Execute one production routine and return its carry status.
+
+    geoRAM-paged overlays are reached through the production group-0 XY XIP
+    gate (A=routine id, X/Y=args); non-paged routines run at their linked
+    address. The gate preserves the callee carry and any descriptor returned
+    in X/Y for geoRAM routines.
+    """
+    record = _load_routine_record(routine)
+    if record.get("layer") == "georam":
+        _run_paged(emu, routine, x=x, y=y)
+    else:
+        emu.set_a(a)
+        emu.set_x(x)
+        emu.set_y(y)
+        emu.execute(_load_symbol_address(routine), MAX_CYCLES)
     return bool(int(emu.get_state().p) & 1)
 
 

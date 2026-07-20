@@ -62,20 +62,53 @@ def assign_page_placement(
     georam_routines = [r for r in routines if is_georam_routine(r)]
 
     placement: Dict[str, Tuple[int, int, int]] = {}
+    reserved: set[Tuple[int, int]] = set()
+
+    # Page-bound assembly sources declare their physical page explicitly.  The
+    # call directory must follow that physical placement, not the incidental
+    # order in routines.json (which changes whenever a non-XIP record is
+    # inserted ahead of an existing XIP routine).
+    for r in georam_routines:
+        explicit_page = r.get("xip_page")
+        if explicit_page is None:
+            continue
+        block = int(r.get("xip_block", 0))
+        page = int(explicit_page)
+        offset = int(r.get("xip_offset", 0))
+        if block < 0 or not 0 <= page < 64 or not 0 <= offset < 256:
+            raise ValueError(f"Routine {r['name']} has invalid explicit XIP placement")
+        if offset + int(r.get("size_ceiling", 256)) > 256:
+            raise ValueError(f"Routine {r['name']} explicit XIP placement crosses page")
+        key = (block, page)
+        if key in reserved:
+            raise ValueError(f"Duplicate explicit XIP page {block}:{page}")
+        reserved.add(key)
+        placement[r["name"]] = (block, page, offset)
+
     current_block = 0
     current_page = 0
     current_offset = 0
 
     for r in georam_routines:
+        if r["name"] in placement:
+            continue
         size = r.get("size_ceiling", 256)
         if size > 256:
             raise ValueError(
                 f"Routine {r['name']} size ceiling {size} exceeds page size 256"
             )
 
-        # If it doesn't fit on the current page, move to the next page
-        if current_offset + size > 256:
+        # If it doesn't fit on the current page, move to the next page.
+        # Explicit reservations are skipped so an automatically placed body
+        # can never overwrite a hand-bound XIP page.
+        if current_offset + size > 256 or (current_block, current_page) in reserved:
             current_offset = 0
+            current_page += 1
+            if current_page >= 64:
+                current_page = 0
+                current_block += 1
+
+        while (current_block, current_page) in reserved:
             current_page += 1
             if current_page >= 64:
                 current_page = 0
@@ -289,6 +322,15 @@ def validate_linked_placement(
         encoding="utf-8"
     ):
         errors.add("linked map is missing its segment list")
+    map_text = Path(map_path).read_text(encoding="utf-8")
+    linked_pages = {
+        int(match.group(1)): int(match.group(2), 16)
+        for match in re.finditer(
+            r"^\s*GEORAM_PAGE_(\d+)\s+Offs=[0-9A-Fa-f]+\s+Size=([0-9A-Fa-f]+)",
+            map_text,
+            re.MULTILINE,
+        )
+    }
     routines = load_routine_manifest(routines_path)
     directory_data = json.loads(Path(directory_path).read_text(encoding="utf-8"))
     directory = directory_data.get("routines", {})
@@ -299,10 +341,6 @@ def validate_linked_placement(
             Path(labels_path).read_text(encoding="utf-8")
         )
     }
-    by_module: Dict[str, List[Dict[str, Any]]] = {}
-    for routine in routines:
-        by_module.setdefault(str(routine.get("module", "")), []).append(routine)
-
     for routine in routines:
         name = str(routine["name"])
         record = directory.get(name)
@@ -327,22 +365,19 @@ def validate_linked_placement(
             errors.add(f"geoRAM routine {name} crosses the $DEFF boundary")
         if record.get("address") != f"${0xDE00 + offset:04X}":
             errors.add(f"geoRAM routine {name} window address disagrees with offset")
-
-        module_routines = by_module[str(routine.get("module", ""))]
-        index = module_routines.index(routine)
-        later_labels = [
-            labels[str(candidate["name"])]
-            for candidate in module_routines[index + 1 :]
-            if str(candidate["name"]) in labels and name in labels
-        ]
-        if later_labels:
-            actual_size = min(later_labels) - labels[name]
-            if actual_size <= 0:
-                errors.add(f"linked routine order is invalid for {name}")
-            elif actual_size > ceiling:
-                errors.add(
-                    f"linked routine {name} size {actual_size} exceeds ceiling {ceiling}"
-                )
+        # Every XIP routine has the same linked mirror address ($DE00), so
+        # label subtraction across routines measures page aliases rather than
+        # routine size.  Validate the linker-owned physical page segment
+        # instead.  Page-bound routines occupy offset zero exclusively.
+        page_size = linked_pages.get(page)
+        # Migration-debt entries can remain in the generated directory before
+        # their source body has a GEORAM_PAGE segment.  Their policy audit owns
+        # that distinction; this linker check only validates physical pages
+        # that the current artifact actually contains.
+        if page_size is not None and offset == 0 and page_size > ceiling:
+            errors.add(
+                f"linked geoRAM page {page} size {page_size} exceeds ceiling {ceiling} for {name}"
+            )
 
     group_count = int(directory_data.get("directory", {}).get("group_count", 0))
     missing = int(

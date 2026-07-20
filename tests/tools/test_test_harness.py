@@ -211,7 +211,7 @@ def test_replay_boundary_rejects_corruption(tmp_path: Path) -> None:
 
 
 def test_validate_callable_coverage_writes_honest_matrix(tmp_path: Path) -> None:
-    """Coverage report counts callables and exposes every missing unit test."""
+    """Coverage requires an explicit direct-execution declaration, not text."""
     production = tmp_path / "production.json"
     production.write_text(
         json.dumps(
@@ -229,7 +229,11 @@ def test_validate_callable_coverage_writes_honest_matrix(tmp_path: Path) -> None
     unit_dir = tmp_path / "unit"
     unit_dir.mkdir()
     (unit_dir / "test_a.py").write_text(
-        'def test_a():\n    address = "covered_call"\n', encoding="utf-8"
+        "import pytest\n\n"
+        "def _call(name):\n    return name\n\n"
+        "@pytest.mark.callable_coverage('covered_call', executor='_call')\n"
+        "def test_a():\n    assert _call('covered_call') == 'covered_call'\n",
+        encoding="utf-8",
     )
     output = tmp_path / "coverage.json"
     report = test_harness.validate_callable_coverage(
@@ -238,4 +242,30 @@ def test_validate_callable_coverage_writes_honest_matrix(tmp_path: Path) -> None
     assert report["total_routines"] == 2
     assert report["covered_routines"] == 1
     assert report["uncovered_routines"] == ["missing_call"]
+    assert report["schema_version"] == "2.0"
+    assert report["evidence"]["covered_call"][0]["executor"] == "_call"
     assert json.loads(output.read_text(encoding="utf-8")) == report
+
+
+def test_textual_callable_name_is_not_direct_execution_evidence(tmp_path: Path) -> None:
+    """A name in prose or an assertion cannot satisfy routine coverage."""
+    unit_dir = tmp_path / "unit"
+    unit_dir.mkdir()
+    (unit_dir / "test_text.py").write_text(
+        "def test_mentions_name():\n    assert 'entry' == 'entry'\n", encoding="utf-8"
+    )
+    assert test_harness.collect_covered_entries(str(unit_dir), {"entry"}) == set()
+
+
+def test_callable_coverage_requires_the_declared_executor(tmp_path: Path) -> None:
+    """A marker without a linked-byte call is rejected rather than credited."""
+    unit_dir = tmp_path / "unit"
+    unit_dir.mkdir()
+    (unit_dir / "test_bad.py").write_text(
+        "import pytest\n\n"
+        "@pytest.mark.callable_coverage('entry', executor='_call')\n"
+        "def test_bad():\n    assert True\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="does not call executor '_call'"):
+        test_harness.collect_covered_entries(str(unit_dir), {"entry"})

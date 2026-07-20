@@ -10,6 +10,11 @@ CTX_MAX_DEPTH = 8
 .segment "BSS"
 ctx_stack_block: .res CTX_MAX_DEPTH
 ctx_stack_page:  .res CTX_MAX_DEPTH
+; The XIP code page selected by the gate for each active context.  Data
+; helpers use this to restore the instruction mapping before returning to a
+; caller that is executing at $DE00.
+ctx_code_block:  .res CTX_MAX_DEPTH
+ctx_code_page:   .res CTX_MAX_DEPTH
 
 .segment "RESIDENT"
 
@@ -18,6 +23,8 @@ ctx_stack_page:  .res CTX_MAX_DEPTH
 .export ctx_pop
 .export ctx_depth
 .export ctx_check_overflow
+.export ctx_set_code_mapping
+.export ctx_get_code_mapping
 
 ctx_init:
     lda #$00
@@ -68,4 +75,35 @@ ctx_pop:
 
 ctx_depth:
     lda zp_gr_ctx_sp
+    rts
+
+; ctx_set_code_mapping - Record the current XIP page for the active context.
+; Inputs: X=block, A=page. Outputs: C=0, or C=1 when no context is active.
+; Clobbers: A, X, flags. Side effects: updates only context metadata.
+ctx_set_code_mapping:
+    ldy zp_gr_ctx_sp
+    beq @fail
+    dey
+    sta ctx_code_page,y
+    txa
+    sta ctx_code_block,y
+    clc
+    rts
+@fail:
+    sec
+    rts
+
+; ctx_get_code_mapping - Return the current XIP code mapping.
+; Inputs: none. Outputs: X=block, A=page, C=0; C=1 if no XIP context.
+; Clobbers: A, X, Y, flags. Side effects: none.
+ctx_get_code_mapping:
+    ldy zp_gr_ctx_sp
+    beq @fail
+    dey
+    lda ctx_code_page,y
+    ldx ctx_code_block,y
+    clc
+    rts
+@fail:
+    sec
     rts

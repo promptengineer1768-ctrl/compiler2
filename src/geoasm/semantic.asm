@@ -25,7 +25,9 @@ TOKEN_NUMBER    = $02
 .import keyword_dialect
 .import keyword_modes
 .import keyword_count_value
-.import token_init, token_next, token_keyword_id, token_dialect
+.import token_next, token_keyword_id, token_dialect
+.import georam_call_group_0_xy
+.importzp GEORAM_ROUTINE_ID_TOKEN_INIT
 
 .segment "BSS"
 .export semantic_dialect
@@ -121,7 +123,10 @@ semantic_validate_line:
     sta semantic_for_depth
     sta semantic_do_depth
     sta semantic_program_line
-    jsr token_init
+    ldx semantic_source_ptr
+    ldy semantic_source_ptr+1
+    lda #<GEORAM_ROUTINE_ID_TOKEN_INIT
+    jsr georam_call_group_0_xy
     lda semantic_dialect
     sta token_dialect
     jsr token_next
@@ -168,8 +173,11 @@ semantic_validate_line:
     sec
     rts
 @next_stmt:
+    ; Multi-line FOR is the common case: NEXT often appears alone on a later
+    ; line. Depth is tracked within a single colon-separated line only; a bare
+    ; NEXT with no matching FOR on this line is allowed (runtime detects abuse).
     lda semantic_for_depth
-    beq @next_without_for
+    beq @next
     dec semantic_for_depth
     jmp @next
 @do:
@@ -197,10 +205,6 @@ semantic_validate_line:
     rts
 @syntax_error:
     lda #ERR_SYNTAX
-    sec
-    rts
-@next_without_for:
-    lda #ERR_NEXT_WITHOUT_FOR
     sec
     rts
 

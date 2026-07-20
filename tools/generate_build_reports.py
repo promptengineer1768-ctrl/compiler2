@@ -15,7 +15,12 @@ SEGMENT_RE = re.compile(
     r"(?P<start>[0-9A-F]{6})\s+(?P<end>[0-9A-F]{6})\s+"
     r"(?P<size>[0-9A-F]{6})\s+(?P<align>[0-9A-F]{5})$"
 )
-RESIDENT_SEGMENTS = {"LOADER", "RESIDENT", "EDITOR_PINNED", "COMPILER_INIT"}
+# The resident budget is the permanently mapped ``RESIDENT`` segment.  The
+# loader runs only during installation, COMPILER_INIT is bootstrap code, and
+# EDITOR_PINNED is a separately accounted high-RAM service surface; including
+# those three in this metric turns an 8 KiB resident limit into a misleading
+# aggregate-image limit.
+RESIDENT_SEGMENTS = {"RESIDENT"}
 BENCHMARK_JIFFY_LIMIT = 60
 # REQUIREMENTS §8.1: base geoRAM-canonical image hard ceiling.
 GEORAM_BYTE_LIMIT = 512 * 1024

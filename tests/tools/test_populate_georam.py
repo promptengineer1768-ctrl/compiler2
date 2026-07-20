@@ -51,6 +51,12 @@ def test_populate_preserves_all_linked_cold_bytes(tmp_path: Path) -> None:
     assert output[2 + len(expected) :] == bytes(65536 - len(expected))
 
 
+def test_cold_pack_excludes_ram_under_io_overlay() -> None:
+    """The $D000 overlay ships only as the separately staged IOBASIC sidecar."""
+    assert "COMPRESSOR" not in COLD_SEGMENTS
+    assert "IO_COLD" not in COLD_SEGMENTS
+
+
 def test_populate_rejects_fill_only_payload(tmp_path: Path) -> None:
     """Uniform linker fill cannot silently become a release image."""
     map_path = tmp_path / "compiler.map"
@@ -91,6 +97,51 @@ def test_populate_overlays_directory_routine_bytes(tmp_path: Path) -> None:
     output_path = tmp_path / "georam.bin"
 
     populate(map_path, compiler_path, output_path, labels_path, directory_path)
+
+    payload = output_path.read_bytes()[2:]
+    destination = 2 * 256 + 16
+    assert payload[destination : destination + len(routine)] == routine
+
+
+def test_populate_preserves_linker_xip_bytes_at_directory_location(
+    tmp_path: Path,
+) -> None:
+    """A real $DE00 label is sourced from ld65's XIP sidecar, never the PRG."""
+    map_path = tmp_path / "compiler.map"
+    map_path.write_text(_map_text(0x0810, 4))
+    compiler_path = tmp_path / "compiler.bin"
+    compiler_path.write_bytes(b"\x01\x08" + bytes(range(1, 65)))
+    (tmp_path / "hibasic.bin").write_bytes(b"\x61\x62\x63\x64")
+    labels_path = tmp_path / "compiler.lbl"
+    labels_path.write_text("al 00DE00 .editor_delete_line\n")
+    directory_path = tmp_path / "routine_directory.json"
+    directory_path.write_text("""
+{
+  "routines": {
+    "editor_delete_line": {
+      "layer": "georam",
+      "block": 0,
+      "page": 2,
+      "offset": 16
+    }
+  }
+}
+""")
+    linked_xip_path = tmp_path / "linked-georam.bin"
+    linked_xip = bytearray(b"\xea" * (3 * 256))
+    routine = b"\xa9\x42\xa2\x24\x60"
+    linked_xip[2 * 256 + 16 : 2 * 256 + 16 + len(routine)] = routine
+    linked_xip_path.write_bytes(linked_xip)
+    output_path = tmp_path / "georam.bin"
+
+    populate(
+        map_path,
+        compiler_path,
+        output_path,
+        labels_path,
+        directory_path,
+        linked_georam_path=linked_xip_path,
+    )
 
     payload = output_path.read_bytes()[2:]
     destination = 2 * 256 + 16

@@ -70,7 +70,6 @@ def _run(emu: Any, symbol: str, pointer: int = INPUT_ADDR) -> Any:
         emu.load_georam(image[2:])
         emu.write_mem(0xDFFF, int(record["block"]))
         emu.write_mem(0xDFFE, int(record["page"]))
-    emu._compiler2_real_bytes_only = True
     emu.set_x(pointer & 0xFF)
     emu.set_y(pointer >> 8)
     entry = _address(symbol)

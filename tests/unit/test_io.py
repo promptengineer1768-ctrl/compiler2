@@ -54,7 +54,6 @@ def _load_binary(emu: C64Emu6502) -> None:
     load_addr = payload[0] | (payload[1] << 8)
     emu.write_mem_range(load_addr, payload[2:])
     emu.set_georam_enabled(True)
-    setattr(emu, "_compiler2_real_bytes_only", True)
     emu.write_mem(0x0000, 0x2F)
     emu.write_mem(0x0001, 0x35)
     # Variable stores and other runtime helpers live in the RAM_HIGH image.
@@ -142,6 +141,41 @@ def _load_zp_address(symbol_name: str) -> int:
 
 def _carry_is_clear(emu: C64Emu6502) -> bool:
     return (int(emu.get_state().p) & 0x01) == 0
+
+
+def _routine_record(symbol_name: str) -> dict[str, object]:
+    directory_path = _artifact_root() / "routine_directory.json"
+    data: dict[str, object] = json.loads(directory_path.read_text(encoding="utf-8"))
+    routines = data["routines"]
+    assert isinstance(routines, dict)
+    record = routines[symbol_name]
+    assert isinstance(record, dict)
+    return record
+
+
+def _routine_layer(symbol_name: str) -> str:
+    record = _routine_record(symbol_name)
+    layer = record.get("layer", "")
+    assert isinstance(layer, str)
+    return layer
+
+
+def _load_georam_backing(emu: C64Emu6502) -> None:
+    """Load build/georam.bin into the emulator's geoRAM backing.
+
+    geoRAM-paged overlays (layer=georam) live in this image and must be
+    banked into the $DE00 window before execution.
+    """
+    georam_path = _artifact_root() / "georam.bin"
+    if not georam_path.exists():
+        pytest.fail("build/georam.bin not found. Run build.ps1 first.")
+    image = georam_path.read_bytes()
+    assert image[:2] == b"\x00\xde"
+    emu.set_georam_enabled(True)
+    backing_size = len(emu.export_georam())
+    payload_bytes = image[2:]
+    assert backing_size >= len(payload_bytes)
+    emu.load_georam(payload_bytes + bytes(backing_size - len(payload_bytes)))
 
 
 @pytest.mark.unit
@@ -452,13 +486,27 @@ class TestIo:
         payload = (_artifact_root() / "compiler.bin").read_bytes()
         load_addr = payload[0] | (payload[1] << 8)
         emu.write_mem_range(load_addr, payload[2:])
-        emu.set_georam_enabled(True)
+        # program_replace_from_load is a geoRAM-paged overlay; its bytes live in
+        # build/georam.bin and must be banked into the $DE00 window.
+        _load_georam_backing(emu)
 
         def call(routine: str, *, a: int = 0, x: int = 0, y: int = 0) -> bool:
             emu.set_a(a)
             emu.set_x(x)
             emu.set_y(y)
-            emu.execute(_load_symbol_address(routine), 2_000_000)
+            if _routine_layer(routine) == "georam":
+                record = _routine_record(routine)
+                routine_id_obj = record["id"]
+                assert isinstance(routine_id_obj, int)
+                routine_id = routine_id_obj
+                if routine_id < 0x100:
+                    emu.set_a(routine_id & 0xFF)
+                    emu.execute(_load_symbol_address("georam_call_group_0_xy"), 2_000_000)
+                else:
+                    emu.set_a(routine_id & 0xFF)
+                    emu.execute(_load_symbol_address("georam_call_group_n_xy"), 2_000_000)
+            else:
+                emu.execute(_load_symbol_address(routine), 2_000_000)
             return bool(int(emu.get_state().p) & 1)
 
         assert not call("arena_init_all")

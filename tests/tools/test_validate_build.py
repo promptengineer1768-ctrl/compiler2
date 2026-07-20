@@ -182,14 +182,74 @@ class TestBuildManifest:
                 tool_versions={"ca65": "ca65 V2.19", "ld65": "ld65 V2.19"},
             )
 
+    def test_rejects_artifacts_when_a_source_input_changes(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Validation rejects stale artifacts instead of re-signing them."""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "src").mkdir()
+        source = tmp_path / "src" / "main.asm"
+        source.write_text("nop\n", encoding="utf-8")
+        (tmp_path / "build.ps1").write_text("# build\n", encoding="utf-8")
+        build_dir = tmp_path / "build"
+        build_dir.mkdir()
+        (build_dir / "API.md").write_text("api\n", encoding="utf-8")
+        (build_dir / "MAP.md").write_text("map\n", encoding="utf-8")
+        versions = {"ca65": "ca65 V2.19", "ld65": "ld65 V2.19"}
+        manifest = validate_build.build_manifest_data(build_dir, tool_versions=versions)
+        (build_dir / "build_manifest.json").write_text(
+            json.dumps(manifest), encoding="utf-8"
+        )
+        source.write_text("brk\n", encoding="utf-8")
+        monkeypatch.setattr(
+            validate_build, "configured_tool_versions", lambda: versions
+        )
+
+        errors = validate_build.validate_build_manifest(
+            str(build_dir / "build_manifest.json")
+        )
+
+        assert "build artifacts are stale relative to current source inputs" in errors
+        assert json.loads((build_dir / "build_manifest.json").read_text()) == manifest
+
+    def test_validation_does_not_write_a_missing_manifest(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The normal validator is read-only when no release manifest exists."""
+        monkeypatch.chdir(tmp_path)
+        missing = tmp_path / "build" / "build_manifest.json"
+
+        assert validate_build.validate_build_manifest(str(missing)) == [
+            f"build manifest is missing: {missing}"
+        ]
+        assert not missing.exists()
+
+    def test_required_release_artifacts_are_explicit(self, tmp_path: Path) -> None:
+        """A release cannot silently omit a final artifact from the contract."""
+        errors = validate_build.validate_required_release_artifacts(tmp_path)
+
+        assert errors == [
+            f"required release artifact is missing: {name}"
+            for name in validate_build.FINAL_ARTIFACT_NAMES
+        ]
+
 
 class TestCrossArtifactValidators:
     """Direct coverage for generated contract validators."""
 
     def test_checked_in_generated_contracts_are_consistent(self) -> None:
         root = Path(__file__).resolve().parents[2]
-        if not (root / "build" / "routine_directory.json").exists():
-            pytest.skip("build/ artifacts not present; run build.ps1 first")
+        required = (
+            "routine_directory.json",
+            "arena_layout.json",
+            "zp_allocation.json",
+            "size_report.json",
+            "API.md",
+            "MAP.md",
+            "production_entries.json",
+        )
+        if any(not (root / "build" / name).exists() for name in required):
+            pytest.skip("complete build artifacts not present; run build.ps1 first")
         assert (
             validate_build.validate_routine_directory(
                 str(root / "manifests" / "routines.json"),
@@ -257,6 +317,96 @@ class TestCrossArtifactValidators:
             "generated runtime ABI differs from manifest"
         ]
 
+    def test_expansion_contract_validator_rejects_fabricated_reu_overlay(
+        self, tmp_path: Path
+    ) -> None:
+        """A patch-only release cannot claim an unshipped REU-native overlay."""
+        import generate_expansion_contracts
+
+        (tmp_path / "routine_directory.json").write_text(
+            json.dumps(
+                {
+                    "routines": {
+                        "xip": {
+                            "id": 2,
+                            "layer": "georam",
+                            "block": 0,
+                            "page": 1,
+                            "offset": 0,
+                            "address": "$DE00",
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        (tmp_path / "reu_loader_manifest.json").write_text(
+            json.dumps({"kind": "reu_patch", "georam_sha256": "abc"}),
+            encoding="utf-8",
+        )
+        generate_expansion_contracts.write(tmp_path)
+        assert validate_build.validate_expansion_contracts(tmp_path) == []
+        layout_path = tmp_path / "reu_layout.json"
+        layout = json.loads(layout_path.read_text(encoding="utf-8"))
+        layout["overlays"] = [{"overlay_id": 1}]
+        layout_path.write_text(json.dumps(layout), encoding="utf-8")
+
+        assert validate_build.validate_expansion_contracts(tmp_path) == [
+            "patch-only REU layout must not advertise executable overlays"
+        ]
+
+    def test_expansion_contract_validator_requires_dual_reu_records(
+        self, tmp_path: Path
+    ) -> None:
+        """Every linked geoRAM page must have a planned dual REU record."""
+        import generate_expansion_contracts
+
+        (tmp_path / "routine_directory.json").write_text(
+            json.dumps(
+                {
+                    "routines": {
+                        "xip": {
+                            "id": 2,
+                            "layer": "georam",
+                            "block": 0,
+                            "page": 1,
+                            "offset": 0,
+                            "address": "$DE00",
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        (tmp_path / "reu_loader_manifest.json").write_text(
+            json.dumps({"kind": "reu_patch", "georam_sha256": "abc"}),
+            encoding="utf-8",
+        )
+        generate_expansion_contracts.write(tmp_path)
+        assert validate_build.validate_expansion_contracts(tmp_path) == []
+
+        layout_path = tmp_path / "reu_layout.json"
+        layout = json.loads(layout_path.read_text(encoding="utf-8"))
+        layout["routine_records"] = []
+        layout["routine_record_count"] = 0
+        layout_path.write_text(json.dumps(layout), encoding="utf-8")
+        errors = validate_build.validate_expansion_contracts(tmp_path)
+        assert (
+            "REU layout routine_records disagree with linked geoRAM dual placements"
+            in errors
+        )
+
+        layout = json.loads(
+            (tmp_path / "reu_layout.json").read_text(encoding="utf-8")
+        )
+        # restore dual then claim live execution
+        generate_expansion_contracts.write(tmp_path)
+        layout = json.loads(layout_path.read_text(encoding="utf-8"))
+        layout["routine_records"][0]["reu"]["execution_status"] = "live"
+        layout_path.write_text(json.dumps(layout), encoding="utf-8")
+        errors = validate_build.validate_expansion_contracts(tmp_path)
+        assert any("claims live execution" in error for error in errors)
+
     def test_stale_generated_validator_detects_newer_input(
         self, tmp_path: Path
     ) -> None:
@@ -269,6 +419,85 @@ class TestCrossArtifactValidators:
         assert validate_build.validate_no_stale_generated(
             {str(output): [str(source)]}
         ) == [f"generated output {output} is stale relative to {source}"]
+
+    def test_xip_path_contracts_flag_direct_calls_and_missing_pages(
+        self, tmp_path: Path
+    ) -> None:
+        """XIP gates reject direct mirrors and conforming entries without pages."""
+        source_root = tmp_path / "src"
+        source_root.mkdir()
+        (source_root / "caller.asm").write_text("jsr token_init\n", encoding="utf-8")
+        policy_path = tmp_path / "policy.json"
+        policy_path.write_text(
+            json.dumps(
+                {
+                    "routines": [
+                        {
+                            "name": "token_init",
+                            "target_placement": "expansion_xip",
+                            "conformance": "conforming",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        directory_path = tmp_path / "directory.json"
+        directory_path.write_text(json.dumps({"routines": {}}), encoding="utf-8")
+
+        errors = validate_build.validate_xip_path_contracts(
+            source_root=source_root,
+            policy_path=policy_path,
+            routine_directory_path=directory_path,
+        )
+
+        assert any("direct jsr to expansion_xip routine token_init" in e for e in errors)
+        assert any(
+            "conforming expansion_xip routine lacks geoRAM entry" in e for e in errors
+        )
+
+    def test_xip_path_validation_is_read_only(self, tmp_path: Path) -> None:
+        """Validate-only XIP checks must not rewrite policy or directory files."""
+        source_root = tmp_path / "src"
+        source_root.mkdir()
+        (source_root / "caller.asm").write_text("rts\n", encoding="utf-8")
+        policy = {
+            "routines": [
+                {
+                    "name": "token_init",
+                    "target_placement": "expansion_xip",
+                    "conformance": "conforming",
+                }
+            ]
+        }
+        directory = {
+            "routines": {
+                "token_init": {
+                    "layer": "georam",
+                    "block": 0,
+                    "page": 1,
+                    "offset": 0,
+                    "address": "$DE00",
+                }
+            }
+        }
+        policy_path = tmp_path / "policy.json"
+        directory_path = tmp_path / "directory.json"
+        policy_text = json.dumps(policy)
+        directory_text = json.dumps(directory)
+        policy_path.write_text(policy_text, encoding="utf-8")
+        directory_path.write_text(directory_text, encoding="utf-8")
+
+        assert (
+            validate_build.validate_xip_path_contracts(
+                source_root=source_root,
+                policy_path=policy_path,
+                routine_directory_path=directory_path,
+            )
+            == []
+        )
+        assert policy_path.read_text(encoding="utf-8") == policy_text
+        assert directory_path.read_text(encoding="utf-8") == directory_text
 
 
 class TestGeoramImageBudget:

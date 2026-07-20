@@ -82,6 +82,31 @@ def _load_binary(emu: C64Emu6502) -> None:
     if hibasic.exists():
         emu.write_mem_range(0xE000, hibasic.read_bytes())
         emu.write_mem(0x0001, 0x35)
+    # geoRAM routines (detokenize/list helpers) are reached through the real
+    # XIP gate, so the geoRAM backing must hold the built overlay image.
+    georam_path = ROOT / "build" / "georam.bin"
+    if georam_path.exists():
+        image = georam_path.read_bytes()
+        assert image[:2] == b"\x00\xde"
+        backing = len(emu.export_georam())
+        payload_bytes = image[2:]
+        assert backing >= len(payload_bytes)
+        emu.load_georam(payload_bytes + bytes(backing - len(payload_bytes)))
+    emu.write_mem(0x0000, 0x2F)
+
+
+def _execute_xip_no_args(emu: C64Emu6502, routine: str, cycles: int = 50_000) -> None:
+    """Execute an argument-free editor service through the real geoRAM gate."""
+    image = ROOT / "build" / "georam.bin"
+    if not image.exists():
+        pytest.skip("build/georam.bin not found.")
+    emu.load_georam(image.read_bytes()[2:])
+    directory = json.loads((ROOT / "build" / "routine_directory.json").read_text())
+    record = directory["routines"][routine]
+    assert record["layer"] == "georam"
+    emu.execute(_load_symbol_address("ctx_init"), cycles)
+    emu.set_x(int(record["id"]) & 0xFF)
+    emu.execute(_load_symbol_address("georam_call_group_n"), cycles)
 
 
 def _carry_set(emu: C64Emu6502) -> bool:
@@ -135,10 +160,7 @@ class TestEditorDeleteLine:
         """editor_delete_line should remove a line."""
         emu = C64Emu6502(lib_path=_dll_path())
         _load_binary(emu)
-        addr = _load_symbol_address("editor_delete_line")
-        emu.set_x(0x00)
-        emu.set_y(0x10)
-        emu.execute(addr, 10000)
+        _execute_xip_no_args(emu, "editor_delete_line")
         state = emu.get_state()
         assert state.a is not None
 
@@ -255,9 +277,6 @@ class TestEditorReadyTransition:
         """editor_ready_transition should update state to READY."""
         emu = C64Emu6502(lib_path=_dll_path())
         _load_binary(emu)
-        addr = _load_symbol_address("editor_ready_transition")
-        emu.set_x(0x00)
-        emu.set_y(0x10)
-        emu.execute(addr, 10000)
+        _execute_xip_no_args(emu, "editor_ready_transition")
         state = emu.get_state()
         assert state.a is not None

@@ -1,4 +1,4 @@
-﻿"""Unit tests for transcendental math routines (math_trans.asm).
+"""Unit tests for transcendental math routines (math_trans.asm).
 
 Tests verify LOG, EXP, SQR, POW, RND, FMA, and IEEE extension functions
 against stock BASIC V2 values and legacy project Python proxy accuracy fixtures.
@@ -108,7 +108,6 @@ def _load_compiler_image(emu: C64Emu6502) -> None:
     if hibasic_path.exists():
         emu.write_mem_range(0xE000, hibasic_path.read_bytes())
         emu.write_mem(0x0001, 0x35)
-    setattr(emu, "_compiler2_real_bytes_only", True)
 
 
 def _load_float_from_fac1(emu: C64Emu6502, zp_fac1: int) -> float:

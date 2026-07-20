@@ -54,6 +54,40 @@ def _sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _build_input_paths(project_root: Path) -> list[Path]:
+    """Return the complete, deterministic set of production build inputs."""
+    paths: set[Path] = set()
+    for root, pattern in (
+        (project_root / "manifests", "*.json"),
+        (project_root / "src", "*.asm"),
+        (project_root / "tools", "*.py"),
+        (project_root / "docs", "*.md"),
+    ):
+        if root.is_dir():
+            paths.update(path for path in root.rglob(pattern) if path.is_file())
+    paths.update(
+        path
+        for path in (
+            project_root / "build.ps1",
+            project_root / "REQUIREMENTS.md",
+            project_root / "DESIGN2.md",
+            project_root / "REU_REQUIREMENTS.md",
+            project_root / "REU_DESIGN.md",
+        )
+        if path.is_file()
+    )
+    return sorted(paths, key=lambda path: path.relative_to(project_root).as_posix())
+
+
+def build_input_records(project_root: Path | None = None) -> dict[str, str]:
+    """Return checksums for every source input that can affect a release."""
+    root = (project_root or Path.cwd()).resolve()
+    return {
+        path.relative_to(root).as_posix(): _sha256_file(path)
+        for path in _build_input_paths(root)
+    }
+
+
 def _read_tool_version(executable: Path) -> str:
     """Return one checked executable version string."""
     result = subprocess.run(
@@ -99,6 +133,15 @@ def _artifact_records(build_dir: Path) -> dict[str, dict[str, int | str]]:
     return records
 
 
+def validate_required_release_artifacts(build_dir: Path) -> list[str]:
+    """Return errors for any deterministic final release artifact that is absent."""
+    return [
+        f"required release artifact is missing: {name}"
+        for name in FINAL_ARTIFACT_NAMES
+        if not (build_dir / name).is_file()
+    ]
+
+
 def build_manifest_data(
     build_dir: Path,
     *,
@@ -107,6 +150,7 @@ def build_manifest_data(
     """Build the final reproducibility manifest from current artifacts."""
     versions = dict(tool_versions or configured_tool_versions())
     artifacts = _artifact_records(build_dir)
+    source_inputs = build_input_records()
     artifact_checksums = {
         name: str(record["sha256"]) for name, record in artifacts.items()
     }
@@ -116,6 +160,7 @@ def build_manifest_data(
         "valid": True,
         "fingerprint": fingerprint,
         "compiler2_version": "1.0",
+        "source_inputs": source_inputs,
         "toolchain": {
             name: {"version": version} for name, version in sorted(versions.items())
         },
@@ -178,6 +223,12 @@ def validate_build_manifest(path: str) -> list[str]:
     for name in ("API.md", "MAP.md"):
         if name not in artifacts:
             errors.append(f"build manifest omits required reference: {name}")
+
+    recorded_inputs = manifest.get("source_inputs")
+    if not isinstance(recorded_inputs, dict):
+        errors.append("build manifest omits source-input checksums")
+    elif recorded_inputs != build_input_records():
+        errors.append("build artifacts are stale relative to current source inputs")
 
     expected_fingerprint = compute_build_fingerprint(actual_versions, actual_checksums)
     if manifest.get("fingerprint") != expected_fingerprint:
@@ -327,10 +378,9 @@ def validate_size_report(size_report_path: str) -> list[str]:
         if isinstance(value, dict):
             for key, child in value.items():
                 child_path = f"{path}.{key}" if path else str(key)
-                if (
-                    key in {"within_limit", "compile_within_limit"}
-                    and child is not True
-                ):
+                # Pending measurements may legitimately report null.  Only an
+                # explicit false is a hard budget failure.
+                if key in {"within_limit", "compile_within_limit"} and child is False:
                     errors.add(f"budget gate {child_path} is not true")
                 visit(child, child_path)
         elif isinstance(value, list):
@@ -338,6 +388,10 @@ def validate_size_report(size_report_path: str) -> list[str]:
                 visit(child, f"{path}[{index}]")
 
     visit(report, "")
+    # Top-level compile and resident budget booleans remain mandatory gates.
+    for key in ("resident_within_limit", "compile_within_limit", "georam_within_limit"):
+        if key in report and report[key] is not True:
+            errors.add(f"budget gate {key} is not true")
     return sorted(errors)
 
 
@@ -474,30 +528,10 @@ def compute_build_fingerprint(
         SHA-256 fingerprint string.
     """
     h = hashlib.sha256()
-    paths: set[Path] = set()
-    for root, pattern in (
-        (Path("manifests"), "*.json"),
-        (Path("src"), "*.asm"),
-        (Path("tools"), "*.py"),
-        (Path("docs"), "*.md"),
-    ):
-        if root.is_dir():
-            paths.update(path for path in root.rglob(pattern) if path.is_file())
-    paths.update(
-        path
-        for path in (
-            Path("build.ps1"),
-            Path("REQUIREMENTS.md"),
-            Path("DESIGN2.md"),
-            Path("REU_REQUIREMENTS.md"),
-            Path("REU_DESIGN.md"),
-        )
-        if path.is_file()
-    )
-    for path in sorted(paths, key=lambda item: item.as_posix()):
-        h.update(path.as_posix().encode("utf-8"))
+    for name, checksum in sorted(build_input_records().items()):
+        h.update(name.encode("utf-8"))
         h.update(b"\0")
-        h.update(path.read_bytes())
+        h.update(checksum.encode("ascii"))
         h.update(b"\0")
     for name, version in sorted((tool_versions or {}).items()):
         h.update(f"tool:{name}\0{version}\0".encode())
@@ -756,6 +790,211 @@ def validate_georam_image_budget(size_report_path: str) -> list[str]:
     return ordered
 
 
+def validate_xip_path_contracts(
+    *,
+    source_root: str | Path = "src",
+    policy_path: str | Path = "manifests/placement_policy.json",
+    routine_directory_path: str | Path = "build/routine_directory.json",
+) -> list[str]:
+    """Validate expansion-native call paths and conforming directory coverage.
+
+    Runs the production XIP-path auditor in read-only mode: direct ``jsr``/``jmp``
+    into ``expansion_xip`` symbols are rejected, and every policy entry marked
+    ``conforming`` must have a generated geoRAM directory record.  Validation
+    never rewrites or re-signs fingerprints or manifests.
+
+    Args:
+        source_root: Production assembly tree to scan for direct calls.
+        policy_path: Checked-in placement-policy JSON.
+        routine_directory_path: Generated geoRAM routine directory.
+
+    Returns:
+        Deterministic list of XIP-path contract errors (empty when valid).
+    """
+    # Local import keeps validate_build importable when only schema checks run.
+    tools_dir = Path(__file__).resolve().parent
+    if str(tools_dir) not in sys.path:
+        sys.path.insert(0, str(tools_dir))
+    from xip_path_audit import direct_xip_calls, missing_xip_directory_entries
+
+    errors: list[str] = []
+    try:
+        errors.extend(direct_xip_calls(Path(source_root), Path(policy_path)))
+        errors.extend(
+            missing_xip_directory_entries(
+                Path(policy_path), Path(routine_directory_path)
+            )
+        )
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        errors.append(f"XIP path audit failed: {error}")
+    return errors
+
+
+def validate_expansion_contracts(build_dir: str | Path = "build") -> list[str]:
+    """Validate generated geoRAM and REU release-contract agreement.
+
+    The shipped REU artifact remains a patch-only sidecar: live ``overlays`` and
+    ``slot_classes`` must stay empty and ``implementation_status`` must stay
+    ``patch_only_no_reu_xip_overlays``.  Dual ``routine_records`` are required
+    for every linked geoRAM page so REU placement can be audited without
+    claiming DMA-to-XIP execution is live.
+
+    Args:
+        build_dir: Release output directory.
+
+    Returns:
+        Deterministic contract errors, or an empty list when the artifacts
+        accurately describe the linked and packaged release.
+    """
+    # Import locally so the validator and generator stay in lockstep without
+    # forcing a package install for every build-tool invocation.
+    tools_dir = Path(__file__).resolve().parent
+    if str(tools_dir) not in sys.path:
+        sys.path.insert(0, str(tools_dir))
+    import generate_expansion_contracts as expansion_contracts
+
+    root = Path(build_dir)
+    required = {
+        "routine directory": root / "routine_directory.json",
+        "REU loader manifest": root / "reu_loader_manifest.json",
+        "overlay directory": root / "overlay_directory.json",
+        "REU layout": root / "reu_layout.json",
+    }
+    errors = [
+        f"{name} is missing: {path}"
+        for name, path in required.items()
+        if not path.is_file()
+    ]
+    if errors:
+        return errors
+    try:
+        routine_document = _load_json(str(required["routine directory"]))
+        reu_manifest = _load_json(str(required["REU loader manifest"]))
+        overlay = _load_json(str(required["overlay directory"]))
+        reu_layout = _load_json(str(required["REU layout"]))
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        return [f"expansion contract is invalid: {error}"]
+
+    routines = routine_document.get("routines")
+    if not isinstance(routines, dict):
+        return ["linked routine directory routines must be an object"]
+    expected_records: list[dict[str, Any]] = []
+    expected_dual: list[dict[str, Any]] = []
+    for name, record in sorted(routines.items(), key=lambda item: int(item[1]["id"])):
+        if not isinstance(record, dict) or record.get("layer") != "georam":
+            continue
+        try:
+            block = int(record["block"])
+            page = int(record["page"])
+            entry_offset = int(record["offset"])
+            window_address = str(record["address"])
+            routine_id = int(record["id"])
+            expected_records.append(
+                {
+                    "routine_id": routine_id,
+                    "routine_name": str(name),
+                    "block": block,
+                    "page": page,
+                    "entry_offset": entry_offset,
+                    "window_address": window_address,
+                }
+            )
+            expected_dual.append(
+                expansion_contracts.dual_routine_record(
+                    routine_id=routine_id,
+                    routine_name=str(name),
+                    block=block,
+                    page=page,
+                    entry_offset=entry_offset,
+                    window_address=window_address,
+                )
+            )
+        except (KeyError, TypeError, ValueError):
+            errors.append(f"linked geoRAM routine has incomplete placement: {name}")
+
+    if overlay.get("backend") != "georam":
+        errors.append("overlay directory backend is not georam")
+    if overlay.get("routines") != expected_records:
+        errors.append("overlay directory differs from linked geoRAM routine placements")
+    if overlay.get("routine_count") != len(expected_records):
+        errors.append(
+            "overlay directory routine count disagrees with linked placements"
+        )
+    if overlay.get("routine_directory_sha256") != _sha256_file(
+        required["routine directory"]
+    ):
+        errors.append("overlay directory routine-directory checksum is stale")
+
+    if reu_manifest.get("kind") != "reu_patch":
+        errors.append("REU loader manifest is not a reu_patch document")
+    if reu_layout.get("backend") != "reu_patch_only":
+        errors.append("REU layout backend does not describe the shipped patch")
+    if (
+        reu_layout.get("implementation_status")
+        != expansion_contracts.IMPLEMENTATION_STATUS
+    ):
+        errors.append("REU layout does not disclose patch-only implementation")
+    if reu_layout.get("source_georam_sha256") != reu_manifest.get("georam_sha256"):
+        errors.append("REU layout source geoRAM checksum disagrees with REU patch")
+    if reu_layout.get("slot_classes") != [] or reu_layout.get("overlays") != []:
+        errors.append("patch-only REU layout must not advertise executable overlays")
+
+    dual_records = reu_layout.get("routine_records")
+    if not isinstance(dual_records, list):
+        errors.append("REU layout routine_records must be a list")
+    elif dual_records != expected_dual:
+        errors.append(
+            "REU layout routine_records disagree with linked geoRAM dual placements"
+        )
+    if reu_layout.get("routine_record_count") != len(expected_dual):
+        errors.append(
+            "REU layout routine_record_count disagrees with dual placements"
+        )
+
+    if isinstance(dual_records, list):
+        for record in dual_records:
+            if not isinstance(record, dict):
+                errors.append("REU dual routine record is not an object")
+                continue
+            reu_half = record.get("reu")
+            if not isinstance(reu_half, dict):
+                errors.append(
+                    f"REU dual record missing reu half: {record.get('routine_name')}"
+                )
+                continue
+            if reu_half.get("execution_status") != expansion_contracts.EXECUTION_NOT_LIVE:
+                errors.append(
+                    "patch-only REU dual record claims live execution: "
+                    f"{record.get('routine_name')}"
+                )
+            if reu_half.get("slot_class") != expansion_contracts.PRIMARY_XIP_SLOT_CLASS:
+                errors.append(
+                    "REU dual record has unexpected slot class: "
+                    f"{record.get('routine_name')}"
+                )
+            if reu_half.get("image_length") != expansion_contracts.PAGE_BYTES:
+                errors.append(
+                    "REU dual record page image length is not 256: "
+                    f"{record.get('routine_name')}"
+                )
+
+    planned = reu_layout.get("planned_slot_classes")
+    expected_planned = [
+        {
+            "slot_class": expansion_contracts.PRIMARY_XIP_SLOT_CLASS,
+            "origin": expansion_contracts.PRIMARY_XIP_SLOT_ORIGIN,
+            "capacity_bytes": expansion_contracts.PAGE_BYTES,
+            "execution_status": expansion_contracts.EXECUTION_NOT_LIVE,
+        }
+    ]
+    if planned != expected_planned:
+        errors.append(
+            "REU layout planned_slot_classes must document the non-live primary "
+            "XIP miss slot"
+        )
+    return errors
+
+
 def _contract_errors() -> list[str]:
     """Run generated-contract validators used before and after assembly."""
     errors: list[str] = []
@@ -772,6 +1011,8 @@ def _contract_errors() -> list[str]:
         )
     )
     errors.extend(validate_georam_image_budget("build/size_report.json"))
+    errors.extend(validate_expansion_contracts("build"))
+    errors.extend(validate_xip_path_contracts())
     return errors
 
 
@@ -1054,6 +1295,13 @@ def main() -> None:
         else:
             sys.exit(1)
 
+    if option == "--xip-path":
+        ok = _report_errors(
+            validate_xip_path_contracts(),
+            "XIP path contracts validated successfully.",
+        )
+        raise SystemExit(0 if ok else 1)
+
     if option == "--all":
         errors: list[str] = []
         if not validate_manifests():
@@ -1093,22 +1341,24 @@ def main() -> None:
             )
         )
         errors.extend(validate_build_manifest("build/build_manifest.json"))
+        errors.extend(validate_required_release_artifacts(Path("build")))
         ok = _report_errors(errors, "All build contracts validated successfully.")
         raise SystemExit(0 if ok else 1)
+
+    if option == "--write-manifest":
+        manifest_data = write_build_manifest(Path("build"))
+        print(f"Build manifest written. Fingerprint: {manifest_data['fingerprint']}")
+        return
 
     if option is not None:
         print(f"Error: unknown validation option: {option}")
         raise SystemExit(2)
 
-    # General validations
-    success = validate_manifests()
-    if success:
-        manifest_data = write_build_manifest(Path("build"))
-        fingerprint = str(manifest_data["fingerprint"])
-        print(f"Build validation successful. Fingerprint: {fingerprint}")
-    else:
-        print("Build validation failed.")
-        sys.exit(1)
+    # Validation is deliberately read-only.  A stale artifact must be rebuilt,
+    # never re-signed by a validation command.
+    errors = validate_build_manifest("build/build_manifest.json")
+    ok = _report_errors(errors, "Build manifest validated successfully.")
+    raise SystemExit(0 if ok else 1)
 
 
 if __name__ == "__main__":

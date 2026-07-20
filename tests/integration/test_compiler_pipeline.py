@@ -23,6 +23,8 @@ except ImportError:
 RECORD_SIZE = 6
 SOURCE_HANDLE = 0xC900
 REPLAY_ADDR = 0xC900
+GEORAM_PAGE = 0xDFFE
+GEORAM_BLOCK = 0xDFFF
 
 
 def _dll_path() -> Path:
@@ -48,26 +50,64 @@ def _address(symbol: str) -> int:
     return int(data["routines"][symbol]["address"].removeprefix("$"), 16)
 
 
+def _load_binary(emu: Any) -> None:
+    """Load the linked compiler, the geoRAM overlay, and the RAM_HIGH image."""
+    payload = (ROOT / "build" / "compiler.bin").read_bytes()
+    load_addr = payload[0] | (payload[1] << 8)
+    emu.write_mem_range(load_addr, payload[2:])
+    image = (ROOT / "build" / "georam.bin").read_bytes()
+    assert image[:2] == b"\x00\xde"
+    emu.set_georam_enabled(True)
+    backing_size = len(emu.export_georam())
+    payload_bytes = image[2:]
+    assert backing_size >= len(payload_bytes)
+    emu.load_georam(payload_bytes + bytes(backing_size - len(payload_bytes)))
+    emu.write_mem(0x0000, 0x2F)
+    emu.write_mem(0x0001, 0x35)
+    # The eight-boundary coordinator calls into RAM_HIGH cold code (HIBASIC /
+    # EDITOR / WEDGE / COMPRESSOR) during compilation, so install it.
+    hibasic = ROOT / "build" / "hibasic.bin"
+    if hibasic.exists():
+        emu.write_mem_range(0xE000, hibasic.read_bytes())
+
+
+def _routine_record(symbol: str) -> dict[str, Any]:
+    data = json.loads((ROOT / "build" / "routine_directory.json").read_text())
+    record: dict[str, Any] = data["routines"][symbol]
+    return record
+
+
 def _emulator() -> Any:
     """Load the current linked compiler into a fresh emulator."""
     if C64Emu6502 is None:
         pytest.skip("Emulator binding unavailable")
     emu = C64Emu6502(lib_path=_dll_path())
-    setattr(emu, "_compiler2_real_bytes_only", True)
-    emu.set_georam_enabled(True)
-    payload = (ROOT / "build" / "compiler.bin").read_bytes()
-    load_addr = payload[0] | (payload[1] << 8)
-    emu.write_mem_range(load_addr, payload[2:])
+    _load_binary(emu)
     emu.write_mem_range(SOURCE_HANDLE, b"10 PRINT 1+2*3\x00")
     return emu
 
 
 def _run(emu: Any, symbol: str, a: int = 0, handle: int = SOURCE_HANDLE) -> Any:
-    """Invoke one pipeline routine with the standard register contract."""
-    emu.set_a(a)
+    """Invoke one pipeline routine through its production execution layer."""
+    record = _routine_record(symbol)
+    if record["layer"] == "georam":
+        if a:
+            assert int(record["offset"]) == 0
+            emu.write_mem(GEORAM_BLOCK, int(record["block"]))
+            emu.write_mem(GEORAM_PAGE, int(record["page"]))
+            emu.set_a(a)
+            entry = 0xDE00
+        else:
+            routine_id = int(record["id"])
+            assert 0x100 <= routine_id < 0x200
+            emu.set_a(routine_id & 0xFF)
+            entry = _address("georam_call_group_n_xy")
+    else:
+        emu.set_a(a)
+        entry = _address(symbol)
     emu.set_x(handle & 0xFF)
     emu.set_y(handle >> 8)
-    emu.execute(_address(symbol), 5000)
+    emu.execute(entry, 8_000_000)
     return emu.get_state()
 
 

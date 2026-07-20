@@ -140,8 +140,8 @@ def test_compressed_georam_sidecar_round_trip(tmp_path: Path) -> None:
 
 @pytest.mark.system
 @pytest.mark.local
-def test_compressed_compiler_loader_is_smaller() -> None:
-    """Compression produces a nonempty loader smaller than the raw payload."""
-    compressed = BUILD / "compile_compressed.prg"
-    assert compressed.stat().st_size > 2
-    assert compressed.stat().st_size < (BUILD / "compile.bin").stat().st_size
+def test_compressed_georam_sidecar_is_smaller() -> None:
+    """Compression produces a sidecar smaller than the raw geoRAM payload."""
+    sidecar = BUILD / "GEORAM_compressed.prg"
+    assert sidecar.stat().st_size > 2
+    assert sidecar.stat().st_size < (BUILD / "georam.bin").stat().st_size

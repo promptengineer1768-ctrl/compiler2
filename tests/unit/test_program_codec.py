@@ -68,6 +68,36 @@ def _load_binary(emu: C64Emu6502) -> None:
     load_addr = payload[0] | (payload[1] << 8)
     emu.write_mem_range(load_addr, payload[2:])
     emu.set_georam_enabled(True)
+    georam_path = ROOT / "build" / "georam.bin"
+    if not georam_path.exists():
+        pytest.fail("build/georam.bin not found. Run build.ps1 first.")
+    georam_image = georam_path.read_bytes()
+    assert georam_image[:2] == b"\x00\xde"
+    # The built XIP image is a 64 KiB payload, while the manifest's arena
+    # layout deliberately uses the emulator's 512 KiB geoRAM configuration
+    # (for example arena 8 lives in block 7).  Loading only the image would
+    # shrink the emulated device to 64 KiB, turning valid arena reads into
+    # $FF.  Overlay the image without changing configured capacity.
+    backing_size = len(emu.export_georam())
+    assert backing_size >= len(georam_image) - 2
+    emu.load_georam(
+        georam_image[2:] + bytes(backing_size - (len(georam_image) - 2))
+    )
+    # The installed production path initializes the dispatcher context before
+    # any group-1 XIP call.  Codec tests invoke the real gate directly, so
+    # establish the same prerequisite instead of treating an uninitialized
+    # context stack as a codec failure.
+    emu.execute(_load_symbol_address("ctx_init"), 5_000_000)
+
+
+def _routine_record(routine: str) -> dict[str, object] | None:
+    """Return the linked routine-directory record when one is available."""
+    directory = ROOT / "build" / "routine_directory.json"
+    if not directory.exists():
+        return None
+    data = json.loads(directory.read_text(encoding="utf-8"))
+    record = data.get("routines", {}).get(routine)
+    return record if isinstance(record, dict) else None
 
 
 def _write_record(emu: C64Emu6502, address: int, payload: bytes) -> None:
@@ -87,6 +117,18 @@ STREAM_GENERATION = 1
 
 
 def _call(emu: C64Emu6502, routine: str, *, a: int = 0, x: int = 0, y: int = 0) -> bool:
+    record = _routine_record(routine)
+    if record is not None and record.get("layer") == "georam":
+        # A direct `execute($DE00 + offset)` bypasses the production dispatcher
+        # and cannot prove that an XIP routine survives data-page remapping.
+        # Exercise the same group-1 gate used by runtime I/O instead.
+        routine_id = int(record["id"])
+        assert 0x100 <= routine_id <= 0x1FF
+        emu.set_a(routine_id & 0xFF)
+        emu.set_x(x)
+        emu.set_y(y)
+        emu.execute(_load_symbol_address("georam_call_group_n_xy"), 5_000_000)
+        return bool(int(emu.get_state().p) & 1)
     emu.set_a(a)
     emu.set_x(x)
     emu.set_y(y)
@@ -229,6 +271,48 @@ SAVE_FORMAT_C2P1 = 2
 class TestProgramCodec:
     """program_codec.asm unit coverage."""
 
+    def test_xip_codec_callbacks_restore_code_mapping_before_return(self) -> None:
+        """XIP codec pages must never resume execution with a data page selected."""
+        source = (ROOT / "src" / "geoasm" / "program_codec.asm").read_text(
+            encoding="utf-8"
+        )
+        assert ".import georam_select" in source
+        assert "program_stream_code_block: .res 1" in source
+        assert "program_stream_code_page: .res 1" in source
+
+        probe = source[source.index(".proc __program_stream_probe") : source.index(
+            ".endproc", source.index(".proc __program_stream_probe")
+        )]
+        assert "jsr arena_select_page" in probe
+        assert "jsr georam_select" in probe
+        assert probe.index("jsr georam_select") > probe.index("jsr arena_select_page")
+
+        for helper in ("__program_stream_read", "__program_stream_write"):
+            start = source.index(f".proc {helper}")
+            body = source[start : source.index(".endproc", start)]
+            assert "jsr arena_select_page" in body
+            assert body.count("jsr georam_select") == 2
+            assert body.count("sta program_stream_page_valid") == 2
+
+        classify_start = source.index("__program_stream_classify:")
+        classify_end = source.index(
+            ".assert * - program_classify_file", classify_start
+        )
+        classify = source[classify_start:classify_end]
+        assert "arena_select_page" not in classify
+        assert not re.search(r"\b(?:lda|sta)\s+\$DE0[0-9A-Fa-f]", classify)
+        assert classify.count("jsr __program_stream_read_ax") == 5
+
+        basic35_start = source.index('.segment "GEORAM_PAGE_9"')
+        basic35_end = source.index(
+            ".assert * - program_decode_basic35", basic35_start
+        )
+        basic35 = source[basic35_start:basic35_end]
+        assert "program_decode_basic35:" in basic35
+        assert "jsr __program_stream_validate_basic35_prepare" in basic35
+        assert "jmp __program_stream_decode_stock_validated" in basic35
+        assert "jmp __program_stream_decode_stock\n" not in basic35
+
     def test_classify_stock_and_extended_records(self) -> None:
         """Classification should distinguish V2, C2P1, and Plus/4 PRG records."""
         dll = _dll_path()
@@ -238,12 +322,16 @@ class TestProgramCodec:
 
         stock_addr = 0xC000
         _write_stream(emu, stock_addr, bytes([0x01, 0x08, 0x00, 0x00]))
+        # Enter from an unrelated selected page.  The production XIP gate must
+        # restore this outer selection after codec data reads remap $DE00.
+        assert not _call(emu, "georam_select", a=0x3F, x=0)
         assert not _call(
             emu, "program_classify_file", x=stock_addr & 0xFF, y=stock_addr >> 8
         )
         state = emu.get_state()
         assert state.a == 0
         assert (int(state.p) & 0x01) == 0
+        assert (emu.read_mem(0xDFFF), emu.read_mem(0xDFFE)) == (0, 0x3F)
 
         extended_addr = 0xC100
         _write_stream(emu, extended_addr, _extended_program(b"test"))
@@ -375,10 +463,12 @@ class TestProgramCodec:
         assert not _call(emu, "arena_init_all")
         source = 0xC600
         _write_stream(emu, source, payload)
-        emu.set_x(source & 0xFF)
-        emu.set_y(source >> 8)
-        emu.execute(_load_symbol_address("program_decode_stock"), 10_000)
-        assert int(emu.get_state().p) & 0x01
+        assert _call(
+            emu,
+            "program_decode_stock",
+            x=source & 0xFF,
+            y=source >> 8,
+        )
 
     def test_stock_encoder_recomputes_every_link(self) -> None:
         """Export ignores stale imported links and emits canonical addresses."""
@@ -431,10 +521,12 @@ class TestProgramCodec:
         payload[offsets[mutation]] ^= 1
         source = 0xC800
         _write_stream(emu, source, bytes(payload))
-        emu.set_x(source & 0xFF)
-        emu.set_y(source >> 8)
-        emu.execute(_load_symbol_address("program_decode_extended"), 10_000)
-        assert int(emu.get_state().p) & 0x01
+        assert _call(
+            emu,
+            "program_decode_extended",
+            x=source & 0xFF,
+            y=source >> 8,
+        )
 
     def test_malformed_records_are_rejected(self) -> None:
         """Malformed stock and extended inputs should return carry set."""

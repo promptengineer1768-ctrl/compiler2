@@ -1,7 +1,8 @@
 """Unit tests for compressor integration routines (compressor.asm).
 
-Tests verify RLE/LZ77 compression and streaming CGS1 decompression write
-real output and reject bad input.
+Tests verify the production loader's streaming CGS1 decompression path writes
+real output and rejects bad input. Packing is performed by the host compressor
+tool; the installed image only needs the matching decompressor.
 """
 
 from __future__ import annotations
@@ -97,6 +98,13 @@ def _load_binary(emu: Any) -> None:
     hibasic_path = ROOT / "build" / "hibasic.bin"
     if hibasic_path.exists():
         emu.write_mem_range(0xE000, hibasic_path.read_bytes())
+    # io_compressor_stream (the real decompressor body) lives in the IO_COLD
+    # segment, linked from build/iobasic.bin and loaded at $D000 by the
+    # production linker config (IO: start = $D000).  Without it the wrapper's
+    # JSR lands in unmapped RAM.
+    iobasic_path = ROOT / "build" / "iobasic.bin"
+    if iobasic_path.exists():
+        emu.write_mem_range(0xD000, iobasic_path.read_bytes())
     # ALL_RAM so $E000+ HIBASIC image is visible (not KERNAL ROM).
     emu.write_mem(0x0001, 0x30)
     # Stepped mapped execution keeps normal-RAM stores visible to read_mem.
@@ -123,71 +131,23 @@ def _cgs1_rle(unpacked: bytes) -> bytes:
     )
 
 
-@pytest.mark.unit
-@pytest.mark.local
-class TestRleCompression:
-    """RLE compression tests."""
-
-    def test_rle_compress_writes_count_value_pairs(self) -> None:
-        """compressor_rle must emit (count, value) pairs into the out buffer."""
-        emu_cls = _require_emu()
-        dll = _dll_path()
-        emu = emu_cls(lib_path=dll)
-        _load_binary(emu)
-        src = 0x6000
-        data = bytes([0xAA, 0xAA, 0xAA, 0xBB, 0xBB])
-        emu.write_mem_range(src, data)
-        emu.set_x(src & 0xFF)
-        emu.set_y((src >> 8) & 0xFF)
-        emu.set_a(len(data))
-        emu.execute(_load_symbol_address("compressor_rle"), 50_000)
-        state = emu.get_state()
-        assert (state.p & 0x01) == 0
-        assert state.a == 4  # (3,AA) (2,BB)
-        out = _load_symbol_address("compressor_out_buffer")
-        assert emu.read_mem(out + 0) == 3
-        assert emu.read_mem(out + 1) == 0xAA
-        assert emu.read_mem(out + 2) == 2
-        assert emu.read_mem(out + 3) == 0xBB
-        assert emu.read_mem(_load_symbol_address("compressor_out_length")) == 4
-
-    def test_rle_rejects_zero_length(self) -> None:
-        """compressor_rle fails cleanly on A=0."""
-        emu_cls = _require_emu()
-        dll = _dll_path()
-        emu = emu_cls(lib_path=dll)
-        _load_binary(emu)
-        emu.set_x(0x00)
-        emu.set_y(0x60)
-        emu.set_a(0)
-        emu.execute(_load_symbol_address("compressor_rle"), 10_000)
-        assert emu.get_state().p & 0x01
-
-
-@pytest.mark.unit
-@pytest.mark.local
-class TestLz77Compression:
-    """LZ77 / literal-pack tests."""
-
-    def test_lz77_compress_writes_literal_token(self) -> None:
-        """compressor_lz77 must write a literal token plus payload bytes."""
-        emu_cls = _require_emu()
-        dll = _dll_path()
-        emu = emu_cls(lib_path=dll)
-        _load_binary(emu)
-        src = 0x6000
-        data = bytes([0x10, 0x20, 0x30])
-        emu.write_mem_range(src, data)
-        emu.set_x(src & 0xFF)
-        emu.set_y((src >> 8) & 0xFF)
-        emu.set_a(len(data))
-        emu.execute(_load_symbol_address("compressor_lz77"), 50_000)
-        state = emu.get_state()
-        assert (state.p & 0x01) == 0
-        assert state.a == 4  # token + 3 bytes
-        out = _load_symbol_address("compressor_out_buffer")
-        assert emu.read_mem(out) == 2  # length-1
-        assert bytes(emu.read_mem_range(out + 1, out + 3)) == data
+def test_production_compressor_exports_only_loader_decompressor() -> None:
+    """The installed image retains only the production-reachable CGS1 reader."""
+    source = (ROOT / "src" / "geoasm" / "compressor.asm").read_text(encoding="utf-8")
+    loader = (ROOT / "src" / "geoasm" / "loader_core.asm").read_text(encoding="utf-8")
+    initializer = (ROOT / "src" / "geoasm" / "compiler_init.asm").read_text(
+        encoding="utf-8"
+    )
+    assert ".export compressor_stream" in source
+    assert ".export compressor_rle" not in source
+    assert ".export compressor_lz77" not in source
+    assert ".import compressor_stream" in loader
+    assert "jmp compressor_stream" in loader
+    assert '.segment "IO_COLD"' in source
+    assert "jsr ram_under_io_enter" in source
+    assert "jsr ram_under_io_exit" in source
+    assert "jsr init_install_iobasic" in initializer
+    assert "jsr ram_under_io_copy_in" in initializer
 
 
 @pytest.mark.unit

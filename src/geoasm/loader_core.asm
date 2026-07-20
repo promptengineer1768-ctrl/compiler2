@@ -8,7 +8,7 @@
 .include "common/constants.asm"
 
 .import georam_stream_load, georam_stream_device
-.import detect_georam, compiler_init
+.import detect_georam, compiler_bootstrap
 .import detect_capacity_blocks
 .import detect_reu
 .import detect_reu_capacity_banks
@@ -211,9 +211,9 @@ loader_decompression:
 
 ; loader_entry - Dual-device install at $080D
 ; Probe geoRAM+REU, prefer geoRAM store, fingerprint skip-reload, load image,
-; publish expansion profile; neither device → fail. Success → compiler_init.
+; publish expansion profile; neither device → fail. Success → compiler_bootstrap.
 ; Input:  none
-; Output: C = error (failure path); success jumps to compiler_init
+; Output: C = error (failure path); success jumps to compiler_bootstrap
 ; Clobbers: A, X, Y
 .export loader_entry
 loader_entry:
@@ -284,11 +284,12 @@ loader_entry:
 @ready:
     sei
     jsr loader_restore_banking
-    ldx #<ready_message
-    ldy #>ready_message
-    jsr loader_print
+    ; Do not print "BASIC V3 READY" here. compiler_init XIP still has to LOAD
+    ; HIBASIC, construct arenas, install IRQ/NMI vectors, and arm the
+    ; project cursor; a premature READY makes the shell look idle while
+    ; the machine is mid-disk I/O with stock CINV and no blink.
     inc loader_sequence_phase
-    jmp compiler_init
+    jmp compiler_bootstrap
 
 @failed:
     sei
@@ -590,7 +591,6 @@ reu_patch_magic:
 detecting_message: .byte $0D, "DETECTING GEORAM", $8D
 detected_message:  .byte "GEORAM DETECTED", $8D
 loading_message:   .byte "LOADING TO GEORAM", $8D
-ready_message:     .byte "BASIC V3 READY", $8D
 failed_message:    .byte "?GEORAM LOAD ERROR", $8D
 loader_raw_block:  .byte 0
 loader_raw_page:   .byte 0

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -33,8 +34,6 @@ EXPORT_FLAG_CE00_RESERVED = 0x01
 EXPORT_STATE_GE_80 = 0x01
 EXPORT_STATE_GE_100 = 0x02
 
-READ_HELPER_ADDR = 0xC700
-
 
 def _symbol(name: str) -> int:
     """Return a linked production symbol address."""
@@ -45,37 +44,94 @@ def _symbol(name: str) -> int:
     return int(match.group(1), 16)
 
 
+GEORAM_PAGE = 0xDFFE
+GEORAM_BLOCK = 0xDFFF
+
+MAX_CYCLES = 8_000_000
+
+
+def _load_binary(emu: C64Emu6502) -> None:
+    """Load the real linked compiler plus the geoRAM image and enable geoRAM."""
+    payload = (ROOT / "build" / "compiler.bin").read_bytes()
+    load_address = payload[0] | (payload[1] << 8)
+    emu.write_mem_range(load_address, payload[2:])
+    georam_path = ROOT / "build" / "georam.bin"
+    if not georam_path.exists():
+        pytest.fail("build/georam.bin not found. Run build.ps1 first.")
+    image = georam_path.read_bytes()
+    assert image[:2] == b"\x00\xde"
+    emu.set_georam_enabled(True)
+    backing_size = len(emu.export_georam())
+    payload_bytes = image[2:]
+    assert backing_size >= len(payload_bytes)
+    emu.load_georam(payload_bytes + bytes(backing_size - len(payload_bytes)))
+
+
+def _load_routine_record(symbol: str) -> dict[str, object]:
+    """Return the routine_directory.json entry for one routine."""
+    data = json.loads(
+        (ROOT / "build" / "routine_directory.json").read_text(encoding="utf-8")
+    )
+    record = data["routines"][symbol]
+    assert isinstance(record, dict)
+    return record
+
+
+def _run_paged(emu: C64Emu6502, routine: str, *, x: int, y: int) -> None:
+    """Reach a geoRAM routine through the production XY XIP gate.
+
+    Routine IDs below 256 take the group-0 gate (A=id); IDs 256..511 take the
+    group-n gate (A=low byte of id), which indexes the group-1 directory.
+    """
+    record = _load_routine_record(routine)
+    assert record.get("layer") == "georam", f"{routine} is not a geoRAM routine"
+    routine_id_obj = record["id"]
+    assert isinstance(routine_id_obj, int)
+    routine_id = routine_id_obj
+    assert routine_id < 0x200
+    if routine_id < 0x100:
+        gate = "georam_call_group_0_xy"
+    else:
+        gate = "georam_call_group_n_xy"
+    emu.set_a(routine_id & 0xFF)
+    emu.set_x(x)
+    emu.set_y(y)
+    emu.execute(_symbol(gate), MAX_CYCLES)
+
+
 def _emulator() -> C64Emu6502:
     """Load the production artifact into a real-byte-only emulator."""
     dll = TOOLS_ROOT / "emu6502.dll"
     emu = C64Emu6502(lib_path=dll)
-    payload = (ROOT / "build" / "compiler.bin").read_bytes()
-    load = payload[0] | (payload[1] << 8)
-    emu.write_mem_range(load, payload[2:])
+    _load_binary(emu)
     emu.write_mem(0x0000, 0x2F)
     emu.write_mem(0x0001, 0x35)
     install_kernal_stubs(emu)
-    emu._compiler2_real_bytes_only = True
     return emu
 
 
 def _call(emu: C64Emu6502, routine: str, pointer: int) -> tuple[int, int, int, bool]:
-    """Execute an export routine and return A/X/Y/carry."""
-    emu.set_x(pointer & 0xFF)
-    emu.set_y(pointer >> 8)
-    emu.execute(_symbol(routine), 80_000)
+    """Execute an export routine and return A/X/Y/carry.
+
+    geoRAM-paged overlays are reached through the production group XY XIP gate
+    (A=routine id, X/Y=pointer); the linked export_compile_command runs at its
+    linked address with X/Y=pointer. The gate preserves the callee carry, A,
+    and X/Y for georAM routines.
+    """
+    record = _load_routine_record(routine)
+    if record.get("layer") == "georam":
+        _run_paged(emu, routine, x=pointer & 0xFF, y=pointer >> 8)
+    else:
+        emu.set_x(pointer & 0xFF)
+        emu.set_y(pointer >> 8)
+        emu.execute(_symbol(routine), MAX_CYCLES)
     state = emu.get_state()
     return int(state.a), int(state.x), int(state.y), bool(int(state.p) & 1)
 
 
 def _cpu_read(emu: C64Emu6502, address: int) -> int:
-    """Read CPU-visible RAM through a tiny LDA/RTS helper."""
-    emu.write_mem_range(
-        READ_HELPER_ADDR,
-        bytes([0xAD, address & 0xFF, address >> 8, 0x60]),
-    )
-    emu.execute(READ_HELPER_ADDR, 20)
-    return int(emu.get_state().a)
+    """Read CPU-visible RAM directly; emu.read_mem reflects CPU stores."""
+    return int(emu.read_mem(address))
 
 
 def _write_eb(
@@ -389,12 +445,14 @@ def test_export_write_prg_validates_record_and_uses_kernal_save_abi() -> None:
     _, _, _, carry = _call(emu, "export_write_prg", record)
     assert not carry
 
-    payload = (ROOT / "build" / "compiler.bin").read_bytes()
-    load = payload[0] | (payload[1] << 8)
-    # The public page-bounded entry is a trampoline; inspect the linked
-    # implementation body for the resident KERNAL calls.
-    start = _symbol("export_write_prg_impl") - load + 2
-    body = payload[start : start + 240]
+    # export_write_prg is a geoRAM XIP page (offset 0 at $DE00); inspect its
+    # linked bytes in the geoRAM image for the resident KERNAL calls.
+    directory = json.loads(
+        (ROOT / "build" / "routine_directory.json").read_text(encoding="utf-8")
+    )
+    page = int(directory["routines"]["export_write_prg"]["page"])
+    georam = (ROOT / "build" / "georam.bin").read_bytes()
+    body = georam[2 + page * 256 : 2 + page * 256 + 256]
     for callee in ("kernal_setnam", "kernal_setlfs"):
         address = _symbol(callee)
         assert bytes((0x20, address & 0xFF, address >> 8)) in body

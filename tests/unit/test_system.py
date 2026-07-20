@@ -50,8 +50,17 @@ def _load_binary(emu: C64Emu6502) -> None:
     hibasic = _artifact_root() / "hibasic.bin"
     if hibasic.exists():
         emu.write_mem_range(0xE000, hibasic.read_bytes())
-        # $01=$35: BASIC/KERNAL out, HIBASIC RAM at $E000+ visible.
-        emu.write_mem(0x0001, 0x35)
+    # The IO_COLD runtime helpers (fre_init/fre_query/...) link from
+    # build/iobasic.bin at $D000 via the production linker config. They must be
+    # present in the $D000 window so the runtime routines are real, executable
+    # bytes rather than unmapped RAM.
+    iobasic = _artifact_root() / "iobasic.bin"
+    if iobasic.exists():
+        emu.write_mem_range(0xD000, iobasic.read_bytes())
+    # ALL_RAM ($01=$30): HIBASIC at $E000+ and the IOBASIC overlay at $D000
+    # are both plain RAM, so every runtime routine is reachable.
+    emu.write_mem(0x0000, 0x2F)
+    emu.write_mem(0x0001, 0x30)
     install_kernal_stubs(emu)
 
 

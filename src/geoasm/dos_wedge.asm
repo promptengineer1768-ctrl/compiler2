@@ -7,6 +7,11 @@
 .include "common/zp.inc"
 
 .import wedge_dispatch_development
+.import georam_call_group_n
+; The resident gate owns the generated directory tables.  Import only the
+; generated ID needed by this XIP caller; including georam_pages.inc here
+; would duplicate its 1,536-byte directory in normal CODE.
+.import GEORAM_ROUTINE_ID_WEDGE_PARSE
 
 zp_ptr1 = zp_tmptr
 
@@ -16,7 +21,7 @@ WEDGE_KIND_LOAD      = 2
 WEDGE_KIND_STREAM    = 3
 WEDGE_KIND_NORMAL    = $FF
 
-.segment "WEDGE"
+.segment "GEORAM_PAGE_40"
 
 ; wedge_parse - Parse a development wedge prefix command.
 ; Inputs: X/Y = captured direct-mode text pointer (NUL-terminated).
@@ -131,6 +136,12 @@ wedge_parse:
     rts
 .endproc
 
+; Link-time XIP boundary proof: parser body and all page-local helpers fit the
+; selected geoRAM page with a six-byte safety margin.
+.assert * - wedge_parse <= $FA, error, "wedge_parse exceeds its geoRAM page"
+
+.segment "WEDGE"
+
 ; wedge_run_development - Parse then dispatch one direct-mode wedge line.
 ; Inputs: X/Y = captured text. Outputs: C=error; A=$FF and C clear means the
 ; line is normal BASIC (not a wedge command).
@@ -138,13 +149,15 @@ wedge_parse:
 ; Clobbers: A, X, Y. Zero page: zp_tmptr and handler ZP.
 .export wedge_run_development
 wedge_run_development:
-    stx zp_ptr1
     sty zp_ptr1+1
-    jsr wedge_parse
+    ; wedge_parse is the first production geoRAM XIP pilot.  Its generated
+    ; placement is group 1 / index 113 (routine ID 369), so enter only via the
+    ; resident directory gate; no normal-RAM mirror exists.
+    ldx #<(GEORAM_ROUTINE_ID_WEDGE_PARSE - $100)
+    jsr georam_call_group_n
     bcs @done
     cmp #WEDGE_KIND_NORMAL
     beq @done
-    ldx zp_ptr1
     ldy zp_ptr1+1
     jmp wedge_dispatch_development
 @done:

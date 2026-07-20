@@ -116,6 +116,23 @@ class TestPageAssignment:
         _, placement = georam_pages.assign_page_placement(routines)
         assert "tokenize" in placement
 
+    def test_explicit_xip_page_survives_manifest_order_changes(self) -> None:
+        """Physical page declarations beat incidental manifest ordering."""
+        routines = [
+            {"name": "early", "layer": "geoasm", "size_ceiling": 256},
+            {
+                "name": "bound",
+                "layer": "geoasm",
+                "size_ceiling": 64,
+                "xip_page": 7,
+            },
+            {"name": "later", "layer": "geoasm", "size_ceiling": 256},
+        ]
+        _, placement = georam_pages.assign_page_placement(routines)
+        assert placement["bound"] == (0, 7, 0)
+        assert placement["early"] != placement["bound"]
+        assert placement["later"] != placement["bound"]
+
     def test_duplicate_routine_names_are_rejected(self) -> None:
         """Names are directory keys and therefore must be globally unique."""
         routines = [

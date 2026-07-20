@@ -7,8 +7,11 @@
 .include "common/zp.inc"
 .include "common/constants.asm"
 
-.import ctrl_reset, kernal_chrout, kernal_print_packed, pipeline_compile_line
+.import ctrl_reset, kernal_chrout, kernal_print_packed
 .import codegen_get_code_ptr
+.import georam_call_group_n_xy
+.import GEORAM_ROUTINE_ID_PIPELINE_COMPILE_LINE
+.import GEORAM_ROUTINE_ID_EDITOR_DETOKENIZE_LINE
 .import keyword_name_lo, keyword_name_hi, keyword_length, keyword_token
 .import keyword_count_value
 
@@ -66,6 +69,7 @@ editor_accepted_length: .byte 0
 editor_line_links:      .res 25, 0
 
 ; Accepted line buffer
+.export editor_accepted_line
 editor_accepted_line:   .res 81, 0
 
 ; Result buffer for output (detokenized LIST text handle target)
@@ -307,7 +311,8 @@ editor_submit_line:
     php
     ldx zp_ptr1
     ldy zp_ptr1+1
-    jsr pipeline_compile_line
+    lda #<GEORAM_ROUTINE_ID_PIPELINE_COMPILE_LINE
+    jsr georam_call_group_n_xy
     bcs @compile_fail
     plp
     bcs @ready
@@ -355,6 +360,7 @@ _editor_line_is_numbered:
 ; Input:  X/Y = line number record
 ; Output: C = error
 ; Clobbers: A, X, Y
+.segment "GEORAM_PAGE_2"
 .export editor_delete_line
 editor_delete_line:
     ; Shift lines down and clear bottom
@@ -384,6 +390,9 @@ editor_delete_line:
     sta editor_line_links,x
     clc
     rts
+.assert * - editor_delete_line <= $FA, error, "editor_delete_line exceeds geoRAM page 2"
+
+.segment "EDITOR"
 
 ; =============================================================================
 ; LIST Conversion
@@ -509,13 +518,16 @@ editor_list_range:
     sta zp_ptr1+1
 @line_loop:
     ; Stock linked: next:u16 at zp_ptr1. Zero next ends the program.
+    ; Keep next in editor_list_src (BSS), not zp_tmp1: detokenize uses
+    ; zp_tmp2 ($0C) as a 16-bit divisor, which aliases zp_tmp1+1 and would
+    ; corrupt the high byte of a ZP-saved next pointer across the call.
     ldy #0
     lda (zp_ptr1),y
-    sta zp_tmp1
+    sta editor_list_src
     iny
     lda (zp_ptr1),y
-    sta zp_tmp1+1
-    ora zp_tmp1
+    sta editor_list_src+1
+    ora editor_list_src
     beq @empty_ok
 
     ; Line number at +2.
@@ -551,15 +563,16 @@ editor_list_range:
     lda zp_ptr1+1
     adc #0
     tay
-    jsr editor_detokenize_line
+    lda #<GEORAM_ROUTINE_ID_EDITOR_DETOKENIZE_LINE
+    jsr georam_call_group_n_xy
     bcs @error
     jsr editor_list_print_result
     bcs @error
 @skip:
     ; Advance to next linked line (absolute next pointer).
-    lda zp_tmp1
+    lda editor_list_src
     sta zp_ptr1
-    lda zp_tmp1+1
+    lda editor_list_src+1
     sta zp_ptr1+1
     jmp @line_loop
 @empty_ok:
@@ -576,6 +589,7 @@ editor_list_range:
 ; Input:  X/Y = publication result handle
 ; Output: none
 ; Clobbers: A, X, Y
+.segment "GEORAM_PAGE_5"
 .export editor_ready_transition
 editor_ready_transition:
     lda #<ready_msg
@@ -596,6 +610,9 @@ editor_print_string_ax:
 
 ready_msg:
     .byte "READY.", $8D
+.assert * - editor_ready_transition <= $FA, error, "editor_ready_transition exceeds geoRAM page 5"
+
+.segment "EDITOR"
 
 ; =============================================================================
 ; LIST helpers (after public exports so size ceilings stay page-local)

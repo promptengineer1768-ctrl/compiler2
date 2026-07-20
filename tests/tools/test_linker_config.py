@@ -71,6 +71,16 @@ class TestConfigGeneration:
         content = linker_config.generate_cfg(policy, num_georam_pages=2)
         assert "GEORAM0" in content and "GEORAM1" in content
 
+    def test_io_cold_overlay_is_a_separate_linked_image(self) -> None:
+        """Cold I/O-hidden code must not leak into the normal RAM image."""
+        policy = linker_config.load_linker_policy(str(POLICY_PATH))
+        content = linker_config.generate_cfg(policy, num_georam_pages=1)
+        assert (
+            'IO: start = $D000, size = $1000, type = rw, file = "build/iobasic.bin"'
+            in content
+        )
+        assert "IO_COLD: load = IO, type = ro, define = yes;" in content
+
     def test_protected_ranges_follow_linker_policy(self) -> None:
         """POKE protection constants must derive from the canonical RAM policy."""
         policy = linker_config.load_linker_policy(str(POLICY_PATH))

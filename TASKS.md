@@ -2257,7 +2257,7 @@ behavior. Six unrelated pre-existing failures remain outside these phases
 - [x] Implement `loader_install_ram_payload` — RAM payload install
 - [x] Implement `loader_restore_banking` — restore `$35`
 - [x] Implement `loader_check_sentinel` — guard byte check
-- [x] Implement REU detect / fingerprint skip-reload / dual D64 install path
+- [~] Implement REU detect / fingerprint skip-reload / dual D64 install path
 
 **REFACTOR phase:**
 - [x] Verify all unit tests pass
@@ -2282,7 +2282,7 @@ pytest tests/integration/test_loader.py -v
 
 **GREEN phase:**
 - [x] Create `src/geoasm/compiler_init.asm`
-- [x] Implement `compiler_init` — BSS clear, arena init, editor entry
+- [~] Implement `compiler_init` — BSS clear, arena init, editor entry
 - [x] Implement `init_clear_bss`
 - [x] Implement `init_arenas`
 - [x] Implement `init_editor` / `init_enter_main_loop`
@@ -2453,10 +2453,10 @@ status, not missing behavior.
 - [x] Implement generated reference validation
 - [x] Implement stale file detection
 - [x] Implement build fingerprint computation
-- [x] Generate and validate `build/compiler.bin`
+- [~] Generate and validate `build/compiler.bin`
 - [x] Generate and validate `build/compiler.map`
 - [x] Generate and validate `build/compiler.lbl`
-- [x] Generate and validate `build/build_manifest.json`
+- [~] Generate and validate `build/build_manifest.json`
 - [x] Generate and validate `build/loader_manifest.json`
 - [x] Generate and validate `build/size_report.json`
 
@@ -2506,14 +2506,14 @@ python tools/validate_build.py --reference
 **GREEN phase:**
 - [x] Create `tools/extract_segments.py` — RAM payload extraction
 - [x] Create `tools/prepare_compressor_segments.py` — LZSS staging
-- [x] Validate resident byte budget within limit
+- [~] Validate resident byte budget within limit
 - [x] Generate and validate `build/compile.bin`
 - [x] Generate and validate `build/segments/compiler_main.bin`
 - [x] Generate and validate `build/compressor_layout.cfg`
 - [x] Validate geoRAM page budget within limit
 - [x] Validate stack depth within limit
 - [x] Validate context nesting within limit
-- [x] Validate standalone COMPILE budget
+- [~] Validate standalone COMPILE budget
 
 **REFACTOR phase:**
 - [x] Verify all system tests pass
@@ -2537,7 +2537,7 @@ python tools/validate_build.py --budgets
 - [x] Implement `collect_assembly_entries` — coverage matrix
 - [x] Implement `replay_boundary` — boundary replay
 - [x] Implement `run_smoke_selection` / `run_full_selection`
-- [x] Validate every callable has unit coverage
+- [~] Validate every callable has unit coverage
 
 **REFACTOR phase:**
 - [x] Verify all system tests pass
@@ -2600,10 +2600,10 @@ pytest tests/hardware/test_vice_infrastructure.py -v
 - [x] Implement immediate mode runner
 - [x] Implement program mode runner
 - [x] Implement compile mode runner
-- [x] Validate all BASIC V2 keywords covered with real VICE captures
+- [~] Validate all BASIC V2 keywords covered with real VICE captures
 
 **REFACTOR phase:**
-- [x] Verify all E2E tests pass with no placeholder catalog fixtures marked as
+- [~] Verify all E2E tests pass with no placeholder catalog fixtures marked as
       complete
 - [x] Verify no regressions
 
@@ -2623,10 +2623,10 @@ pytest tests/e2e/test_e2e_basicv2_*.py -v
 - [x] Verify tests fail (pending cases skip; fixture-backed cases pass)
 
 **GREEN phase:**
-- [x] Validate all BASIC V3.5 keywords covered with real Plus/4 VICE captures
+- [~] Validate all BASIC V3.5 keywords covered with real Plus/4 VICE captures
 
 **REFACTOR phase:**
-- [x] Verify all E2E tests pass with no placeholder catalog fixtures marked as
+- [~] Verify all E2E tests pass with no placeholder catalog fixtures marked as
       complete
 - [x] Verify no regressions
 
@@ -2650,7 +2650,7 @@ pytest tests/e2e/test_e2e_basicv35_*.py -v
       equivalent)
 
 **REFACTOR phase:**
-- [x] Verify all IEEE E2E tests pass with reviewed oracle fixtures, not catalog
+- [~] Verify all IEEE E2E tests pass with reviewed oracle fixtures, not catalog
       placeholders
 - [x] Verify no regressions
 
@@ -2697,7 +2697,7 @@ pytest tests/hardware/ -v
 **Prerequisites:** T10.3
 
 - [x] Add resident byte budget tracking to build
-- [x] Add geoRAM page budget tracking to build
+- [~] Add geoRAM page budget tracking to build
 - [x] Generate size deltas for each commit
 - [x] Identify hot paths justifying resident placement
 
@@ -2711,7 +2711,7 @@ python tools/validate_build.py --size-report
 **Prerequisites:** T12.1, T11.2
 
 - [x] Measure call frequency for each runtime helper
-- [x] Move cold helpers to geoRAM (no eligible resident cold helpers; generated report records keep-resident decisions)
+- [~] Move cold helpers to geoRAM (no eligible resident cold helpers; generated report records keep-resident decisions)
 - [x] Verify no regression in Phase 1 benchmark
 - [x] Update resident byte budget
 
@@ -2747,12 +2747,12 @@ python tools/phase1_for_benchmark.py --require-measured
 - [x] Mark stable unit tests as `smoke`
 - [x] Mark stable integration tests as `smoke`
 - [x] Mark stable system contract tests as `smoke`
-- [x] Mark stable E2E tests as `smoke`
-- [x] Validate smoke selection covers all critical paths
-- [x] Validate smoke selection runs in < 60 seconds
+- [~] Mark stable E2E tests as `smoke`
+- [~] Validate smoke selection covers all critical paths
+- [~] Validate smoke selection runs in < 60 seconds
 
 **REFACTOR phase:**
-- [x] Verify smoke selection is stable across runs
+- [~] Verify smoke selection is stable across runs
 
 **Verification:**
 ```powershell
@@ -2798,6 +2798,337 @@ pre-existing VICE-gated e2e design.
 Out-of-scope pre-existing failures (not part of Phases 10-13) remain in
 Phase 5: `tests/unit/test_variables.py` (3) and `tests/unit/test_io.py` (1).
 
+---
+
+## Phase 14: Expansion-Native Conformance Recovery
+
+> This phase corrects the implementation to the geoRAM-canonical architecture
+> in `REQUIREMENTS.md` §§2, 7, and 8, `REU_REQUIREMENTS.md` RREU-5, and
+> `DESIGN2.md` §8.  It supersedes any earlier completion claim that treated a
+> geoRAM sidecar copy as evidence that the production call path executes XIP.
+>
+> **Scope rule:** "all 402 routines in geoRAM" is not a valid literal target:
+> pinned IRQ/NMI, loader, KERNAL/expansion gates, runtime ABI required by a
+> standalone `COMPILE` export, and active compiled code are intentionally
+> normal-RAM classes.  The enforceable target is that every routine is
+> classified exactly once, every non-exempt compiler/editor/diagnostic/cold-math
+> routine is geoRAM XIP (or its ABI-compatible REU overlay), and every
+> normal-RAM exception has a design-anchor, concrete reason, byte cost, and
+> regression test.  Unclassified or unjustified normal-RAM execution fails the
+> build.
+
+### Wave -1 — Audit Remediation and Evidence Integrity
+
+The 2026-07-18 conformance audit invalidated prior completion claims for
+expansion execution, dual-device support, budgets, packaging, E2E, and coverage.
+Do not restore an earlier `[x]` marker wholesale: audit each task's full
+production path and acceptance evidence independently.
+
+### T14.0.1 Completion-Claim Reconciliation
+
+**Prerequisites:** None
+
+- [~] Add a machine-readable audit ledger mapping each invalidated Phase 9-13
+      completion claim to its failed requirement, artifact, test, or missing
+      execution evidence; set only the affected behavioral/verification task
+      markers to `[~]` after reviewing their complete acceptance criteria.
+- [x] Keep creation-only subtasks `[x]` only when the artifact exists and has
+      no implied production-completion claim.
+- [x] Reject a release when its task/traceability status claims `passing` or
+      complete while its named production evidence is stale, skipped, missing,
+      or failing.
+
+**Evidence (2026-07-18):**
+`manifests/completion_claim_ledger.json` records the four Phase 9-13 claim
+groups invalidated by the conformance audit. `tools/validate_completion_claims.py`
+validates that ledger and rejects traceability records that claim passing while
+their named audit evidence is invalidated. `pytest
+tests/tools/test_validate_completion_claims.py -v` passed (3 tests). The
+production validation command is intentionally RED until the recorded recovery
+work is complete: it rejects the current passing `R12.1` and `R13` records.
+
+### T14.0.2 Clean Build, Artifact Freshness, and Release Integrity
+
+**Prerequisites:** T14.0.1
+
+- [ ] Make `build.ps1` construct every release in a clean isolated output
+      directory; reject stale objects, maps, labels, directories, sidecars,
+      D64 files, and inherited artifacts before linking or packaging.
+- [ ] Extend the build fingerprint with hashes of every assembly source,
+      manifest, generator, linker policy, command line, and tool version.
+      Verification must compare against those inputs and must never rewrite or
+      re-sign a manifest in read-only validation mode.
+- [ ] Make a release fail on RAM_HIGH/resident/compile/D64/sidecar budget or
+      fingerprint mismatch, and require the linked `compiler.bin`, map, labels,
+      GEOASM/GEORAM/REU directories, sidecars, and D64 to derive from one build.
+- [ ] Add clean-build, stale-input, stale-artifact, failed-link, sidecar-byte,
+      and reproducibility system tests.
+
+### T14.0.3 Executable Test and VICE Evidence Integrity
+
+**Prerequisites:** T14.0.2
+
+- [ ] Replace symbol-name/textual routine coverage with execution of assembled
+      production bytes for every callable assembly routine; test-only exports
+      may expose entries but may not bypass the production path.
+- [ ] For release-required artifacts, replace conditional missing-artifact or
+      optional-tool skips with explicit prerequisite failures; keep only
+      environment-gated hardware nodes separately reported as not executed.
+- [ ] Require every supported keyword/mode matrix row to have a reviewed VICE
+      fixture and a freshness-bound READY-to-result run. Pending, timed-out,
+      catalog-only, or stale-artifact cases are incomplete, never passing.
+- [ ] Add bounded watchdog diagnostics so an E2E timeout reports emulator,
+      loader, prompt, and artifact fingerprint state rather than hanging.
+
+### T14.0.4 Genuine GeoRAM XIP Recovery
+
+**Prerequisites:** T14.0.2
+
+- [ ] Replace the normal-RAM `GEOASM` execution model with generated,
+      page-linked `$DE00-$DEFF` bodies and declared entry/callback boundaries;
+      a sidecar copy of RAM code is prohibited as XIP evidence.
+- [ ] Route resident, runtime, loader, and native calls solely through the
+      common expansion dispatcher. Remove all production direct calls to a
+      normal-RAM mirror of an `expansion_xip` routine.
+- [ ] Make the linker/page generator reject oversized routines, cross-page
+      relative branches, fall-through, unregistered absolute transfers, and
+      page-unsafe internal labels before a sidecar is produced.
+- [ ] Add local-emulator and VICE canaries that prove instruction fetches from
+      the selected geoRAM page through return, tail transfer, error unwind,
+      and IRQ progress.
+
+### T14.0.5 Real REU Overlay and Common-Arena Recovery
+
+**Prerequisites:** T14.0.2
+
+- [ ] Implement the pinned REU gate as the sole production REC owner, with
+      documented DMA validation, ownership, nesting, mapping, error, and
+      interrupt contracts; remove loader/foreground REC programming outside
+      its explicitly tested detector boundary.
+- [ ] Generate REU overlay IDs, extents, slot origins/capacities, directories,
+      pin-depth/call-graph validation, and per-routine ABI-equivalent GeoRAM
+      and REU records.
+- [ ] Implement REU page-DMA into generated XIP slots plus returning/tail
+      dispatch, eviction, and deterministic depth errors. A detection-only
+      REU build or a placeholder `reu.bin` is not a supported backend.
+- [ ] Make all expansion-backed program, compiler, editor, variable, array,
+      string-payload, and scratch arena operations use the selected backend
+      with equivalent handles, generations, transactions, and publication.
+- [ ] Add REU-only, GeoRAM-only, both-present, and no-device VICE installation
+      and cross-device differential evidence.
+
+### Wave 0 — Policy, Inventory, and RED Gates
+
+These tasks run first.  No migration task may be marked complete before their
+tests fail against the current direct-call implementation and then become
+mandatory build gates.
+
+### T14.1 Routine Placement Policy and Complete Inventory
+
+**Prerequisites:** T14.0.1, T14.0.2
+
+**CONTRACT/RED phase:**
+
+- [ ] Add a checked-in placement policy for every production routine ID: one of
+      `resident_pinned`, `loader`, `runtime_abi`, `compiled_code`,
+      `expansion_xip`, or a narrowly named approved exception.
+- [ ] Classify all 402 current production routines exactly once; no inferred
+      default and no catch-all `other` category is permitted.
+- [ ] Require every non-`expansion_xip` classification to name its normative
+      design/requirement anchor, a concrete impossibility or active-runtime
+      reason, normal-RAM byte cost, owner, and review test.
+- [ ] Add a failing system test for missing, duplicate, stale, or unsupported
+      classifications and for an exception without the required evidence.
+- [ ] Before migrating a family, derive its linked executable byte size, direct
+      call/branch edges, absolute-address dependencies, KERNAL/I/O boundaries,
+      live state, and test coverage.  Classify its migration method as
+      `repack`, `split`, `xip_rewrite`, or an approved resident exception;
+      record a cost/risk rationale and prohibit speculative rewrites before
+      this audit is reviewed.
+- [ ] Run a read-only compatibility spike against the companion project's
+      annotated batch porter.  Preserve only its parser, annotation schema,
+      and reporting ideas if they satisfy this project's dispatcher and
+      geoRAM/REU contracts; do not adopt its hard-coded force-port lists,
+      automatic RAM fallbacks, or generated source as production output.
+      Add fixtures proving every accepted transformation preserves the XIP
+      ABI, page containment, and production execution path.
+
+**GREEN/TRACE phase:**
+
+- [ ] Generate an auditable placement report listing all routine IDs, linked
+      addresses, physical geoRAM/REU records, exemption evidence, and byte
+      totals by class.
+- [ ] Add placement rows to traceability and `MAP.md`; report every resident
+      byte delta with the required non-XIP explanation.
+
+**Verification:**
+
+```powershell
+python -m pytest tests/system/test_expansion_placement_policy.py -v
+python tools/validate_build.py --all
+```
+
+### T14.2 Production XIP-Path Enforcement
+
+**Prerequisites:** T14.1
+
+**RED phase:**
+
+- [ ] Add failing linked-binary and source-call-graph tests proving every
+      `expansion_xip` routine has a generated geoRAM page/entry and an
+      ABI-compatible REU overlay record.
+- [ ] Prove a real call from resident or another overlay enters through the
+      expansion dispatcher/gate, not a direct `JSR`/`JMP` to the low-RAM mirror.
+- [ ] Prove the bytes executed by each sampled public entry are fetched from
+      `$DE00-$DEFF` on the geoRAM local emulator, including nested return,
+      tail transfer, error unwind, and selected-page restoration.
+- [ ] Reject a normal-RAM mirror that is reachable as the production execution
+      path for an `expansion_xip` routine; test-only direct execution remains
+      explicitly isolated.
+
+**GREEN/TRACE phase:**
+
+- [ ] Make these checks mandatory in `build.ps1`/`validate_build.py`.
+- [ ] Add VICE hardware canaries for XIP entry, long compiler/editor work with
+      IRQ progress, and representative nested calls.
+
+**Verification:**
+
+```powershell
+python -m pytest tests/system/test_expansion_xip_path.py tests/integration/test_georam_cycle.py -v
+python tools/validate_build.py --all
+```
+
+### T14.3 Pre-Migration Product Baseline
+
+**Prerequisites:** T14.1, T14.2
+
+- [ ] Capture the current build/map/directory/sidecar fingerprints and the
+      prioritized keyword matrix as failing or passing behavior, without using
+      stale artifacts.
+- [ ] Add a per-case READY-to-result VICE fixture for install, immediate,
+      program, and compile modes where applicable.
+- [ ] Record current resident/high-RAM/geoRAM bytes and require every migration
+      to preserve or improve the relevant budget unless a documented design
+      exception is approved.
+
+### Wave 1 — Dispatch and Storage Foundation
+
+These may proceed in parallel after Wave 0; each task owns disjoint production
+entry families and must retain the Wave-0 gates.
+
+### T14.4 Common Expansion Dispatcher and Generated Page Boundaries
+
+**Prerequisites:** T14.2
+
+- [ ] Route all public expansion-native calls through the common dispatcher;
+      preserve geoRAM returning/tail semantics and REU overlay equivalence.
+- [ ] Split compiler/editor routines at declared page boundaries; replace
+      cross-page direct calls with generated gate calls or declared callbacks.
+- [ ] Remove production dependence on direct low-RAM `GEOASM` calls while
+      retaining only explicitly classified mirror/stub bytes.
+
+### T14.5 Expansion-Backed Editor, Program Store, and Dynamic Data
+
+**Prerequisites:** T14.2
+
+- [ ] Move numbered-line publication, `LIST`, line edit/delete, tokenized
+      source, IR, compiler scratch, variables, arrays, and string payloads to
+      their typed expansion arenas; remove interim high-RAM program storage.
+- [ ] Keep the resident editor limited to IRQ-safe input/cursor/handoff work.
+- [ ] Verify strings, arrays, and program edits through real geoRAM pages and
+      preserve transactional generations/rollback.
+
+### Wave 2 — Priority Compiler Migration
+
+These tasks can run in parallel once T14.4 is stable, but share the Wave-0 XIP
+policy and must not reintroduce high-RAM compiler implementations.
+
+### T14.6 Tokenizer, Parser, Semantic Analysis, and Numeric Expressions
+
+**Prerequisites:** T14.4
+
+- [ ] Port the tokenizer, keyword trie, parser, semantic checks, IR builder,
+      optimizer, and numeric expression lowering to page-bounded XIP routines.
+- [ ] Cover integer types, numeric variables, assignment/`LET`, `PRINT`, and
+      `+`, `-`, `*`, `/` in immediate, program, and supported compile modes.
+
+### T14.7 Compiler Pipeline, Codegen, and Standalone Export Boundary
+
+**Prerequisites:** T14.4
+
+- [ ] Port compile pipeline, codegen, diagnostics, incremental compilation,
+      and export planning to XIP; retain only the standalone runtime ABI and
+      emitted compiled image in normal RAM.
+- [ ] Prove `COMPILE` runs the installed compiled artifact for every supported
+      keyword case and remains independent of compiler/editor/geoRAM state.
+
+### T14.8 Control Flow and System/Special Variables
+
+**Prerequisites:** T14.5, T14.6, T14.7
+
+- [ ] Port loop/control compiler services and verify `FOR`/`NEXT`, `DO`/`LOOP`,
+      `WHILE`, `UNTIL`, `EXIT`, `GOTO`, `GOSUB`, `RETURN`, `STOP`/`CONT`, and
+      `RME` through immediate/program/compile paths as their language profile
+      permits.
+- [ ] Implement and verify live `TI`, `TI$`, and `ST` semantics through the
+      approved resident KERNAL/time boundary without placing compiler logic in
+      resident/high RAM.
+
+### Wave 3 — User-Visible Priority Completion
+
+These tasks are the acceptance order for the user's requested vertical slices.
+
+### T14.9 Install, READY, and Immediate Keyword Slice
+
+**Prerequisites:** T14.5, T14.6
+
+- [ ] Verify D64 load → expansion install → editor READY, then every supported
+      immediate keyword/function through real geoRAM XIP.
+- [ ] Include numeric variables, all integer types, arithmetic, numeric `PRINT`,
+      expressions, assignment, `TI`/`TI$`/`ST`, and direct error behavior.
+
+### T14.10 Stored Program, Loop, Branch, and COMPILE Slice
+
+**Prerequisites:** T14.7, T14.8, T14.9
+
+- [ ] Verify numbered entry, `LIST`, `RUN`, `NEW`, stored control flow, every
+      supported loop form, `GOTO`, `GOSUB`, `RETURN`, and `RME` in VICE.
+- [ ] Repeat supported cases in `COMPILE` mode and prove the installed compiled
+      artifact—not the editor/compiler fallback—executed.
+- [ ] **Top-priority performance gate:** enter the unchanged stock-CBM source
+      `tests/performance/noels_retro_lab_cbm_v2.bas` through the installed
+      editor, issue `RUN` to compile and execute it in memory in clean NTSC
+      VICE, and assert the ten dots, `500500`, `E`, and measured `TI` jiffies.
+      Record the installed artifact fingerprint and compare against the 2,388
+      jiffy stock C64 BASIC V2 reference; a hand-authored native fixture,
+      prefilled timing JSON, or editor/interpreter fallback is not evidence.
+
+### T14.11 Disk Wedge and Release Regression Slice
+
+**Prerequisites:** T14.5, T14.9
+
+- [ ] Route `$`, `@`, `/`, and `!` through the XIP editor/compiler boundary and
+      verify real device behavior, KERNAL banking restoration, and error paths.
+- [ ] Verify release D64 contents, sidecar fingerprints, geoRAM-only, REU-only,
+      both-present, and no-device outcomes as required by the dual-device docs.
+
+### Wave 4 — Completion Audit
+
+### T14.12 Full Placement and Product Verification
+
+**Prerequisites:** T14.6-T14.11
+
+- [ ] Require zero unclassified routines and zero unjustified non-XIP compiler,
+      editor, diagnostic, or cold-math routines.
+- [ ] Run all placement, source-call, linked-page, local-geoRAM, REU-overlay,
+      system, functional, VICE E2E, and focused hardware suites.
+- [ ] Inspect generated `GEORAM`/`REU` images, directories, maps, fingerprints,
+      size reports, and D64 artifacts; update traceability and document exact
+      verification commands/results before any task is marked complete.
+
+---
+
 ## Summary
 
 | Phase | Tasks | Approach | Description |
@@ -2816,14 +3147,13 @@ Phase 5: `tests/unit/test_variables.py` (3) and `tests/unit/test_io.py` (1).
 | 11 | T11.1-T11.5 | Fixture/E2E-first | E2E Language Tests |
 | 12 | T12.1-T12.2 | Measurement-first | Resident Size Minimization |
 | 13 | T13.1 | Selection-first | Smoke Test Selection |
+| 14 | T14.0.1-T14.12 | Audit recovery, then XIP migration | Expansion-Native Conformance Recovery |
 
-Total: 79 tasks across 13 phases.
+Total: 96 tasks across 14 phases.
 
-**Status:** All non-VICE task-list implementation phases are complete
-(2026-07-15). Remaining 2026-07-09 SKELETON demotion rows (REU detect, dual
-loader, codec SAVE/VERIFY, QUIT/NMI vectors, COMPILE budgets, compressor,
-editor list range) are re-verified complete through production paths and the
-full non-VICE suite. Live VICE E2E/hardware re-execution is deferred.
+**Status:** Phase 14 is open. Earlier completion claims do not satisfy the
+expansion-native execution policy until T14.1-T14.12 prove the production XIP
+path and the prioritized READY-to-keyword behavior.
 
 **Current Test Results:**
 - Build: `build.ps1` success; `tools/validate_build.py --all` success

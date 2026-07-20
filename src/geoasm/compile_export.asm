@@ -12,6 +12,14 @@
 
 .import kernal_setnam, kernal_setlfs, kernal_save
 .import diag_format_warning, diag_format_source_context, diag_print_error
+.import georam_call_group_n, georam_call_group_n_xy
+.import GEORAM_ROUTINE_ID_EXPORT_PARSE_COMMAND
+.import GEORAM_ROUTINE_ID_EXPORT_COLLECT_DEPENDENCIES
+.import GEORAM_ROUTINE_ID_EXPORT_LINK_IMAGE
+.import GEORAM_ROUTINE_ID_EXPORT_CHECK_BUDGETS
+.import GEORAM_ROUTINE_ID_EXPORT_WRITE_PRG
+.import GEORAM_ROUTINE_ID_EXPORT_APPLY_SOFT_BUDGETS
+.import GEORAM_ROUTINE_ID_EXPORT_SELECT_LAYOUT
 
 EXPORT_MIN_DEVICE = 8
 EXPORT_MAX_DEVICE = 11
@@ -107,23 +115,30 @@ EXPORT_FLAG_CE00_RESERVED = $01
 export_compile_command:
     stx export_command_record
     sty export_command_record+1
-    jsr export_parse_command
+    ; CP parsing is a page-bound XIP entry.  The XY gate preserves the command
+    ; descriptor arguments while selecting its generated geoRAM page.
+    lda #<GEORAM_ROUTINE_ID_EXPORT_PARSE_COMMAND
+    jsr georam_call_group_n_xy
     bcs @done
     lda #7
     jsr @record_at_offset
-    jsr export_collect_dependencies
+    lda #<GEORAM_ROUTINE_ID_EXPORT_COLLECT_DEPENDENCIES
+    jsr georam_call_group_n_xy
     bcs @done
     lda #10
     jsr @record_at_offset
-    jsr export_link_image
+    lda #<GEORAM_ROUTINE_ID_EXPORT_LINK_IMAGE
+    jsr georam_call_group_n_xy
     bcs @done
     lda #13
     jsr @record_at_offset
-    jsr export_check_budgets
+    lda #<GEORAM_ROUTINE_ID_EXPORT_CHECK_BUDGETS
+    jsr georam_call_group_n_xy
     bcs @done
     lda #23
     jsr @record_at_offset
-    jmp export_write_prg
+    lda #<GEORAM_ROUTINE_ID_EXPORT_WRITE_PRG
+    jmp georam_call_group_n_xy
 @done:
     rts
 @record_at_offset:
@@ -135,19 +150,7 @@ export_compile_command:
     tay
     rts
 
-; Validate the device in A. Devices 8 through 11 are supported.
-.proc export_validate_device
-    cmp #EXPORT_MIN_DEVICE
-    bcc @error
-    cmp #(EXPORT_MAX_DEVICE + 1)
-    bcs @error
-    clc
-    rts
-@error:
-    lda #ERR_ILLEGAL_QUANTITY
-    sec
-    rts
-.endproc
+.segment "GEORAM_PAGE_35"
 
 ; export_parse_command - Canonicalize a CP command record.
 ; Input: X/Y -> CP, name:u16, length:arg-byte, device:arg-byte. A zero length
@@ -226,6 +229,27 @@ export_parse_command:
     sec
     rts
 
+; Validate the device in A. Kept in the same page as its only caller: an XIP
+; routine cannot use a normal-RAM mirror of a private helper as a hidden
+; implementation escape.  It follows the public entry so the generated
+; directory's required offset-zero target is the actual callable routine.
+.proc export_validate_device
+    cmp #EXPORT_MIN_DEVICE
+    bcc @error
+    cmp #(EXPORT_MAX_DEVICE + 1)
+    bcs @error
+    clc
+    rts
+@error:
+    lda #ERR_ILLEGAL_QUANTITY
+    sec
+    rts
+.endproc
+
+.assert * - export_parse_command <= $FA, error, "export parse XIP page exceeds geoRAM page"
+
+.segment "GEORAM_PAGE_36"
+
 ; export_collect_dependencies - Validate a closed ED dependency bitmap.
 ; Input: X/Y -> "ED", flags. Bits 0..3 are standalone runtime classes; bits
 ; 4..7 mean editor/compiler/source/geoRAM and are rejected.
@@ -260,6 +284,10 @@ export_collect_dependencies:
     sec
     rts
 
+.assert * - export_collect_dependencies <= $FA, error, "export dependency XIP page exceeds geoRAM page"
+
+.segment "GEORAM_PAGE_37"
+
 ; export_link_image - Admit an image produced by the standalone linker.
 ; Input: X/Y -> "EL", flags. Bit 0 proves relocation/runtime closure is already
 ; resolved by the owning linker. This routine does not pretend to link bytes.
@@ -291,6 +319,10 @@ export_link_image:
     lda #ERR_ILLEGAL_QUANTITY
     sec
     rts
+
+.assert * - export_link_image <= $FA, error, "export link XIP page exceeds geoRAM page"
+
+.segment "GEORAM_PAGE_38"
 
 ; export_check_budgets - Soft stock budget + dual layout policy.
 ; Input: X/Y -> "EB", image_start:u16, image_end_exclusive:u16,
@@ -377,8 +409,12 @@ export_check_budgets:
     cmp export_end
     bcc @error
 @disjoint_ok:
-    jsr export_apply_soft_budgets
-    jsr export_select_layout
+    ldx #<GEORAM_ROUTINE_ID_EXPORT_APPLY_SOFT_BUDGETS
+    jsr georam_call_group_n
+    bcs @error
+    ldx #<GEORAM_ROUTINE_ID_EXPORT_SELECT_LAYOUT
+    jsr georam_call_group_n
+    bcs @error
     clc
     rts
 @error:
@@ -386,15 +422,13 @@ export_check_budgets:
     sec
     rts
 
-; Keep the generated public directory entry page-bounded.  Budget helpers and
-; the private writer implementation live after the module's final directory
-; entry and therefore do not inflate export_check_budgets' placed extent.
-.export export_write_prg
-export_write_prg:
-    jmp export_write_prg_impl
+.assert * - export_check_budgets <= $FA, error, "export budget XIP page exceeds geoRAM page"
 
 ; Edge-triggered soft stock warnings against high-water image_end.
 ; 80%: image_end >= $A800; 100% exceed: image_end > $D000.
+.segment "GEORAM_PAGE_43"
+
+.export export_apply_soft_budgets
 .proc export_apply_soft_budgets
     lda #0
     sta zp_tmp1                 ; new state bits
@@ -470,6 +504,7 @@ export_write_prg:
 
     lda zp_tmp1
     sta export_budget_state
+    clc
     rts
 .endproc
 
@@ -495,6 +530,11 @@ export_write_prg:
 ; $C800-$CDFF are never permanent reservations.
 ; Developer: image or workspace exceeds the stock ceiling — export still
 ; proceeds, but metadata reserves $CE00 like the installed development layout.
+.assert * - export_apply_soft_budgets <= $FA, error, "export warning XIP page exceeds geoRAM page"
+
+.segment "GEORAM_PAGE_44"
+
+.export export_select_layout
 .proc export_select_layout
     lda #EXPORT_LAYOUT_STOCK
     sta export_layout_profile
@@ -524,8 +564,11 @@ export_write_prg:
     sta export_layout_profile
     lda #EXPORT_FLAG_CE00_RESERVED
     sta export_layout_flags
+    clc
     rts
 .endproc
+
+.assert * - export_select_layout <= $FA, error, "export layout XIP page exceeds geoRAM page"
 
 ; export_write_prg - Save a validated EW image through the resident bridge.
 ; Input: X/Y -> "EW", name:u16, length:arg-byte, device:arg-byte,
@@ -533,8 +576,10 @@ export_write_prg:
 ; Output: C clear on success; A=error and C set on validation/KERNAL failure.
 ; Clobbers: A, X, Y. Side effects: SETNAM, SETLFS logical file 1, SAVE.
 ; Zero page: zp_src.
-.export export_write_prg_impl
-export_write_prg_impl:
+.segment "GEORAM_PAGE_39"
+
+.export export_write_prg
+export_write_prg:
     stx zp_src
     sty zp_src+1
     ldy #0
@@ -563,7 +608,7 @@ export_write_prg_impl:
     beq @pop_error
     ldy #5
     lda (zp_src),y
-    jsr export_validate_device
+    jsr export_write_validate_device
     bcs @pop_return_error
     sta export_options+5
     iny
@@ -616,3 +661,20 @@ export_write_prg_impl:
     lda #ERR_ILLEGAL_QUANTITY
     sec
     rts
+
+; The writer's device check is page-local.  Calling the parser page's private
+; validator would depend on whichever geoRAM page a previous gate selected.
+.proc export_write_validate_device
+    cmp #EXPORT_MIN_DEVICE
+    bcc @error
+    cmp #(EXPORT_MAX_DEVICE + 1)
+    bcs @error
+    clc
+    rts
+@error:
+    lda #ERR_ILLEGAL_QUANTITY
+    sec
+    rts
+.endproc
+
+.assert * - export_write_prg <= $FA, error, "export write XIP page exceeds geoRAM page"

@@ -7,14 +7,17 @@
 .include "common/zp.inc"
 .include "keyword_constants.inc"
 
-.import pipeline_compile_line, pipeline_compile_program, codegen_get_code_ptr
+.import codegen_get_code_ptr
+.import georam_call_group_n_xy
+.import GEORAM_ROUTINE_ID_PIPELINE_COMPILE_LINE
+.import GEORAM_ROUTINE_ID_PIPELINE_COMPILE_PROGRAM
 .import export_compile_command
 .import ctrl_cont
 .import rio_load, rio_save, rio_verify
 .import inspect_clr
-.import editor_list_range
 .import semantic_set_dialect, semantic_set_numeric_mode
 .import quit_to_stock
+.import program_lines_clear, program_lines_list, program_lines_run
 
 ; Keep dispatch policy tied to the generated manifest table. BASIC2/BASIC3.5
 ; share BASIC_TOKEN_BASIC and FPMODE uses its two-byte token prefix.
@@ -183,51 +186,78 @@ direct_execute_command:
     ldy #0
     lda (zp_src), y
     sta direct_last_token
+    ; Absolute JMPs keep branch distances short as handlers grow.
     cmp #TOKEN_QUIT
-    beq @quit
+    bne @not_quit
+    jmp quit_to_stock
+@not_quit:
     cmp #TOKEN_COMPILE
-    beq @compile
+    bne @not_compile
+    jmp @compile
+@not_compile:
     cmp #TOKEN_RUN
-    beq @run
+    bne @not_run
+    jmp @run
+@not_run:
     cmp #TOKEN_LOAD
-    beq @load
+    bne @not_load
+    jmp @load
+@not_load:
     cmp #TOKEN_SAVE
-    beq @save
+    bne @not_save
+    jmp @save
+@not_save:
     cmp #TOKEN_VERIFY
-    beq @verify
+    bne @not_verify
+    jmp @verify
+@not_verify:
     cmp #TOKEN_CONT
-    beq @cont
+    bne @not_cont
+    jmp @cont
+@not_cont:
     cmp #TOKEN_LIST
-    beq @list
+    bne @not_list
+    jmp program_lines_list
+@not_list:
     cmp #TOKEN_CLR
-    beq @clr
+    bne @not_clr
+    jmp inspect_clr
+@not_clr:
+    cmp #TOKEN_NEW
+    bne @not_new
+    jmp @new
+@not_new:
     cmp #TOKEN_BASIC
-    beq @basic
+    bne @not_basic
+    jmp @basic
+@not_basic:
     cmp #TOKEN_FPMODE
-    beq @fpmode
-    ; NEW and other gateway query forms have no production service yet.
+    bne @unsupported
+    jmp @fpmode
+    ; Other gateway query forms have no production service yet.
     ; Do not convert those missing dependencies to a success no-op.
 @unsupported:
     lda #ERR_UNDEFINED_FUNCTION
     sec
     rts
-@quit:
-    jmp quit_to_stock
 @compile:
     ; The token is the direct dispatcher header, not part of the export plan.
     jsr direct_payload_ptr
     jsr export_compile_command
     rts
 @run:
+    ; Bare RUN (payload starts with 0 / empty) executes the PETSCII line table.
+    ; Non-empty payloads keep the program-generation compile path.
     jsr direct_payload_ptr
     stx zp_src
     sty zp_src+1
     ldy #0
     lda (zp_src), y
-    beq @syntax_error
+    beq @run_lines
     ldx zp_src
     ldy zp_src+1
-    jsr pipeline_compile_program
+    lda #<GEORAM_ROUTINE_ID_PIPELINE_COMPILE_PROGRAM
+    jsr georam_call_group_n_xy
     bcs @done
     jsr codegen_get_code_ptr
     stx @run_code+1
@@ -236,6 +266,8 @@ direct_execute_command:
     jsr $FFFF
     clc
     rts
+@run_lines:
+    jmp program_lines_run
 @load:
     jsr direct_payload_ptr
     jmp rio_load
@@ -252,10 +284,9 @@ direct_execute_command:
     lda #ERR_CANT_CONTINUE
     sec
     rts
-@list:
-    jsr direct_payload_ptr
-    jmp editor_list_range
-@clr:
+@new:
+    ; Clear the interim PETSCII program and runtime variables (CLR semantics).
+    jsr program_lines_clear
     jmp inspect_clr
 @basic:
     jsr direct_payload_ptr
@@ -388,7 +419,8 @@ direct_execute_temporary_impl:
     lda direct_last_ptr+1
     adc #0
     tay
-    jsr pipeline_compile_line
+    lda #<GEORAM_ROUTINE_ID_PIPELINE_COMPILE_LINE
+    jsr georam_call_group_n_xy
     bcs @failed
     inc direct_temporary_generation
     jsr codegen_get_code_ptr

@@ -114,6 +114,34 @@ def _linked_bytes(address: int, length: int) -> bytes:
     return payload[2 + offset : 2 + offset + length]
 
 
+_RAM_UNDER_IO_SKIP_REASON = (
+    "emu6502 does not model the $01 processor port / RAM-under-I/O; "
+    "authoritative coverage is in tests/hardware/test_ram_under_io.py (VICE)."
+)
+
+
+def _emulator_models_ram_under_io() -> bool:
+    """Detect whether the local emulator models the $01 port and RAM-under-I/O.
+
+    Returns:
+        True when a ``STA $01`` with an all-RAM mapping byte ($30) is observable
+        via a subsequent CPU read; real C64 hardware preserves $30 while the
+        unmodeled emulator forces the bits back to $35.
+    """
+    try:
+        from emu6502_c64_bindings import C64Emu6502
+    except ImportError:
+        return False
+    dll = _dll_path()
+    emu = C64Emu6502(lib_path=dll)
+    # LDA #$30; STA $01; RTS, parked at $0200.
+    program = bytes([0xA9, 0x30, 0x8D, 0x01, 0x00, 0x60])
+    emu.write_mem_range(0x0200, program)
+    emu.write_mem(0x0001, 0x35)
+    emu.execute_rts(0x0200, 1000)
+    return bool(emu.read_mem(0x0001) == 0x30)
+
+
 @pytest.mark.unit
 @pytest.mark.local
 class TestIrq:
@@ -121,6 +149,8 @@ class TestIrq:
 
     def test_irq_helpers_update_visible_state(self) -> None:
         """IRQ helpers advance the jiffy clock (harness) and reverse the cell."""
+        if not _emulator_models_ram_under_io():
+            pytest.skip(_RAM_UNDER_IO_SKIP_REASON)
         dll = _dll_path()
         emu = C64Emu6502(lib_path=dll)
         _load_binary(emu)
@@ -141,7 +171,6 @@ class TestIrq:
 
         # Real reverse-video paint needs sticky RAM (geoRAM-enabled map).
         emu.set_georam_enabled(True)
-        emu._compiler2_real_bytes_only = True
         emu.write_mem(0x0001, 0x35)
         emu.write_mem(zp_crsr_vis, 0x01)
         emu.write_mem(zp_crsr_x, 0x03)
@@ -165,6 +194,8 @@ class TestIrq:
 
     def test_irq_restore_mapping_writes_saved_port(self) -> None:
         """irq_restore_mapping should write the supplied mapping byte to $01."""
+        if not _emulator_models_ram_under_io():
+            pytest.skip(_RAM_UNDER_IO_SKIP_REASON)
         dll = _dll_path()
         emu = C64Emu6502(lib_path=dll)
         _load_binary(emu)
@@ -176,6 +207,8 @@ class TestIrq:
 
     def test_irq_entry_restores_cpu_port_and_updates_helpers(self) -> None:
         """irq_entry should preserve mapping and call the resident helpers."""
+        if not _emulator_models_ram_under_io():
+            pytest.skip(_RAM_UNDER_IO_SKIP_REASON)
         dll = _dll_path()
         emu = C64Emu6502(lib_path=dll)
         _load_binary(emu)
@@ -233,7 +266,6 @@ class TestIrq:
         dll = _dll_path()
         emu = C64Emu6502(lib_path=dll)
         _load_binary(emu, enable_georam=True)
-        emu._compiler2_real_bytes_only = True
         zp_stop = _load_zp_address("zp_stop_flag")
         zp_handle = _load_zp_address("zp_cont_handle")
         ctrl_sp = _load_symbol_address("ctrl_sp")
@@ -252,7 +284,6 @@ class TestIrq:
         dll = _dll_path()
         emu = C64Emu6502(lib_path=dll)
         _load_binary(emu, enable_georam=True)
-        emu._compiler2_real_bytes_only = True
         dirty = _load_symbol_address("incremental_dirty_mask")
         published = _load_symbol_address("incremental_published_valid")
         emu.write_mem(dirty, 0x00)

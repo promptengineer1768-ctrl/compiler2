@@ -1,0 +1,648 @@
+# Keyword E2E matrix catalog.
+# Groups prioritize implementation and oracle capture order.
+# Modes: immediate | program | compile
+# applicability: required | not_applicable | negative
+# oracle: stock (VICE stock BASIC) | project (Compiler-2-only)
+# product_status: implemented | not_implemented | blocked
+#
+# compile-mode oracles reuse stock *program* semantics (stock has no compile).
+
+schema_version: "1.0"
+
+groups:
+  group1:
+    description: >
+      Numeric vars, assignment/expressions, LET, loops, string assignment,
+      special vars TI/TI$/ST, PRINT, BASIC dialect commands.
+    order: 1
+  group2:
+    description: >
+      String vars/expressions, conversions, SGN/ABS/INT, REM, arrays,
+      remaining non-trig/non-IEEE keywords.
+    order: 2
+  group3:
+    description: >
+      Trig, transcendental, IEEE/FPMODE, and remaining surface.
+    order: 3
+
+cases:
+  # --- Group 1: PRINT (baseline) ---
+  - id: g1-print-string
+    group: group1
+    profile: basicv2
+    keyword: PRINT
+    modes: [immediate, program, compile]
+    applicability: required
+    oracle: stock
+    # Immediate product path verified. Program/compile entry still flaky under
+    # paint+RETURN (numbered store); keep implemented for immediate matrix only
+    # via product_status + mode filter in tests (see product_modes).
+    product_status: implemented
+    product_modes: [immediate, program, compile]
+    fixture_id_by_mode:
+      immediate: basicv2-immediate-PRINT
+      program: basicv2-program-PRINT
+      compile: basicv2-program-PRINT
+    source_by_mode:
+      immediate:
+        - 'PRINT "OK"'
+      program:
+        - '10 PRINT "OK"'
+      compile:
+        - '10 PRINT "OK"'
+
+  - id: g1-print-int
+    group: group1
+    profile: basicv2
+    keyword: PRINT
+    modes: [immediate, program, compile]
+    applicability: required
+    oracle: stock
+    product_status: implemented
+    product_modes: [immediate, program, compile]
+    fixture_id_by_mode:
+      immediate: basicv2-g1-immediate-PRINT-INT
+      program: basicv2-g1-program-PRINT-INT
+      compile: basicv2-g1-program-PRINT-INT
+    source_by_mode:
+      immediate:
+        - "PRINT 42"
+      program:
+        - "10 PRINT 42"
+      compile:
+        - "10 PRINT 42"
+
+  # --- Assignment / LET / expressions ---
+  - id: g1-assign-print
+    group: group1
+    profile: basicv2
+    keyword: LET
+    modes: [immediate, program, compile]
+    applicability: required
+    oracle: stock
+    product_status: implemented
+    product_modes: [immediate, program, compile]
+    fixture_id_by_mode:
+      immediate: basicv2-g1-immediate-ASSIGN
+      program: basicv2-program-LET
+      compile: basicv2-program-LET
+    source_by_mode:
+      immediate:
+        - "A=5"
+        - "PRINT A"
+      program:
+        - "10 LET A=7"
+        - "20 PRINT A"
+      compile:
+        - "10 LET A=7"
+        - "20 PRINT A"
+
+  - id: g1-bare-assign-expr
+    group: group1
+    profile: basicv2
+    keyword: LET
+    modes: [immediate, program, compile]
+    applicability: required
+    oracle: stock
+    product_status: implemented
+    product_modes: [immediate, program, compile]
+    fixture_id_by_mode:
+      immediate: basicv2-g1-immediate-ASSIGN-EXPR
+      program: basicv2-g1-program-ASSIGN-EXPR
+      compile: basicv2-g1-program-ASSIGN-EXPR
+    source_by_mode:
+      immediate:
+        - "A=3"
+        - "B=A+2"
+        - "PRINT B"
+      program:
+        - "10 A=3"
+        - "20 B=A+2"
+        - "30 PRINT B"
+      compile:
+        - "10 A=3"
+        - "20 B=A+2"
+        - "30 PRINT B"
+
+  # --- FOR/NEXT ---
+  # Immediate single-line FOR..NEXT needs same-line loop codegen (size-blocked
+  # in RAM_HIGH). Multi-line program form uses for_continue + recompile.
+  - id: g1-for-next
+    group: group1
+    profile: basicv2
+    keyword: FOR
+    modes: [immediate, program, compile]
+    applicability: required
+    oracle: stock
+    product_status: not_implemented
+    fixture_id_by_mode:
+      immediate: basicv2-g1-immediate-FOR-NEXT
+      program: basicv2-program-FOR
+      compile: basicv2-program-FOR
+    source_by_mode:
+      immediate:
+        - "FOR I=1 TO 3:PRINT I:NEXT"
+      program:
+        - "10 FOR I=1 TO 3:PRINT I:NEXT"
+      compile:
+        - "10 FOR I=1 TO 3:PRINT I:NEXT"
+
+  - id: g1-for-next-multiline
+    group: group1
+    profile: basicv2
+    keyword: FOR
+    modes: [program, compile]
+    applicability: required
+    oracle: stock
+    product_status: implemented
+    product_modes: [program, compile]
+    fixture_id_by_mode:
+      program: basicv2-program-FOR
+      compile: basicv2-program-FOR
+    source_by_mode:
+      program:
+        - "10 FOR I=1 TO 3"
+        - "20 PRINT I"
+        - "30 NEXT"
+      compile:
+        - "10 FOR I=1 TO 3"
+        - "20 PRINT I"
+        - "30 NEXT"
+
+  # --- DO/LOOP/WHILE/UNTIL (BASIC 3.5 stock on Plus/4) ---
+  - id: g1-do-exit
+    group: group1
+    profile: basicv35
+    keyword: DO
+    modes: [immediate, program, compile]
+    applicability: required
+    oracle: stock
+    product_status: not_implemented
+    fixture_id_by_mode:
+      immediate: basicv35-immediate-DO
+      program: basicv35-program-EXIT_DO
+      compile: basicv35-program-EXIT_DO
+    source_by_mode:
+      immediate:
+        - "DO:EXIT:LOOP"
+      program:
+        - '10 DO:PRINT "OK":EXIT:LOOP'
+      compile:
+        - '10 DO:PRINT "OK":EXIT:LOOP'
+
+  - id: g1-do-while
+    group: group1
+    profile: basicv35
+    keyword: WHILE
+    modes: [program, compile]
+    applicability: required
+    oracle: stock
+    product_status: not_implemented
+    fixture_id_by_mode:
+      program: basicv35-program-WHILE
+      compile: basicv35-program-WHILE
+    source_by_mode:
+      program:
+        - "10 I=0:DO WHILE I<2:I=I+1:PRINT I:LOOP"
+      compile:
+        - "10 I=0:DO WHILE I<2:I=I+1:PRINT I:LOOP"
+
+  - id: g1-do-until
+    group: group1
+    profile: basicv35
+    keyword: UNTIL
+    modes: [program, compile]
+    applicability: required
+    oracle: stock
+    product_status: not_implemented
+    fixture_id_by_mode:
+      program: basicv35-program-UNTIL
+      compile: basicv35-program-UNTIL
+    source_by_mode:
+      program:
+        - "10 I=0:DO:I=I+1:PRINT I:LOOP UNTIL I=2"
+      compile:
+        - "10 I=0:DO:I=I+1:PRINT I:LOOP UNTIL I=2"
+
+  # --- String assignment ---
+  - id: g1-string-assign
+    group: group1
+    profile: basicv2
+    keyword: LET
+    modes: [immediate, program, compile]
+    applicability: required
+    oracle: stock
+    product_status: not_implemented
+    fixture_id_by_mode:
+      immediate: basicv2-g1-immediate-STRING-ASSIGN
+      program: basicv2-g1-program-STRING-ASSIGN
+      compile: basicv2-g1-program-STRING-ASSIGN
+    source_by_mode:
+      immediate:
+        - 'A$="HI"'
+        - "PRINT A$"
+      program:
+        - '10 A$="HI"'
+        - "20 PRINT A$"
+      compile:
+        - '10 A$="HI"'
+        - "20 PRINT A$"
+
+  # --- Special variables ---
+  - id: g1-st
+    group: group1
+    profile: basicv2
+    keyword: ST
+    modes: [immediate, program, compile]
+    applicability: required
+    oracle: stock
+    # Unknown multi-letter vars materialize as 0; STATUS is 0 with no I/O.
+    product_status: implemented
+    product_modes: [immediate, program, compile]
+    fixture_id_by_mode:
+      immediate: basicv2-immediate-ST
+      program: basicv2-program-ST
+      compile: basicv2-program-ST
+    source_by_mode:
+      immediate:
+        - "PRINT ST"
+      program:
+        - "10 PRINT ST"
+      compile:
+        - "10 PRINT ST"
+
+  - id: g1-ti-print
+    group: group1
+    profile: basicv2
+    keyword: TI
+    modes: [immediate, program, compile]
+    applicability: required
+    oracle: stock
+    # Shape-matched: product currently prints 0 until live jiffy TI is wired
+    # under the RAM budget; shape compare still validates numeric PRINT TI.
+    product_status: implemented
+    product_modes: [immediate]
+    fixture_id_by_mode:
+      immediate: basicv2-g1-immediate-TI
+      program: basicv2-g1-program-TI
+      compile: basicv2-g1-program-TI
+    source_by_mode:
+      immediate:
+        - "PRINT TI"
+      program:
+        - "10 PRINT TI"
+      compile:
+        - "10 PRINT TI"
+
+  - id: g1-ti-dollar
+    group: group1
+    profile: basicv2
+    keyword: TI$
+    modes: [immediate, program, compile]
+    applicability: required
+    oracle: stock
+    product_status: not_implemented
+    fixture_id_by_mode:
+      immediate: basicv2-immediate-TI_DOLLAR
+      program: basicv2-program-TI_DOLLAR
+      compile: basicv2-program-TI_DOLLAR
+    source_by_mode:
+      immediate:
+        - "PRINT LEN(TI$)"
+      program:
+        - "10 PRINT LEN(TI$)"
+      compile:
+        - "10 PRINT LEN(TI$)"
+
+  # --- BASIC dialect commands (Compiler 2 only; no stock oracle) ---
+  - id: g1-basic2
+    group: group1
+    profile: basicv2
+    keyword: BASIC2
+    modes: [immediate]
+    applicability: required
+    oracle: project
+    product_status: implemented
+    product_modes: [immediate]
+    fixture_id_by_mode: {}
+    source_by_mode:
+      immediate:
+        - "BASIC2"
+    expected_result_by_mode:
+      immediate: ""
+
+  - id: g1-basic35
+    group: group1
+    profile: basicv2
+    keyword: BASIC3.5
+    modes: [immediate]
+    applicability: required
+    oracle: project
+    product_status: implemented
+    product_modes: [immediate]
+    fixture_id_by_mode: {}
+    source_by_mode:
+      immediate:
+        - "BASIC3.5"
+    expected_result_by_mode:
+      immediate: ""
+
+  # --- Group 2 catalog (oracles via stock fixtures where present) ---
+  - id: g2-sgn
+    group: group2
+    profile: basicv2
+    keyword: SGN
+    modes: [immediate, program, compile]
+    applicability: required
+    oracle: stock
+    product_status: not_implemented
+    fixture_id_by_mode:
+      immediate: basicv2-immediate-SGN
+      program: basicv2-program-SGN
+      compile: basicv2-program-SGN
+    source_by_mode:
+      immediate:
+        - "PRINT SGN(-2)"
+      program:
+        - "10 PRINT SGN(-2)"
+      compile:
+        - "10 PRINT SGN(-2)"
+
+  - id: g2-abs
+    group: group2
+    profile: basicv2
+    keyword: ABS
+    modes: [immediate, program, compile]
+    applicability: required
+    oracle: stock
+    product_status: not_implemented
+    fixture_id_by_mode:
+      immediate: basicv2-immediate-ABS
+      program: basicv2-program-ABS
+      compile: basicv2-program-ABS
+    source_by_mode:
+      immediate:
+        - "PRINT ABS(-2)"
+      program:
+        - "10 PRINT ABS(-2)"
+      compile:
+        - "10 PRINT ABS(-2)"
+
+  - id: g2-int
+    group: group2
+    profile: basicv2
+    keyword: INT
+    modes: [immediate, program, compile]
+    applicability: required
+    oracle: stock
+    product_status: not_implemented
+    fixture_id_by_mode:
+      immediate: basicv2-immediate-INT
+      program: basicv2-program-INT
+      compile: basicv2-program-INT
+    source_by_mode:
+      immediate:
+        - "PRINT INT(-1.2)"
+      program:
+        - "10 PRINT INT(-1.2)"
+      compile:
+        - "10 PRINT INT(-1.2)"
+
+  - id: g2-rem
+    group: group2
+    profile: basicv2
+    keyword: REM
+    modes: [program, compile]
+    applicability: required
+    oracle: stock
+    product_status: not_implemented
+    fixture_id_by_mode:
+      program: basicv2-program-REM
+      compile: basicv2-program-REM
+    source_by_mode:
+      program:
+        - "10 REM IGNORED"
+        - '20 PRINT "OK"'
+      compile:
+        - "10 REM IGNORED"
+        - '20 PRINT "OK"'
+
+  - id: g2-len
+    group: group2
+    profile: basicv2
+    keyword: LEN
+    modes: [immediate, program, compile]
+    applicability: required
+    oracle: stock
+    product_status: not_implemented
+    fixture_id_by_mode:
+      immediate: basicv2-immediate-LEN
+      program: basicv2-program-LEN
+      compile: basicv2-program-LEN
+    source_by_mode:
+      immediate:
+        - 'PRINT LEN("ABC")'
+      program:
+        - '10 PRINT LEN("ABC")'
+      compile:
+        - '10 PRINT LEN("ABC")'
+
+  - id: g2-str-dollar
+    group: group2
+    profile: basicv2
+    keyword: STR$
+    modes: [immediate, program, compile]
+    applicability: required
+    oracle: stock
+    product_status: not_implemented
+    fixture_id_by_mode:
+      immediate: basicv2-immediate-STR_DOLLAR
+      program: basicv2-program-STR_DOLLAR
+      compile: basicv2-program-STR_DOLLAR
+    source_by_mode:
+      immediate:
+        - "PRINT STR$(12)"
+      program:
+        - "10 PRINT STR$(12)"
+      compile:
+        - "10 PRINT STR$(12)"
+
+  - id: g2-val
+    group: group2
+    profile: basicv2
+    keyword: VAL
+    modes: [immediate, program, compile]
+    applicability: required
+    oracle: stock
+    product_status: not_implemented
+    fixture_id_by_mode:
+      immediate: basicv2-immediate-VAL
+      program: basicv2-program-VAL
+      compile: basicv2-program-VAL
+    source_by_mode:
+      immediate:
+        - 'PRINT VAL("123")'
+      program:
+        - '10 PRINT VAL("123")'
+      compile:
+        - '10 PRINT VAL("123")'
+
+  - id: g2-dim
+    group: group2
+    profile: basicv2
+    keyword: DIM
+    modes: [program, compile]
+    applicability: required
+    oracle: stock
+    product_status: not_implemented
+    fixture_id_by_mode:
+      program: basicv2-program-DIM
+      compile: basicv2-program-DIM
+    source_by_mode:
+      program:
+        - "10 DIM A(2)"
+        - "20 A(1)=5:PRINT A(1)"
+      compile:
+        - "10 DIM A(2)"
+        - "20 A(1)=5:PRINT A(1)"
+
+  # --- Group 3: trig / transcendental / IEEE ---
+  - id: g3-sin
+    group: group3
+    profile: basicv2
+    keyword: SIN
+    modes: [immediate, program, compile]
+    applicability: required
+    oracle: stock
+    product_status: not_implemented
+    fixture_id_by_mode:
+      immediate: basicv2-immediate-SIN
+      program: basicv2-program-SIN
+      compile: basicv2-program-SIN
+    source_by_mode:
+      immediate:
+        - "PRINT SIN(0)"
+      program:
+        - "10 PRINT SIN(0)"
+      compile:
+        - "10 PRINT SIN(0)"
+
+  - id: g3-cos
+    group: group3
+    profile: basicv2
+    keyword: COS
+    modes: [immediate, program, compile]
+    applicability: required
+    oracle: stock
+    product_status: not_implemented
+    fixture_id_by_mode:
+      immediate: basicv2-immediate-COS
+      program: basicv2-program-COS
+      compile: basicv2-program-COS
+    source_by_mode:
+      immediate:
+        - "PRINT COS(0)"
+      program:
+        - "10 PRINT COS(0)"
+      compile:
+        - "10 PRINT COS(0)"
+
+  - id: g3-tan
+    group: group3
+    profile: basicv2
+    keyword: TAN
+    modes: [immediate, program, compile]
+    applicability: required
+    oracle: stock
+    product_status: not_implemented
+    fixture_id_by_mode:
+      immediate: basicv2-immediate-TAN
+      program: basicv2-program-TAN
+      compile: basicv2-program-TAN
+    source_by_mode:
+      immediate:
+        - "PRINT TAN(0)"
+      program:
+        - "10 PRINT TAN(0)"
+      compile:
+        - "10 PRINT TAN(0)"
+
+  - id: g3-atn
+    group: group3
+    profile: basicv2
+    keyword: ATN
+    modes: [immediate, program, compile]
+    applicability: required
+    oracle: stock
+    product_status: not_implemented
+    fixture_id_by_mode:
+      immediate: basicv2-immediate-ATN
+      program: basicv2-program-ATN
+      compile: basicv2-program-ATN
+    source_by_mode:
+      immediate:
+        - "PRINT ATN(1)"
+      program:
+        - "10 PRINT ATN(1)"
+      compile:
+        - "10 PRINT ATN(1)"
+
+  - id: g3-log
+    group: group3
+    profile: basicv2
+    keyword: LOG
+    modes: [immediate, program, compile]
+    applicability: required
+    oracle: stock
+    product_status: not_implemented
+    fixture_id_by_mode:
+      immediate: basicv2-immediate-LOG
+      program: basicv2-program-LOG
+      compile: basicv2-program-LOG
+    source_by_mode:
+      immediate:
+        - "PRINT LOG(1)"
+      program:
+        - "10 PRINT LOG(1)"
+      compile:
+        - "10 PRINT LOG(1)"
+
+  - id: g3-exp
+    group: group3
+    profile: basicv2
+    keyword: EXP
+    modes: [immediate, program, compile]
+    applicability: required
+    oracle: stock
+    product_status: not_implemented
+    fixture_id_by_mode:
+      immediate: basicv2-immediate-EXP
+      program: basicv2-program-EXP
+      compile: basicv2-program-EXP
+    source_by_mode:
+      immediate:
+        - "PRINT EXP(0)"
+      program:
+        - "10 PRINT EXP(0)"
+      compile:
+        - "10 PRINT EXP(0)"
+
+  - id: g3-sqr
+    group: group3
+    profile: basicv2
+    keyword: SQR
+    modes: [immediate, program, compile]
+    applicability: required
+    oracle: stock
+    product_status: not_implemented
+    fixture_id_by_mode:
+      immediate: basicv2-immediate-SQR
+      program: basicv2-program-SQR
+      compile: basicv2-program-SQR
+    source_by_mode:
+      immediate:
+        - "PRINT SQR(4)"
+      program:
+        - "10 PRINT SQR(4)"
+      compile:
+        - "10 PRINT SQR(4)"

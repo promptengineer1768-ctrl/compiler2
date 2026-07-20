@@ -1,6 +1,8 @@
 ; src/geoasm/compiler_pipeline.asm
 ; Eight-boundary compiler coordinator and deterministic replay records.
 
+.include "common/zp.inc"
+
 PIPELINE_SCHEMA_VERSION = 1
 PIPELINE_RECORD_SIZE    = 6
 PIPELINE_RECORD_CAP     = 8
@@ -204,66 +206,34 @@ pipeline_serialize_boundary:
 
 ; pipeline_validate_boundary - Validate schema, ID, and checksum for replay.
 ; Inputs: A = expected boundary ID, X/Y = serialized record pointer.
-; Outputs: C clear when valid, set when malformed. Side effects: patches local
-; absolute operands. Clobbers: A, X, Y. Zero page: none.
+; Outputs: C clear when valid, set when malformed. Clobbers: A, X, Y.
+; Zero page: zp_tmp1 (indirect record pointer). This overlay executes under
+; geoRAM XIP at the $DE00 window, so the record is read through a zero-page
+; pointer rather than self-modified absolute operands whose linked home
+; address is never the executing copy.
 .export pipeline_validate_boundary
 pipeline_validate_boundary:
     sta pipeline_boundary_id
-    stx @schema+1
-    sty @schema+2
-    txa
-    clc
-    adc #1
-    sta @id+1
-    tya
-    adc #0
-    sta @id+2
-    txa
-    clc
-    adc #2
-    sta @source_lo+1
-    tya
-    adc #0
-    sta @source_lo+2
-    txa
-    clc
-    adc #3
-    sta @source_hi+1
-    tya
-    adc #0
-    sta @source_hi+2
-    txa
-    clc
-    adc #4
-    sta @mode+1
-    tya
-    adc #0
-    sta @mode+2
-    txa
-    clc
-    adc #5
-    sta @checksum+1
-    tya
-    adc #0
-    sta @checksum+2
-@schema:
-    lda $FFFF
+    stx zp_tmp1
+    sty zp_tmp1+1
+    ldy #0
+    lda (zp_tmp1),y
     cmp #PIPELINE_SCHEMA_VERSION
     bne @invalid
-@id:
-    lda $FF00
+    ldy #1
+    lda (zp_tmp1),y
     cmp pipeline_boundary_id
     bne @invalid
-@source_lo:
-    lda $FF00
-@source_hi:
-    eor $FF00
-@mode:
-    eor $FF00
+    ldy #2
+    lda (zp_tmp1),y
+    ldy #3
+    eor (zp_tmp1),y
+    ldy #4
+    eor (zp_tmp1),y
     eor pipeline_boundary_id
     eor #PIPELINE_SCHEMA_VERSION
-@checksum:
-    cmp $FF00
+    ldy #5
+    cmp (zp_tmp1),y
     bne @invalid
     clc
     rts

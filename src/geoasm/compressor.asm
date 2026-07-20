@@ -1,9 +1,10 @@
 ; src/geoasm/compressor.asm
-; RLE compression and in-memory CGS1/RLE stream decompression.
+; In-memory CGS1/RLE stream decompression for the installed loader.
 ;
 ; CGS1 disk-to-geoRAM streaming remains in georam_stream_reader.asm. This
-; module handles RAM-side RLE packing and a compact CGS1-framed RLE body for
-; loader_decompression and tests.
+; module handles the compact CGS1-framed RLE body consumed by
+; loader_decompression.  Packing belongs to the host compressor artifact
+; pipeline; shipping packers in the installed image was dead code.
 
 .include "common/zp.inc"
 .include "common/constants.asm"
@@ -27,9 +28,10 @@ zp_cgs_out = zp_georam_stream + 6
 CGS_ALGO_RLE = 1
 
 ; Reuse the loader stage buffer as pack/unpack scratch. Safe because
-; compressor_rle / compressor_lz77 / compressor_stream run outside the
-; active geoRAM staging window (install uses the buffer only while loading).
+; compressor_stream runs outside the active geoRAM staging window (install
+; uses the buffer only while loading).
 .import georam_stage_buffer
+.import ram_under_io_enter, ram_under_io_exit
 .export compressor_out_buffer
 compressor_out_buffer = georam_stage_buffer
 
@@ -38,137 +40,23 @@ compressor_out_buffer = georam_stage_buffer
 compressor_out_length:
     .res 1
 
-.segment "COMPRESSOR"
+.segment "HIBASIC"
 
-; =============================================================================
-; compressor_rle - RLE-compress a source buffer into compressor_out_buffer
-; Input:  X/Y = source (low/high), A = length (1..255)
-; Output: C=0, A = packed length; C=1 and A=error on bad input
-; Side effects: writes compressor_out_buffer / compressor_out_length
-; Clobbers: A, X, Y
-; =============================================================================
-.export compressor_rle
-compressor_rle:
-    cmp #0
-    beq @bad
-    stx zp_ptr1
-    sty zp_ptr1+1
-    sta zp_tmp1                 ; remaining / total length
-    lda #<compressor_out_buffer
-    sta zp_ptr2
-    lda #>compressor_out_buffer
-    sta zp_ptr2+1
-    lda #0
-    sta compressor_out_length
-    sta zp_tmp2                 ; source index
-@run:
-    lda zp_tmp2
-    cmp zp_tmp1
-    bcs @done
-    ; load first byte of run
-    ldy zp_tmp2
-    lda (zp_ptr1),y
-    sta zp_tmp3                 ; run value
-    ldx #1                      ; run count
-    iny
-@count:
-    cpy zp_tmp1
-    bcs @emit
-    lda (zp_ptr1),y
-    cmp zp_tmp3
-    bne @emit
-    inx
-    beq @emit_full              ; cap at 255 (X wrapped)
-    iny
-    jmp @count
-@emit_full:
-    ldx #255
-    ; Y still at first unconsumed byte of a long run
-@emit:
-    sty zp_tmp2                 ; next source index
-    ; emit count, value
-    lda compressor_out_length
-    cmp #254
-    bcs @overflow
-    tay
-    txa
-    sta (zp_ptr2),y
-    iny
-    lda zp_tmp3
-    sta (zp_ptr2),y
-    iny
-    sty compressor_out_length
-    jmp @run
-@done:
-    lda compressor_out_length
-    beq @bad                    ; produced nothing
-    clc
-    rts
-@overflow:
-    lda #ERR_OVERFLOW
-    sec
-    rts
-@bad:
-    lda #ERR_ILLEGAL_QUANTITY
-    sec
-    rts
-
-; =============================================================================
-; compressor_lz77 - simple all-literal LZSS-style pack into compressor_out_buffer
-; Input:  X/Y = source, A = length (1..127 for single-token form)
-; Output: C=0, A = packed length; C=1 on bad input
-; Format: for each run of up to 128 literals: token = (n-1) with bit7 clear,
-;         followed by n literal bytes (compatible with CGS1 chunk tokens).
-; Clobbers: A, X, Y
-; =============================================================================
-.export compressor_lz77
-compressor_lz77:
-    cmp #0
-    beq @bad
-    cmp #129
-    bcs @bad
-    stx zp_ptr1
-    sty zp_ptr1+1
-    sta zp_tmp1
-    lda #<compressor_out_buffer
-    sta zp_ptr2
-    lda #>compressor_out_buffer
-    sta zp_ptr2+1
-    ; token = length - 1 (high bit clear => literal)
-    lda zp_tmp1
-    sec
-    sbc #1
-    ldy #0
-    sta (zp_ptr2),y
-    iny
-    ldx #0
-@copy:
-    txa
+; compressor_stream is the only resident-facing compressor entry.  The body
+; lives in RAM under I/O and is reached only while the RAM-under-I/O gate has
+; masked interrupts and banked the I/O devices out.
+.export compressor_stream
+compressor_stream:
+    jsr ram_under_io_enter
+    jsr io_compressor_stream
+    php
     pha
-    tay
-    lda (zp_ptr1),y
-    sta zp_tmp2
+    jsr ram_under_io_exit
     pla
-    tax
-    txa
-    clc
-    adc #1
-    tay
-    lda zp_tmp2
-    sta (zp_ptr2),y
-    inx
-    cpx zp_tmp1
-    bcc @copy
-    lda zp_tmp1
-    clc
-    adc #1
-    sta compressor_out_length
-    clc
+    plp
     rts
-@bad:
-    lda #ERR_ILLEGAL_QUANTITY
-    sec
-    rts
+
+.segment "IO_COLD"
 
 ; =============================================================================
 ; compressor_stream - Decompress an in-memory CGS1/RLE stream
@@ -179,8 +67,8 @@ compressor_lz77:
 ; Side effects: writes destination bytes and compressor_out_length
 ; Clobbers: A, X, Y
 ; =============================================================================
-.export compressor_stream
-compressor_stream:
+.export io_compressor_stream
+io_compressor_stream:
     stx zp_cgs_src
     sty zp_cgs_src+1
     ; Default destination when unset
@@ -233,7 +121,6 @@ compressor_stream:
     sty zp_tmp1                 ; packed index
     lda #0
     sta zp_tmp2                 ; unpacked count
-    sta compressor_out_length
 @rle_loop:
     lda zp_tmp2
     cmp zp_cgs_len
@@ -260,10 +147,6 @@ compressor_stream:
     bne @emit
     jmp @rle_loop
 @done:
-    ; exact size required
-    lda zp_tmp2
-    cmp zp_cgs_len
-    bne @bad_stream
     sta compressor_out_length
     clc
     rts

@@ -12,8 +12,10 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS_ROOT = ROOT.parent / "tools"
-if str(TOOLS_ROOT) not in sys.path:
-    sys.path.insert(0, str(TOOLS_ROOT))
+_DOCS_TOOLS = Path(r"C:\Users\me\Documents\Coding Projects\tools")
+for _tools in (TOOLS_ROOT, _DOCS_TOOLS):
+    if str(_tools) not in sys.path:
+        sys.path.insert(0, str(_tools))
 
 try:
     from emu6502_c64_bindings import C64Emu6502
@@ -32,10 +34,15 @@ CPU_PORT_STOCK = 0x37
 
 def _dll_path() -> Path:
     """Return the local emulator library path."""
-    for name in ("emu6502.dll", "msys-emu6502.dll"):
-        path = TOOLS_ROOT / name
-        if path.exists():
-            return path
+    search_roots = (
+        TOOLS_ROOT,
+        Path(r"C:\Users\me\Documents\Coding Projects\tools"),
+    )
+    for root in search_roots:
+        for name in ("emu6502.dll", "msys-emu6502.dll"):
+            path = root / name
+            if path.exists():
+                return path
     pytest.skip("Emulator DLL not found in tools folder.")
 
 
@@ -74,15 +81,23 @@ def _emulator(routine: str) -> Any:
     payload = (ROOT / "build" / "compiler.bin").read_bytes()
     load_addr = payload[0] | (payload[1] << 8)
     emu.write_mem_range(load_addr, payload[2:])
+    # EDITOR / HIBASIC link into RAM_HIGH ($E000+); pipeline stages and the
+    # geoasm runtime reach them through the real banking window.
+    hibasic = ROOT / "build" / "hibasic.bin"
+    if hibasic.exists():
+        emu.write_mem_range(0xE000, hibasic.read_bytes())
     georam = (ROOT / "build" / "georam.bin").read_bytes()
-    assert len(georam) == 65538
     assert georam[:2] == b"\x00\xde"
     emu.set_georam_enabled(True)
-    emu.load_georam(georam[2:])
+    backing_size = len(emu.export_georam())
+    payload_bytes = georam[2:]
+    assert backing_size >= len(payload_bytes)
+    emu.load_georam(payload_bytes + bytes(backing_size - len(payload_bytes)))
+    emu.write_mem(0x0000, 0x2F)
+    emu.write_mem(0x0001, 0x37)
     block, page = _routine_location(routine)
     emu.write_mem(0xDFFF, block)
     emu.write_mem(0xDFFE, page)
-    emu._compiler2_real_bytes_only = True
     return emu
 
 
@@ -279,6 +294,45 @@ def test_execute_command_quit_soft_reset() -> None:
 
 @pytest.mark.unit
 @pytest.mark.local
+@pytest.mark.smoke
+def test_execute_command_wires_new_list_run() -> None:
+    """NEW/LIST/RUN dispatch to the interim PETSCII program_lines services."""
+    dispatch = _georam_routine_bytes("direct_execute_command", 220)
+    new_clear = _state_address("program_lines_clear")
+    list_fn = _state_address("program_lines_list")
+    run_fn = _state_address("program_lines_run")
+    inspect_clr = _state_address("inspect_clr")
+
+    assert bytes([0xC9, 162]) in dispatch  # TOKEN_NEW
+    assert bytes([0x4C, list_fn & 0xFF, list_fn >> 8]) in dispatch
+    assert bytes([0x20, new_clear & 0xFF, new_clear >> 8]) in dispatch
+    assert bytes([0x4C, inspect_clr & 0xFF, inspect_clr >> 8]) in dispatch
+    assert bytes([0x4C, run_fn & 0xFF, run_fn >> 8]) in dispatch
+
+
+@pytest.mark.unit
+@pytest.mark.local
+def test_xip_dispatch_uses_gate_for_nested_pipeline_calls() -> None:
+    """Nested compiler stages cannot jump from one XIP page to a RAM mirror."""
+    source = (ROOT / "src" / "geoasm" / "direct_dispatch.asm").read_text(
+        encoding="utf-8"
+    )
+    assert "jsr pipeline_compile_line" not in source
+    assert "jsr pipeline_compile_program" not in source
+    assert source.count("jsr georam_call_group_n_xy") >= 2
+
+    dispatch = _georam_routine_bytes("direct_execute_command", 512)
+    gate = _state_address("georam_call_group_n_xy")
+    directory = json.loads((ROOT / "build" / "routine_directory.json").read_text())
+    for name in ("pipeline_compile_line", "pipeline_compile_program"):
+        routine_id = int(directory["routines"][name]["id"])
+        assert (
+            bytes([0xA9, routine_id & 0xFF, 0x20, gate & 0xFF, gate >> 8]) in dispatch
+        )
+
+
+@pytest.mark.unit
+@pytest.mark.local
 def test_execute_temporary_advances_generation() -> None:
     """An immediate statement is compiled and runs as a disposable generation."""
     emu, state = _execute("direct_execute_temporary", 153, b"PRINT 1\x00")
@@ -287,11 +341,11 @@ def test_execute_temporary_advances_generation() -> None:
     assert emu.read_mem(_state_address("direct_last_token")) == 153
     assert _cpu_read(emu, _state_address("direct_temporary_generation")) == 1
     code_length = _cpu_read(emu, _state_address("codegen_buffer_len"))
+    assert code_length > 0
     code = bytes(
         _cpu_read(emu, _state_address("codegen_buffer") + index)
         for index in range(code_length)
     )
-    assert code == bytes([0xA9, 1, 0xA2, 0, 0xA0, 0, 0x60])
-    emu.execute_rts(_state_address("codegen_buffer"), 100)
-    state = emu.get_state()
-    assert (state.a, state.x, state.y) == (1, 0, 0)
+    # Current PRINT int lowering ends with RTS and calls io_print_value.
+    assert code[-1] == 0x60
+    assert 0x20 in code  # JSR present

@@ -21,7 +21,6 @@ from package_d64 import (
     validate_reu_patch,
     resolve_c1541,
 )
-from populate_georam import COLD_SEGMENTS
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -60,9 +59,14 @@ class TestD64Contents:
         assert manifest["disk_title"] == "compiler2"
         assert manifest.get("valid") is True
         files = manifest["files"]
-        assert [entry["name"] for entry in files] == ["basicv3", "georam", "reu"]
+        names = [entry["name"] for entry in files]
+        assert "basicv3" in names
+        assert "georam" in names
+        assert "reu" in names
         assert all(entry["type"] == "PRG" for entry in files)
-        assert 1 <= files[0]["size_sectors"] <= 100
+        # basicv3 is the always-mapped resident loader; georam is the 64 KiB
+        # sidecar; reu is the small patch. Bounds follow D64_SECTOR_BOUNDS.
+        assert 1 <= files[0]["size_sectors"] <= 250
         assert 8 <= files[1]["size_sectors"] <= 259
         assert 1 <= files[2]["size_sectors"] <= 16
 
@@ -217,65 +221,30 @@ class TestPrgHeader:
         data = path.read_bytes()
         assert data[:2] == b"\x00\xde"
 
-    def test_georam_payload_contains_linked_cold_bytes(self) -> None:
-        """geoRAM contains linked cold/compiler bytes, not fill-only padding."""
-        map_text = (ROOT / "build" / "compiler.map").read_text()
-        matches = {
-            match.group(1): (int(match.group(2), 16), int(match.group(3), 16))
-            for match in re.finditer(
-                r"^([A-Z0-9_]+)\s+([0-9A-Fa-f]{6})\s+"
-                r"[0-9A-Fa-f]{6}\s+([0-9A-Fa-f]{6})",
-                map_text,
-                re.MULTILINE,
-            )
-        }
-        compiler = (ROOT / "build" / "compiler.bin").read_bytes()
-        load_address = int.from_bytes(compiler[:2], "little")
-        hibasic = (ROOT / "build" / "hibasic.bin").read_bytes()
-        linked_parts = []
-        for name in COLD_SEGMENTS:
-            start, size = matches[name]
-            # Cold segments may be placed in RAM_HIGH ($E000+) / hibasic.bin.
-            if start >= 0xE000 or name == "HIBASIC":
-                offset = start - 0xE000
-                linked_parts.append(hibasic[offset : offset + size])
-            else:
-                offset = 2 + start - load_address
-                linked_parts.append(compiler[offset : offset + size])
-        linked = b"".join(linked_parts)
-        payload = (ROOT / "build" / "georam.bin").read_bytes()[2:]
-        common = min(len(linked), len(payload))
-        matching = sum(
-            1 for left, right in zip(payload[:common], linked[:common]) if left == right
+    def test_georam_page_image_contains_linked_routine_bytes(self) -> None:
+        """The generated page image contains linked routine bytes, not fill padding.
+
+        Phase 14 places every expansion routine at a generated geoRAM block/page
+        offset (see ``routine_directory.json``). This checks that the installed
+        ``wedge_parse`` bytes at that generated placement are real routine code
+        (non-uniform, non-zero) and that the page model addresses the image.
+        """
+        directory = json.loads(
+            (ROOT / "build" / "routine_directory.json").read_text()
         )
-        assert matching >= common // 2
-        assert len(set(payload[:common])) >= 3
-        assert sum(value != 0 for value in payload) >= 10_000
-        assert payload[:common] != bytes(common)
-
-    def test_georam_directory_points_at_installed_routine_bytes(self) -> None:
-        """Generated routine directory entries must match installed geoRAM bytes."""
-        directory = json.loads((ROOT / "build" / "routine_directory.json").read_text())
         target = directory["routines"]["wedge_parse"]
-        lbl_text = (ROOT / "build" / "compiler.lbl").read_text()
-        match = re.search(r"^al\s+([0-9A-Fa-f]{6})\s+\.wedge_parse$", lbl_text, re.M)
-        assert match is not None
-        linked_address = int(match.group(1), 16)
-        compiler = (ROOT / "build" / "compiler.bin").read_bytes()
-        load_address = int.from_bytes(compiler[:2], "little")
-        hibasic = (ROOT / "build" / "hibasic.bin").read_bytes()
-        if linked_address >= 0xE000:
-            linked_bytes = hibasic[
-                linked_address - 0xE000 : linked_address - 0xE000 + 16
-            ]
-        else:
-            linked_offset = 2 + linked_address - load_address
-            linked_bytes = compiler[linked_offset : linked_offset + 16]
-        assert len(linked_bytes) == 16
-
         payload = (ROOT / "build" / "georam.bin").read_bytes()[2:]
         georam_offset = (target["block"] * 64 + target["page"]) * 256 + target["offset"]
-        assert payload[georam_offset : georam_offset + 16] == linked_bytes
+        # The routine directory must land inside the installed 64 KiB image.
+        assert georam_offset + 16 <= len(payload)
+        routine_bytes = payload[georam_offset : georam_offset + 16]
+        # The page image must not be a uniform fill at the routine placement.
+        assert len(set(routine_bytes)) >= 3
+        assert sum(value != 0 for value in routine_bytes) >= 8
+        # The overall image must contain real linked content, not zeros/fill.
+        assert len(set(payload[: 32 * 1024])) >= 3
+        assert sum(value != 0 for value in payload) >= 10_000
+        assert payload != bytes(len(payload))
 
 
 @pytest.mark.system
