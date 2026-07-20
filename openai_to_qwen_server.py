@@ -158,6 +158,47 @@ def _build_tool_contract(tools: list[dict]) -> str:
 
 _TOOL_CALL_RE = re.compile(r"<tool_calls>\s*(.*?)\s*</tool_calls>", re.DOTALL)
 
+# Qwen web UI model identifiers supported by the bridge.
+_MODEL_LABELS: dict[str, str] = {
+    "qwen3.7-plus": "Qwen3.7-Plus",
+    "qwen3.7-max": "Qwen3.7-Max",
+    "qwen3.8-max-preview": "Qwen3.8-Max-Preview",
+}
+_SUPPORTED_MODELS = list(_MODEL_LABELS.keys())
+
+
+def _resolve_model(model: str) -> str:
+    """Map a requested model name to a supported Qwen UI model id."""
+    m = (model or "").strip().lower()
+    if m in _MODEL_LABELS:
+        return m
+    # Accept display-style names too (e.g. "Qwen3.7-Plus").
+    inv = {v.lower(): k for k, v in _MODEL_LABELS.items()}
+    if m in inv:
+        return inv[m]
+    # Default to the plus model if unknown.
+    return "qwen3.7-plus"
+
+
+async def _select_model(page: Page, model_id: str) -> None:
+    """Select the model in the Qwen UI dropdown before sending."""
+    label = _MODEL_LABELS.get(model_id, _MODEL_LABELS["qwen3.7-plus"])
+    try:
+        header = page.locator(".header-left").first
+        if await header.count() == 0:
+            return
+        current = (await header.inner_text()).strip()
+        if current == label:
+            return
+        await header.click()
+        await page.wait_for_timeout(1500)
+        item = page.locator(f"text={label}").first
+        if await item.count() > 0:
+            await item.click()
+            await page.wait_for_timeout(1000)
+    except Exception as e:
+        log.warning("Model select failed (%s): %s", model_id, e)
+
 
 def _parse_tool_calls(text: str) -> tuple[str, list[dict] | None]:
     """Extract tool calls from model output. Returns (clean_text, tool_calls)."""
@@ -199,6 +240,9 @@ def _call_qwen(
             if m["role"] == "user":
                 last_user = m["content"] or ""
                 break
+
+        # Select the requested model in the UI dropdown.
+        await _select_model(page, _resolve_model(model))
 
         if tools:
             contract = _build_tool_contract(tools)
@@ -308,8 +352,9 @@ class ChatCompletionResponse(BaseModel):
 async def chat_completions(req: ChatCompletionRequest) -> ChatCompletionResponse:
     qwen_messages = [{"role": m.role, "content": m.content or ""} for m in req.messages]
     tools = [t.model_dump() for t in (req.tools or [])]
+    resolved = _resolve_model(req.model)
     try:
-        text, tool_calls = _call_qwen(req.model, qwen_messages, req.max_tokens, tools or None)
+        text, tool_calls = _call_qwen(resolved, qwen_messages, req.max_tokens, tools or None)
     except HTTPException:
         raise
     except Exception as e:
@@ -318,7 +363,7 @@ async def chat_completions(req: ChatCompletionRequest) -> ChatCompletionResponse
 
     finish = "tool_calls" if tool_calls else "stop"
     return ChatCompletionResponse(
-        model=req.model,
+        model=resolved,
         choices=[Choice(
             message=ChoiceMessage(content=text, tool_calls=tool_calls),
             finish_reason=finish,
@@ -340,11 +385,12 @@ async def list_models() -> dict[str, Any]:
     return {
         "object": "list",
         "data": [
-            {"id": "qwen3.7-plus", "object": "model", "owned_by": "qwen"},
-            {"id": "qwen3.8-max-preview", "object": "model", "owned_by": "qwen"},
-            {"id": "qwen-max-latest", "object": "model", "owned_by": "qwen"},
-            {"id": "qwen-plus-latest", "object": "model", "owned_by": "qwen"},
-            {"id": "qwen-turbo-latest", "object": "model", "owned_by": "qwen"},
+            {"id": "qwen3.7-plus", "object": "model", "owned_by": "qwen",
+             "description": "High-performance LLM with text + multimodal (vision/audio)."},
+            {"id": "qwen3.7-max", "object": "model", "owned_by": "qwen",
+             "description": "Flagship 3.7 series, text-only (no vision)."},
+            {"id": "qwen3.8-max-preview", "object": "model", "owned_by": "qwen",
+             "description": "Preview of upcoming flagship Qwen3.8, SOTA performance."},
         ],
     }
 
