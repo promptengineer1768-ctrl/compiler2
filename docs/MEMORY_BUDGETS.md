@@ -33,18 +33,33 @@ BASIC loader line and every loaded byte. With the standard `2026 SYS2061`
 loader, the longest contiguous compiled payload range is `$080D-$CFFF`.
 
 The installed development environment may use the selected expansion backend
-for editor state, compiler data, diagnostics, and the physical compiled cache,
-but the compiled cache is accepted only when its standalone image accounting
-fits:
+for editor state, compiler data, and diagnostics. It may **not** use expansion
+for the *installed, currently-runnable compiled image*: that executing image is
+always normal-RAM resident, and `RUN` requires a consistent compiled image
+there per the Publication Rule (`DESIGN2.md` §6.2.1). The standalone image
+accounting still bounds it:
 
 ```text
 standalone_code_budget = standalone_loader_bytes + compiled_program_bytes
 ```
 
+Two distinct "compiled program storage" concepts must not be conflated:
+
+1. **Per-line incremental compile cache** — edit-time scratch (pre-publication
+   compiled records tied to source generation). This may live in geoRAM as
+   ordinary edit-time scratch in the development environment.
+2. **Installed, currently-runnable compiled image** — the finalized executing
+   image. This must be normal-RAM resident the moment `RUN` needs a consistent
+   compiled image (Publication Rule, `DESIGN2.md` §6.2.1); compiled code may
+   never be geoRAM-placed.
+
 Tokenized source is not part of `compiled_program_bytes`. During development,
 tokenized source may live entirely in geoRAM and may grow independently of the
 standalone compiled-code budget. The maximum normal-RAM compiled-cache payload
-range remains `$080D-$CFFF`, with loader bytes accounted from `$0801`.
+range remains `$080D-$CFFF`, with loader bytes accounted from `$0801`. Scalar
+variables are always normal-RAM resident (see `DESIGN2.md` §7.3); arrays may be
+geoRAM-backed in the development environment only as a capacity feature
+(`DESIGN2.md` §7.3, `docs/COMPILER_ARCHITECTURE.md` `AD`).
 
 This budget is the code-image ceiling, not the total runtime-memory ceiling.
 Variables, arrays, strings, stack frames, and the standalone direct-mode

@@ -86,14 +86,31 @@ continuously reports:
 standalone_code_budget = standalone_loader_bytes + compiled_program_bytes
 ```
 
-Soft warnings (design supersedes hard rejection), **edge-triggered**:
+Soft warnings (edge-triggered, **for compiled code size only**):
 
 - crossing **up** through 80% of the stock code ceiling → one near-limit
   warning; crossing **down** through 80% → one clear/recovery status;
 - crossing the 100% ceiling → `WARNING: EXCEEDS STOCK RAM` (and clear on
-  leaving); do not hard-reject solely for size;
+  leaving); do not hard-reject compiled **code** solely for size, because this
+  warning covers only code that is approaching but still fits the ceiling;
 - no continuous re-print while remaining on the same side of a threshold;
 - never silently truncate.
+
+**Compiled code may never use geoRAM expansion.** The emitted native 6502 image
+must always fit normal RAM, in both the development environment and a `COMPILE`
+export; code has no "give it more room via geoRAM" option the way arrays do.
+A compiled-code image that does not fit the standalone budget (`$080D-$CFFF`)
+is a **hard compile-time error**, caught before `RUN` and again at `COMPILE`
+time, not a warning.
+
+**Array data has the only expansion escape hatch.** In the development
+environment, arrays may be geoRAM-backed so an interactive program can `DIM` more
+array space than stock RAM allows. A compiled program that runs in development
+with geoRAM-backed arrays but whose arrays do not fit remaining normal RAM at
+`COMPILE` time must hard-fail as a *distinct diagnostic* from the code-size
+warning (meaning "cannot export this program"), reporting the byte delta the
+arrays are over budget per the footprint-delta convention in
+`REQUIREMENTS.md` §12.3.
 
 `compiled_program_bytes` includes user code, required runtime helpers,
 relocation or runtime metadata, variable descriptors, the standalone
@@ -111,7 +128,7 @@ must fit remaining normal RAM after the image loads.
 | Profile | Condition | `$CE00` |
 |---|---|---|
 | **Stock-compatible** | Program + required workspace fit a stock C64 without expansion or developer XIP reservations | **Free** in the export runtime (even though development may reserve `$CE00` for REU XIP) |
-| **Developer** | Needs expansion-backed storage or developer-only workspace | **Reserved** (fixed page, matching the installed development layout) |
+| **Developer** | Needs expansion-backed **array** storage or developer-only workspace | **Reserved** (fixed page, matching the installed development layout) |
 
 Hot pages `$C800–$CDFF` are disposable XIP cache under memory pressure and are
 not permanent export reservations. Stock exports must not depend on `$CE00`

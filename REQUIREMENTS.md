@@ -518,13 +518,32 @@ with the conventional stock ceiling at the PRG image ending by `$CFFF`
   **`WARNING: EXCEEDS STOCK RAM`** (or equivalent documented wording) but
   **do not hard-reject** the program solely for that reason. (Exceed-ceiling
   messages follow the same edge-triggered pattern relative to the 100%
-  boundary unless a higher layer documents otherwise.)
+  boundary unless a higher layer documents otherwise.) This soft warning
+  covers only code that is approaching but still fits the ceiling.
 
-Programs that require expansion-backed storage at runtime or exceed stock
-export size remain legal in the development environment. The user is expected
-to adapt such programs; release to stock machines is best-effort with warnings.
-This supersedes earlier requirements that forced hard rejection of oversize
-exports.
+**Compiled code may never use geoRAM expansion.** The emitted native 6502
+image must always fit in normal RAM, in both the development environment and a
+`COMPILE` export. Code has no "give it more room via geoRAM" option the way
+arrays do (see §7.3). A compiled-code image that does not fit the standalone
+budget (`$080D-$CFFF`) is therefore a **hard compile-time error**, caught
+before `RUN` and again at `COMPILE` time, not a warning.
+
+**Array data is the only storage class with an expansion escape hatch.** In the
+installed development environment, arrays may be geoRAM-backed so a program can
+`DIM` more array space than stock RAM allows (§7.3). A compiled program that
+runs in development with geoRAM-backed arrays but whose arrays do not fit the
+remaining normal-RAM budget at `COMPILE` time must hard-fail as a *distinct
+diagnostic* from the code-size error — it means "cannot export this program,"
+not "runs but tight." Report the byte delta the arrays are over budget,
+consistent with the footprint-delta reporting convention in §12.3.
+
+Programs that require expansion-backed **array** storage at runtime remain legal
+in the development environment; only the standalone `COMPILE` export of such a
+program hard-fails. Release to stock machines is best-effort for code size
+(warning) but impossible for array overflow (error). This narrows earlier
+requirements that forced hard rejection of oversize exports to the array-data
+case only; code size remains a soft warning but code placement in geoRAM is
+never permitted.
 
 **Export layout profiles (stock vs developer).** `COMPILE` must choose a
 runtime memory layout based on whether the program can run on a stock C64:
@@ -694,6 +713,15 @@ GeoRAM-backed string payloads must not span pages. Normal-RAM-backed string
 payloads must have equivalent ownership, bounds, and stale-handle checks, but
 are not required to use page-sized allocation.
 
+**Scalar variables are always normal-RAM resident, unconditionally.** They are
+never expansion-backed. This holds identically in the installed development
+environment and in `COMPILE` exports, and matches the `VD` descriptor's
+direct-cell mode (§Runtime ABI, `docs/COMPILER_ARCHITECTURE.md`): a scalar
+descriptor names a direct normal-RAM cell, never an arena handle or geoRAM
+page. String descriptors (`SD`) must also support a normal-RAM-backed payload so
+source-free compiled exports run without geoRAM, but scalar and array *value*
+cells do not change residence by profile.
+
 The following must be expansion-backed (selected geoRAM or REU backend) unless
 measurement proves that a small resident component is necessary:
 
@@ -704,8 +732,13 @@ measurement proves that a small resident component is necessary:
 - diagnostics formatting;
 - trigonometric and transcendental math;
 - tokenized program storage;
-- compiled program storage;
-- cold scalar variables and arrays;
+- compiled program storage (the compiled code image; see the hard code-size
+  rule in §6.2 — code must fit normal RAM and may not expand into geoRAM);
+- arrays — **in the development environment only, as a deliberate capacity
+  feature**: geoRAM backing lets an interactive program `DIM` more array space
+  than stock RAM permits. This is intended and documented as a benefit, not a
+  performance hedge, and has no bearing on `COMPILE` export, which requires
+  arrays to fit normal RAM (§6.2 hard-fails array overflow at export time);
 - string payloads when the active runtime profile has expansion memory
   available.
 

@@ -2729,6 +2729,35 @@ python tools/phase1_for_benchmark.py --require-measured
 # Phase 1 compiled benchmark must complete in < 60 jiffies
 ```
 
+### T12.3 geoRAM Cross-Page Call Cycle Cost
+
+**Prerequisites:** T12.1, T11.2
+
+Quantify the concrete cycle cost behind the "compiled code must never cross
+into geoRAM" rule (`REQUIREMENTS.md` §6.2, `DESIGN2.md` §6.4/§7.3): measure a
+cross-page `georam_call_group_n` invocation the same way `N_dma`/`N_fill` were
+empirically measured for REU (`REQUIREMENTS.md` §8.2), breaking out each stage:
+
+- directory-page select;
+- routine resolve (group dispatch);
+- target-page select;
+- context push/pop (nesting context stack).
+
+- [ ] Add a timing harness measuring `georam_call_group_n` end-to-end and per
+      stage on the local emulator and VICE;
+- [ ] Record the measured cycle count as a checked-in production constant
+      (e.g. `N_georam_call`) alongside `N_dma`/`N_fill`, shared with tests;
+- [ ] Document the number and the per-stage breakdown in `DESIGN2.md` §8 and
+      `docs/GEORAM_BANKING.md`;
+- [ ] Add a test asserting the measured end-to-end cost matches the constant
+      within tolerance.
+
+**Verification:**
+```powershell
+pytest tests/hardware/test_georam_call_cost.py -v
+python tools/validate_build.py --georam-call-cost
+```
+
 ---
 
 ## Phase 13: Smoke Test Selection

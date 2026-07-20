@@ -231,15 +231,38 @@ or a different banking view. Integer, float, and string stores use typed
 request records so compiled code never passes an unvalidated raw cell pointer
 as a variable handle.
 
-Arrays use one 16-byte `AD` descriptor and no alternate representation. The
-descriptor records element kind and size, one- or two-dimensional inclusive
-bounds, total element count, descriptor generation, and a contiguous extent in
-the manifest array arena. `AM`, `AE`, and `AS` requests provide dimension,
-element-access, and typed-store operands. Runtime validation recomputes the
-shape and required page count, verifies every owned page, and selects geoRAM
-again while copying any element that crosses a 256-byte page boundary.
-`arr_free` returns the complete extent to the page allocator and invalidates
-the descriptor; stale, malformed, and redimensioned descriptors are rejected.
+Arrays use one 16-byte `AD` descriptor with **two alternate representations**,
+mirroring what `SD` (string descriptor) and `VD` (scalar descriptor) already do:
+
+1. **Direct normal-RAM mode** — a contiguous RAM block with plain indexed
+   addressing and no page-select per element. Used whenever the array fits the
+   resident budget computed from the symbol table at compilation boundary 3
+   (symbols and variable descriptors).
+2. **geoRAM-backed extent mode** — a contiguous extent in the manifest array
+   arena, one page per owned block, selected through the array arena generation.
+   Used only when the array is declared larger than the remaining normal RAM
+   allows, and **only in the development environment**; a `COMPILE` export target
+   never uses this mode (export requires arrays to fit normal RAM, `REQUIREMENTS.md` §6.2).
+
+The descriptor records element kind and size, one- or two-dimensional inclusive
+bounds, total element count, descriptor generation, a storage-class tag, and
+either a direct normal-RAM base pointer (direct mode) or the arena handle/page/
+offset of the contiguous extent (geoRAM mode). `AM`, `AE`, and `AS` requests
+provide dimension, element-access, and typed-store operands. Runtime validation
+recomputes the shape and, in geoRAM mode, the required page count, verifies
+every owned page, and selects geoRAM while copying any element that crosses a
+256-byte page boundary; in direct mode it addresses the contiguous RAM block
+with plain indexed addressing. `arr_free` returns the complete extent (or frees
+the RAM block) and invalidates the descriptor; stale, malformed, and
+redimensioned descriptors are rejected.
+
+The direct normal-RAM mode is required for correctness, not only performance:
+`REQUIREMENTS.md` §6.2 requires the source-free standalone post-run environment
+to support `?A(N)` array-element inspection with no source and no geoRAM, which
+is unsatisfiable for any array-using program if arrays have no alternate
+representation. The compiler defaults arrays to direct-RAM mode and falls back
+to geoRAM-backed mode only when the declared array exceeds remaining normal RAM
+in the development environment.
 
 Strings use one caller-owned 12-byte `SD` descriptor and no raw-pointer or
 alternate representation. Bytes 0-1 contain `SD`, byte 2 is a nonzero

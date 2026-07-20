@@ -522,14 +522,16 @@ descriptors needed for runtime and direct inspection, and the standalone
 direct-mode environment — and nothing that depends on the Compiler 2 editor,
 compiler workspace, source arena, installed environment, or geoRAM.
 
-**Stock memory budget (warnings, not hard reject).** With `2026 SYS2061`, the
-conventional stock payload ends by `$CFFF`. The compiler continuously reports
+**Stock memory budget (warnings, not hard reject — for code size only).** With
+`2026 SYS2061`, the conventional stock payload ends by `$CFFF`. The compiler
+continuously reports
 
 ```text
 standalone_code_budget = standalone_loader_bytes + compiled_program_bytes
 ```
 
-Primary goal: stock-exportable programs. Soft policy (supersedes hard reject):
+Primary goal: stock-exportable programs. Soft policy (applies to compiled
+**code** size, not to array placement — arrays are addressed separately below):
 
 - **Edge-triggered 80% status** (not continuous while remaining on one side):
   - crossing **up** through 80% → one near-limit warning for that crossing;
@@ -540,8 +542,26 @@ Primary goal: stock-exportable programs. Soft policy (supersedes hard reject):
 - crossing the **100%** stock ceiling →
   **`WARNING: EXCEEDS STOCK RAM`** (edge-triggered enter/leave similarly);
   still allow the program in the expansion-backed environment and still allow
-  export;
+  export, because this warning covers only code that is approaching but still
+  fits the ceiling;
 - never silently truncate.
+
+**Compiled code may never use geoRAM expansion.** The emitted native 6502 image
+must always fit in normal RAM, in both the development environment and a
+`COMPILE` export; code has no "give it more room via geoRAM" option the way
+arrays do (§7.3). A compiled-code image that does not fit the standalone budget
+(`$080D-$CFFF`) is a **hard compile-time error**, caught before `RUN` and again
+at `COMPILE` time, not a warning.
+
+**Array data has the only expansion escape hatch.** In the installed
+development environment, arrays may be geoRAM-backed so an interactive program
+can `DIM` more array space than stock RAM allows (§7.3). A compiled program that
+runs in development with geoRAM-backed arrays but whose arrays do not fit the
+remaining normal-RAM budget at `COMPILE` time must hard-fail as a *distinct
+diagnostic* from the code-size warning — it means "cannot export this program,"
+not "runs but tight." Report the byte delta the arrays are over budget,
+consistent with the footprint-delta reporting convention in `docs/MEMORY_BUDGETS.md`.
+Array overflow is an error; code-size overage stays a warning.
 
 **Export layout profiles.**
 
@@ -673,13 +693,27 @@ lifetime/generation. String allocation, assignment, slicing, comparison,
 reclamation, and standalone state inspection dispatch through that descriptor,
 so none of those operations assumes that a payload is physically in geoRAM.
 
+**Scalar variables are always normal-RAM resident, unconditionally.** They are
+never expansion-backed. This holds identically in the installed development
+environment and in `COMPILE` exports, and matches the `VD` descriptor's
+direct-cell mode (`docs/COMPILER_ARCHITECTURE.md`): a scalar descriptor names a
+direct normal-RAM cell, never an arena handle or geoRAM page. String descriptors
+(`SD`) must also support a normal-RAM-backed payload so source-free compiled
+exports run without geoRAM, but scalar and array *value* cells do not change
+residence by profile.
+
 The following are expansion-backed by default (selected geoRAM or REU backend)
 and may move to a small resident component only when measurement proves it
 necessary, with the byte delta reported and justified (R2 optimization
 priority): editor parsing/line-edit transforms, lexer/tokenizer,
 parser/semantic analysis, symbol/control-flow/IR/optimization/codegen passes,
 diagnostics formatting, transcendental math, tokenized program storage,
-compiled program storage, cold scalar variables/arrays, and string payloads
+compiled program storage (but see the hard code-size rule above — code must fit
+normal RAM and may not expand into geoRAM), arrays — **in the development
+environment only, as a deliberate capacity feature** that lets an interactive
+program `DIM` more array space than stock RAM permits; this is intended and
+documented as a benefit, not a performance hedge, and does not apply to
+`COMPILE` export, which requires arrays to fit normal RAM — and string payloads
 when the active profile has expansion memory.
 
 ### 7.4 Arena Model
