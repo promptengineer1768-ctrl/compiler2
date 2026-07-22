@@ -49,6 +49,21 @@ checked all nine distribution-manifest payload hashes, all ten ZIP members, and 
 CRC integrity. The readiness ZIP SHA-256 is
 `bbba1d983c07c5a0b0add3b6541b5dbd207baec109a8761adb15f13ad8c67822`.
 
+## Low-level implementation delegation
+
+Trusted review has sealed three production-CLI acceptance contracts in
+`tests/system/test_backend_adoption.py`. They deliberately fail at the missing
+`tools/backend_adoption.py` boundary, leaving this dependency-ordered queue:
+
+1. `backend.build_adapter`
+2. `backend.generated_documentation`
+3. `backend.distribution`
+
+The worker may change only each task's `allowed_changes`. Requirements, design,
+the task manifest, acceptance tests and their digests, fixtures, snapshots, and
+task status remain protected. A trusted controller validates patch scope and
+test digests before admitting the patch into a fresh checkout.
+
 Skeleton generation is intentionally absent from CI. The trusted profile converts all
 405 authoritative routine records and the final trusted task renders a tracked,
 fail-closed review snapshot under `generated/backend-skeletons`. Its 50 shadow modules

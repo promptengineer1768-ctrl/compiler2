@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -72,6 +73,47 @@ def _regions(profile: dict[str, Any]) -> tuple[LowMemoryRegion, ...]:
         )
         for region in profile["regions"]
     )
+
+
+def _run_adoption_adapter(*arguments: str) -> subprocess.CompletedProcess[str]:
+    """Run the project-owned Backend adapter through its production CLI."""
+    return subprocess.run(
+        [sys.executable, "tools/backend_adoption.py", *arguments],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+@pytest.mark.system
+def test_backend_build_adapter_plans_the_canonical_release_dag() -> None:
+    """Backend planning preserves validation, build, test, and package order."""
+    result = _run_adoption_adapter("plan", "distribution")
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "target": "distribution",
+        "steps": [
+            "validate_manifests",
+            "build_release",
+            "test_system",
+            "prepare_distribution",
+        ],
+    }
+
+
+@pytest.mark.system
+def test_backend_generated_documentation_is_current_and_traceable() -> None:
+    """The production adapter checks every declared generated document."""
+    result = _run_adoption_adapter("documentation", "--check")
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.system
+def test_backend_distribution_is_current_hashed_and_reproducible() -> None:
+    """The production adapter verifies the declared end-user archive twice."""
+    result = _run_adoption_adapter("distribution", "--check-reproducible")
+    assert result.returncode == 0, result.stderr
 
 
 @pytest.mark.system
