@@ -33,8 +33,6 @@
   ],
   "documents": [
     {"id": "manual", "kind": "manual", "template": "docs/MANUAL.md", "output": "build/docs/MANUAL.md"},
-    {"id": "keywords", "kind": "keyword_reference", "template": "docs/KEYWORDS.md", "output": "build/docs/KEYWORDS.md"},
-    {"id": "api", "kind": "api", "template": "docs/GENERATED_REFERENCE.md", "output": "build/API.md"},
-    {"id": "memory_map", "kind": "reference", "template": "docs/GENERATED_REFERENCE.md", "output": "build/MAP.md"}
+    {"id": "keywords", "kind": "keyword_reference", "template": "docs/KEYWORDS.md", "output": "build/docs/KEYWORDS.md"}
   ]
 }

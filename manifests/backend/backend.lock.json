@@ -13,7 +13,7 @@
     "manifests/backend/math-profile.json": "sha256:3f14af143f42315a020dc15ba8eb8a29a548e550ff68c8c8b628b3281817e963",
     "manifests/backend/numeric-type-profile.json": "sha256:013fe0d01e5939aa5e3b7d52f6595840357ae4b4bb72ede36665ae8f7cf30888",
     "manifests/backend/build-profile.json": "sha256:1737074bbd0e00f98c07f958cd5aa517d15a069321e4d24211a87b150ab84b1e",
-    "manifests/backend/documentation-profile.json": "sha256:7c5c3f058e6315361833cb47ac00001fcbdcd48cb2d1b91d64f4923d0ba41844",
+    "manifests/backend/documentation-profile.json": "sha256:6d7331719064e6db9428f86f2e95ecd38a04b6e49ab22ad69663703f728cd07b",
     "manifests/backend/distribution-profile.json": "sha256:ca3118483a69562991e876062a7b1cd43628712e0bec7fae014c063e384efad5",
     "manifests/backend/skeleton-profile.json": "sha256:3c8ddb56785d8471fca1d0495d7db2f5a80355f7b61bf851b5d4ff8293e44d08",
     "manifests/backend/adoption-tasks.json": "sha256:2462e5229adeca746844d0d6db24a6e4f3decb79be94a493f8e74c0fa57fa7bd",

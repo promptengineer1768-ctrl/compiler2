@@ -90,6 +90,16 @@ jobs:
           & "$runtime/x64sc" -help | Select-Object -First 1
           if ($LASTEXITCODE -ne 0) { throw 'VICE Linux runtime preflight failed' }
 
+      - name: Validate pinned consumer contracts
+        shell: pwsh
+        run: |
+          python tools/validate_build.py --manifests
+          python tools/task_manifest.py validate
+
+      - name: Build release artifacts
+        shell: pwsh
+        run: ./build.ps1 -ToolsRoot ../tools -Python (Get-Command python).Source -ExpansionPreference GeoRam -SkipViceBenchmarks
+
       - name: Initialize machine-readable reports
         shell: pwsh
         run: |
@@ -104,15 +114,9 @@ jobs:
           }
           $summary | ConvertTo-Json | Set-Content -Encoding utf8 build/test-reports/ci-summary.json
 
-      - name: Validate pinned consumer contracts
+      - name: Produce prerequisite system-test evidence
         shell: pwsh
-        run: |
-          python tools/validate_build.py --manifests
-          python tools/task_manifest.py validate
-
-      - name: Build release artifacts
-        shell: pwsh
-        run: ./build.ps1 -ToolsRoot ../tools -Python (Get-Command python).Source -ExpansionPreference GeoRam -SkipViceBenchmarks
+        run: python -m pytest tests/tools/test_validate_build.py -v --junitxml=build/test-reports/system.xml
 
       - name: Run system and Backend-adoption tests
         if: always()
