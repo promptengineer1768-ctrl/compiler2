@@ -79,7 +79,7 @@ def _regions(profile: dict[str, Any]) -> tuple[LowMemoryRegion, ...]:
 def test_backend_revision_and_adopted_inputs_are_locked() -> None:
     """The sibling revision and every adopted input must match the lock."""
     lock = _load("backend.lock.json")
-    assert lock["framework_revision"] == "ef1ecd153ca73114c9b8c58cf04ec1ca6ce5814f"
+    assert lock["framework_revision"] == "b6c5d2d3d6565ff0e9e0cc1aa26458e1d3197ee0"
     verify_lock(lock, ROOT)
     assert set(lock["inputs"]) == {f"manifests/backend/{name}" for name in LOCKED}
 
@@ -195,7 +195,8 @@ def test_backend_skeleton_contract() -> None:
 def test_remote_ci_pins_actions_and_publishes_all_proof_artifacts() -> None:
     """Remote proof exposes binaries, docs, distribution, and reports."""
     workflow = (ROOT / ".github/workflows/backend-consumer-ci.yml").read_text("utf-8")
-    assert "ef1ecd153ca73114c9b8c58cf04ec1ca6ce5814f" in workflow
+    assert "b6c5d2d3d6565ff0e9e0cc1aa26458e1d3197ee0" in workflow
+    assert "cc7c9c22c739326d5f6727c3b08300850a79b2c9" in workflow
     assert "@v" not in workflow
     for artifact in (
         "compiler2-binaries",
@@ -209,7 +210,20 @@ def test_remote_ci_pins_actions_and_publishes_all_proof_artifacts() -> None:
     assert "working-directory: compiler2" in workflow
     assert "path: compiler2" in workflow
     assert "path: backend" in workflow
+    assert "path: tools/vice-next-mcp" in workflow
     assert "COMPILER2_BACKEND_ROOT: ${{ github.workspace }}/backend" in workflow
     assert "compiler2/build/test-reports/**" in workflow
     assert "token: ${{ secrets.BACKEND_READ_TOKEN }}" in workflow
     assert "ci-summary.json" in workflow
+    assert "Initialize machine-readable reports" in workflow
+    assert workflow.count("if: always()") >= 6
+
+
+@pytest.mark.system
+def test_build_stops_before_task_validation_if_manifest_validation_fails() -> None:
+    """The first validator cannot have its failure masked by the second."""
+    build = (ROOT / "build.ps1").read_text("utf-8")
+    manifests = build.index("tools/validate_build.py --manifests")
+    manifest_guard = build.index("Build manifest validation failed", manifests)
+    tasks = build.index("tools/task_manifest.py validate")
+    assert manifests < manifest_guard < tasks

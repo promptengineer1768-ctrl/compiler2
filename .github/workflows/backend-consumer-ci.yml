@@ -21,7 +21,7 @@ jobs:
       run:
         working-directory: compiler2
     env:
-      BACKEND_REVISION: ef1ecd153ca73114c9b8c58cf04ec1ca6ce5814f
+      BACKEND_REVISION: b6c5d2d3d6565ff0e9e0cc1aa26458e1d3197ee0
       BACKEND_REPOSITORY: ${{ inputs.backend_repository || 'promptengineer1768-ctrl/backend' }}
       COMPILER2_BACKEND_ROOT: ${{ github.workspace }}/backend
     steps:
@@ -37,6 +37,13 @@ jobs:
           ref: ${{ env.BACKEND_REVISION }}
           path: backend
           token: ${{ secrets.BACKEND_READ_TOKEN }}
+
+      - name: Check out pinned VICE Next harness
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: promptengineer1768-ctrl/vice-next-mcp
+          ref: cc7c9c22c739326d5f6727c3b08300850a79b2c9
+          path: tools/vice-next-mcp
 
       - name: Set up Python 3.13
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
@@ -55,6 +62,20 @@ jobs:
           Copy-Item (Get-Command ca65).Source ../tools/ca65.exe
           Copy-Item (Get-Command ld65).Source ../tools/ld65.exe
 
+      - name: Initialize machine-readable reports
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force build/test-reports | Out-Null
+          $summary = [ordered]@{
+            schema_version = 1
+            backend_revision = $env:BACKEND_REVISION
+            compiler2_commit = $env:GITHUB_SHA
+            workflow_run = $env:GITHUB_RUN_ID
+            status = 'started'
+            junit = 'build/test-reports/system.xml'
+          }
+          $summary | ConvertTo-Json | Set-Content -Encoding utf8 build/test-reports/ci-summary.json
+
       - name: Validate pinned consumer contracts
         shell: pwsh
         run: |
@@ -66,19 +87,24 @@ jobs:
         run: ./build.ps1 -ToolsRoot ../tools -Python (Get-Command python).Source -ExpansionPreference GeoRam
 
       - name: Run system and Backend-adoption tests
+        if: always()
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force build/test-reports | Out-Null
           python -m pytest tests/system tests/tools/test_validate_build.py -v --junitxml=build/test-reports/system.xml
 
       - name: Write machine-readable CI summary
+        if: always()
         shell: pwsh
+        env:
+          CI_JOB_STATUS: ${{ job.status }}
         run: |
           $summary = [ordered]@{
             schema_version = 1
             backend_revision = $env:BACKEND_REVISION
             compiler2_commit = $env:GITHUB_SHA
             workflow_run = $env:GITHUB_RUN_ID
+            status = $env:CI_JOB_STATUS
             junit = 'build/test-reports/system.xml'
           }
           $summary | ConvertTo-Json | Set-Content -Encoding utf8 build/test-reports/ci-summary.json

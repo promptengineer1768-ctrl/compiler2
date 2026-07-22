@@ -50,7 +50,7 @@
       "contract_approval": {
         "approved_by": "trusted",
         "contract_digest": "8d407712c9577ddbb5589e76ca2cd76e73666088579e6d728c94f7bda0b775c3",
-        "review_evidence": "Trusted cross-file review at Backend revision ef1ecd153ca73114c9b8c58cf04ec1ca6ce5814f"
+        "review_evidence": "Trusted cross-file review at Backend revision b6c5d2d3d6565ff0e9e0cc1aa26458e1d3197ee0"
       },
       "depends_on": [],
       "allowed_changes": [
@@ -117,7 +117,7 @@
       "contract_approval": {
         "approved_by": "trusted",
         "contract_digest": "f467e29bf2c5e74d6559f8ec7e8d9da32ba821df77de9001bd0f4c22834ea2a3",
-        "review_evidence": "Trusted readiness contract authored against Backend build/documentation/distribution schemas at revision ef1ecd153ca73114c9b8c58cf04ec1ca6ce5814f."
+        "review_evidence": "Trusted readiness contract authored against Backend build/documentation/distribution schemas at revision b6c5d2d3d6565ff0e9e0cc1aa26458e1d3197ee0."
       },
       "depends_on": ["backend.governance_contract"],
       "allowed_changes": ["manifests/backend/**", "docs/BACKEND_ADOPTION.md", "tests/system/test_backend_adoption.py", "tools/validate_build.py"],
@@ -136,13 +136,13 @@
       "acceptance_tests": [{
         "id": "backend_skeleton_contract",
         "target": "tests/system/test_backend_adoption.py",
-        "contract_digest": "9cf4394a6a5aa7a8d9261189470fe6d1ccf0db2b6fda1b62cc8f0809c3b30eae",
+        "contract_digest": "09c650006d0b0002bb69bfd37c7e57839bcb7b00bd63b8111248b73e41d94274",
         "oracle": "The authoritative routine inventory and deterministic Backend renderer must match exactly.",
         "required": true
       }],
       "contract_approval": {
         "approved_by": "trusted",
-        "contract_digest": "a50df9b428ac7ef4bc94dd21941598876107130ffddbc2352850b1cde21d49b6",
+        "contract_digest": "6966cdb5b22d0287b75d4bf274cd0df32b76845216dd8228591660cbba866a70",
         "review_evidence": "Trusted conversion of all 405 authoritative routine records into the Backend skeleton profile."
       },
       "depends_on": ["backend.governance_contract"],
@@ -167,13 +167,13 @@
       "acceptance_tests": [{
         "id": "backend_skeleton_contract",
         "target": "tests/system/test_backend_adoption.py",
-        "contract_digest": "9cf4394a6a5aa7a8d9261189470fe6d1ccf0db2b6fda1b62cc8f0809c3b30eae",
+        "contract_digest": "09c650006d0b0002bb69bfd37c7e57839bcb7b00bd63b8111248b73e41d94274",
         "oracle": "The authoritative routine inventory and deterministic Backend renderer must match exactly.",
         "required": true
       }],
       "contract_approval": {
         "approved_by": "trusted",
-        "contract_digest": "f6588bc643fa7b225578e21eef3d48af019a3486ffa0121c3630043898ae4d6f",
+        "contract_digest": "707ab5468666c7b7f07dd085b583890d8571a7a117611f9066f748a1ff5e623b",
         "review_evidence": "Trusted review sealed routine identity, module ownership, ABI, fail-closed behavior, and test traceability."
       },
       "depends_on": ["backend.skeleton_inventory_conversion"],
@@ -198,13 +198,13 @@
       "acceptance_tests": [{
         "id": "backend_skeleton_contract",
         "target": "tests/system/test_backend_adoption.py",
-        "contract_digest": "9cf4394a6a5aa7a8d9261189470fe6d1ccf0db2b6fda1b62cc8f0809c3b30eae",
+        "contract_digest": "09c650006d0b0002bb69bfd37c7e57839bcb7b00bd63b8111248b73e41d94274",
         "oracle": "The authoritative routine inventory and deterministic Backend renderer must match exactly.",
         "required": true
       }],
       "contract_approval": {
         "approved_by": "trusted",
-        "contract_digest": "d273ca40bb95006ed3a999a01edfdab77784885f444432b011f9f18bbebe58dc",
+        "contract_digest": "6a2e12e83b671ca1eb72d541ff14e6f128f1fd141d37d1cf037c42a139992f04",
         "review_evidence": "Trusted final generation produced the isolated tracked design-review snapshot without changing production source."
       },
       "depends_on": ["backend.skeleton_acceptance"],
