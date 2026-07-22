@@ -3,17 +3,20 @@
 ## Tool Location
 
 The project uses the VICE Next supervised runtime. Configure machine tools
-explicitly; the current instrumented runtime is:
+explicitly. The Windows runtime verified on 2026-07-22 was extracted from
+release `v3.10-instrumented-20260722-nmi.1` (archive SHA-256
+`f8ab4106d6d86757a59eb34a73b7912ab311ba71badc28b45f4a999bfa1a0a38`):
 
 ```text
-C:\Users\me\Documents\Coding Projects\builds\vice-instrumentation-windows\extracted\src
+C:\Users\me\Downloads\vice-instrumentation-29898426510\windows-extracted\HeadlessVICE-3.10-win64-rnone
 ```
 
 In PowerShell:
 
 ```powershell
-$env:VICE_X64SC = "C:\Users\me\Documents\Coding Projects\builds\vice-instrumentation-windows\extracted\src\x64sc.exe"
-$env:VICE_XPLUS4 = "C:\Users\me\Documents\Coding Projects\builds\vice-instrumentation-windows\extracted\src\xplus4.exe"
+$env:VICE_NEXT_RUNTIME = "C:\Users\me\Downloads\vice-instrumentation-29898426510\windows-extracted\HeadlessVICE-3.10-win64-rnone"
+$env:VICE_X64SC = Join-Path $env:VICE_NEXT_RUNTIME "x64sc.exe"
+$env:VICE_XPLUS4 = Join-Path $env:VICE_NEXT_RUNTIME "xplus4.exe"
 ```
 
 ## Generating Stock Semantic Fixtures

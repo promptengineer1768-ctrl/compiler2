@@ -121,7 +121,7 @@ def test_backend_distribution_is_current_hashed_and_reproducible() -> None:
 def test_backend_revision_and_adopted_inputs_are_locked() -> None:
     """The sibling revision and every adopted input must match the lock."""
     lock = _load("backend.lock.json")
-    assert lock["framework_revision"] == "b6c5d2d3d6565ff0e9e0cc1aa26458e1d3197ee0"
+    assert lock["framework_revision"] == "fea25498a6b2c5e152197c4a3f990c25c6a5558a"
     verify_lock(lock, ROOT)
     assert set(lock["inputs"]) == {f"manifests/backend/{name}" for name in LOCKED}
 
@@ -237,8 +237,8 @@ def test_backend_skeleton_contract() -> None:
 def test_remote_ci_pins_actions_and_publishes_all_proof_artifacts() -> None:
     """Remote proof exposes binaries, docs, distribution, and reports."""
     workflow = (ROOT / ".github/workflows/backend-consumer-ci.yml").read_text("utf-8")
-    assert "b6c5d2d3d6565ff0e9e0cc1aa26458e1d3197ee0" in workflow
-    assert "cc7c9c22c739326d5f6727c3b08300850a79b2c9" in workflow
+    assert "fea25498a6b2c5e152197c4a3f990c25c6a5558a" in workflow
+    assert "5c5e82649466c1007673518f12fb215e799ec2b2" in workflow
     assert "@v" not in workflow
     for artifact in (
         "compiler2-binaries",
@@ -261,9 +261,9 @@ def test_remote_ci_pins_actions_and_publishes_all_proof_artifacts() -> None:
     assert workflow.count("if: always()") >= 6
     assert "pyyaml" in workflow
     assert (
-        "31eebade4c55bb4f9bda7ecb17f35f868c6c2cfceeea86b59ef777c2e25684a2" in workflow
+        "54f88d29a03585546217c95e9c60f60cecd7bbdf3eff5d9d4c3362e800a8cd6a" in workflow
     )
-    assert "v3.10-instrumented-20260718-full.4" in workflow
+    assert "v3.10-instrumented-20260722-nmi.1" in workflow
     assert "xvfb" in workflow.lower()
     assert "DISPLAY=:99" in workflow
     assert "tests/system/test_backend_adoption.py" in workflow

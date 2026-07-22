@@ -21,7 +21,7 @@ jobs:
       run:
         working-directory: compiler2
     env:
-      BACKEND_REVISION: b6c5d2d3d6565ff0e9e0cc1aa26458e1d3197ee0
+      BACKEND_REVISION: fea25498a6b2c5e152197c4a3f990c25c6a5558a
       BACKEND_REPOSITORY: ${{ inputs.backend_repository || 'promptengineer1768-ctrl/backend' }}
       COMPILER2_BACKEND_ROOT: ${{ github.workspace }}/backend
       CC65_REVISION: a29ce64fb51c97b7dda58dc5818f8c64b6b6f3ce
@@ -43,7 +43,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: promptengineer1768-ctrl/vice-next-mcp
-          ref: cc7c9c22c739326d5f6727c3b08300850a79b2c9
+          ref: 5c5e82649466c1007673518f12fb215e799ec2b2
           path: tools/vice-next-mcp
 
       - name: Set up Python 3.13
@@ -72,8 +72,8 @@ jobs:
         shell: pwsh
         run: |
           $archive = Join-Path $env:RUNNER_TEMP 'vice-3.10-instrumented-linux.tar.gz'
-          curl --fail --location --output $archive 'https://github.com/promptengineer1768-ctrl/vice-instrumentation/releases/download/v3.10-instrumented-20260718-full.4/vice-3.10-instrumented-linux.tar.gz'
-          $expected = '31eebade4c55bb4f9bda7ecb17f35f868c6c2cfceeea86b59ef777c2e25684a2'
+          curl --fail --location --output $archive 'https://github.com/promptengineer1768-ctrl/vice-instrumentation/releases/download/v3.10-instrumented-20260722-nmi.1/vice-3.10-instrumented-linux.tar.gz'
+          $expected = '54f88d29a03585546217c95e9c60f60cecd7bbdf3eff5d9d4c3362e800a8cd6a'
           $actual = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($actual -ne $expected) { throw "VICE runtime digest mismatch: $actual" }
           $runtimeRoot = '../builds/vice-instrumentation-windows/extracted'

@@ -86,13 +86,15 @@
       "acceptance": [
         "Every harness adapter task has a failing production-path test and authoritative oracle before low-level delegation."
       ],
-      "acceptance_tests": [{
-        "id": "backend_adapter_contracts",
-        "target": "tests/system/test_backend_adoption.py",
-        "contract_digest": "7116f1709c23121d365be202453bc937d1582f31453bfce495d7618c479ebccb",
-        "oracle": "The sealed file contains failing production-CLI contracts for build planning, generated documentation, and reproducible distribution packaging.",
-        "required": true
-      }],
+      "acceptance_tests": [
+        {
+          "id": "backend_adapter_contracts",
+          "target": "tests/system/test_backend_adoption.py",
+          "contract_digest": "7116f1709c23121d365be202453bc937d1582f31453bfce495d7618c479ebccb",
+          "oracle": "The sealed file contains failing production-CLI contracts for build planning, generated documentation, and reproducible distribution packaging.",
+          "required": true
+        }
+      ],
       "contract_approval": {
         "approved_by": "trusted",
         "contract_digest": "de897971a3ec577a00e496ffa55d52a9433a9921a2042807f1e40bf51870c654",
@@ -107,12 +109,14 @@
         "docs/TESTING.md",
         "pytest.ini"
       ],
-      "evidence": [{
-        "kind": "review",
-        "target": "tests/system/test_backend_adoption.py",
-        "status": "passing",
-        "claim": "Three content-digested production-CLI contracts fail closed at the missing adapter boundary."
-      }],
+      "evidence": [
+        {
+          "kind": "review",
+          "target": "tests/system/test_backend_adoption.py",
+          "status": "passing",
+          "claim": "Three content-digested production-CLI contracts fail closed at the missing adapter boundary."
+        }
+      ],
       "escalations": []
     },
     {
@@ -121,83 +125,203 @@
       "status": "complete",
       "owner": "compiler2",
       "execution_tier": "trusted",
-      "requirements": ["REQ-BUILD-DIST-001"],
-      "design_refs": ["docs/BUILD.md", "docs/GENERATED_REFERENCE.md", "docs/BACKEND_ADOPTION.md"],
-      "acceptance": ["Shared profiles reproduce the documented build targets and package only validated release artifacts without claiming a release."],
-      "acceptance_tests": [{
-        "id": "backend_profile_inventory_contract",
-        "target": "tests/system/test_backend_adoption.py",
-        "contract_digest": "7116f1709c23121d365be202453bc937d1582f31453bfce495d7618c479ebccb",
-        "oracle": "All build, documentation, and distribution readiness profiles validate against the pinned Backend schemas.",
-        "required": true
-      }],
+      "requirements": [
+        "REQ-BUILD-DIST-001"
+      ],
+      "design_refs": [
+        "docs/BUILD.md",
+        "docs/GENERATED_REFERENCE.md",
+        "docs/BACKEND_ADOPTION.md"
+      ],
+      "acceptance": [
+        "Shared profiles reproduce the documented build targets and package only validated release artifacts without claiming a release."
+      ],
+      "acceptance_tests": [
+        {
+          "id": "backend_profile_inventory_contract",
+          "target": "tests/system/test_backend_adoption.py",
+          "contract_digest": "7116f1709c23121d365be202453bc937d1582f31453bfce495d7618c479ebccb",
+          "oracle": "All build, documentation, and distribution readiness profiles validate against the pinned Backend schemas.",
+          "required": true
+        }
+      ],
       "contract_approval": {
         "approved_by": "trusted",
         "contract_digest": "622d6ab60cbb5382681193a3a0cb7927661a636bc7f312ce7c4809f430872e3a",
         "review_evidence": "Trusted readiness contract authored against Backend build/documentation/distribution schemas at revision b6c5d2d3d6565ff0e9e0cc1aa26458e1d3197ee0."
       },
-      "depends_on": ["backend.governance_contract", "backend.harness_acceptance"],
-      "allowed_changes": ["manifests/backend/**", "docs/BACKEND_ADOPTION.md", "tests/system/test_backend_adoption.py", "tools/validate_build.py"],
-      "evidence": [{
-        "kind": "test",
-        "target": "tests/system/test_backend_adoption.py",
-        "status": "passing",
-        "claim": "The pinned Backend validator accepts the complete consumer profile inventory."
-      }],
+      "depends_on": [
+        "backend.governance_contract",
+        "backend.harness_acceptance"
+      ],
+      "allowed_changes": [
+        "manifests/backend/**",
+        "docs/BACKEND_ADOPTION.md",
+        "tests/system/test_backend_adoption.py",
+        "tools/validate_build.py"
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "target": "tests/system/test_backend_adoption.py",
+          "status": "passing",
+          "claim": "The pinned Backend validator accepts the complete consumer profile inventory."
+        }
+      ],
       "escalations": []
     },
     {
       "id": "backend.build_adapter",
       "title": "Implement the project-owned Backend build-graph adapter",
-      "status": "not_started",
+      "status": "complete",
       "owner": "compiler2",
       "execution_tier": "implementation",
-      "requirements": ["REQ-BUILD-DIST-001"],
-      "design_refs": ["DESIGN.md#13-build-system-r121", "docs/BUILD.md", "docs/BACKEND_ADOPTION.md"],
-      "acceptance": ["The adapter plans and optionally executes the existing validation, release, system-test, and distribution commands without bypassing build.ps1 or changing native artifact validation."],
-      "acceptance_tests": [{
-        "id": "backend_build_adapter_contract",
-        "target": "tests/system/test_backend_adoption.py",
-        "contract_digest": "7116f1709c23121d365be202453bc937d1582f31453bfce495d7618c479ebccb",
-        "oracle": "Planning distribution returns validate_manifests, build_release, test_system, and prepare_distribution in dependency order.",
-        "required": true
-      }],
-      "contract_approval": {"approved_by": "trusted", "contract_digest": "42ce2bed02f4eafc5e1eba97d27c02f2a3ddf3baef7360d83fc4faaa635166b3", "review_evidence": "Trusted production-CLI contract review against the existing build profile and build.ps1."},
-      "depends_on": ["backend.build_docs_distribution", "backend.harness_acceptance"],
-      "allowed_changes": ["tools/backend_adoption.py", "build.ps1", "docs/BUILD.md", "docs/BACKEND_ADOPTION.md"],
-      "evidence": [],
+      "requirements": [
+        "REQ-BUILD-DIST-001"
+      ],
+      "design_refs": [
+        "DESIGN.md#13-build-system-r121",
+        "docs/BUILD.md",
+        "docs/BACKEND_ADOPTION.md"
+      ],
+      "acceptance": [
+        "The adapter plans and optionally executes the existing validation, release, system-test, and distribution commands without bypassing build.ps1 or changing native artifact validation."
+      ],
+      "acceptance_tests": [
+        {
+          "id": "backend_build_adapter_contract",
+          "target": "tests/system/test_backend_adoption.py",
+          "contract_digest": "7116f1709c23121d365be202453bc937d1582f31453bfce495d7618c479ebccb",
+          "oracle": "Planning distribution returns validate_manifests, build_release, test_system, and prepare_distribution in dependency order.",
+          "required": true
+        }
+      ],
+      "contract_approval": {
+        "approved_by": "trusted",
+        "contract_digest": "42ce2bed02f4eafc5e1eba97d27c02f2a3ddf3baef7360d83fc4faaa635166b3",
+        "review_evidence": "Trusted production-CLI contract review against the existing build profile and build.ps1."
+      },
+      "depends_on": [
+        "backend.build_docs_distribution",
+        "backend.harness_acceptance"
+      ],
+      "allowed_changes": [
+        "tools/backend_adoption.py",
+        "build.ps1",
+        "docs/BUILD.md",
+        "docs/BACKEND_ADOPTION.md"
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "target": "tests/system/test_backend_adoption.py",
+          "contract_digest": "7116f1709c23121d365be202453bc937d1582f31453bfce495d7618c479ebccb",
+          "status": "passing",
+          "claim": "Planning distribution returns the canonical validation, build, system-test, and packaging dependency order."
+        }
+      ],
       "escalations": []
     },
     {
       "id": "backend.generated_documentation",
       "title": "Implement manifest-gated generated documentation checks",
-      "status": "not_started",
+      "status": "complete",
       "owner": "compiler2",
       "execution_tier": "implementation",
-      "requirements": ["REQ-BUILD-DIST-001"],
-      "design_refs": ["docs/GENERATED_REFERENCE.md", "docs/BUILD.md", "docs/BACKEND_ADOPTION.md"],
-      "acceptance": ["The adapter generates or checks every declared document from implementation-backed inputs and fails when generated API, map, manual, or keyword output is stale."],
-      "acceptance_tests": [{"id": "backend_documentation_adapter_contract", "target": "tests/system/test_backend_adoption.py", "contract_digest": "7116f1709c23121d365be202453bc937d1582f31453bfce495d7618c479ebccb", "oracle": "The production documentation check exits successfully only when every declared document is current and traceable.", "required": true}],
-      "contract_approval": {"approved_by": "trusted", "contract_digest": "96c0f63fd9f4545b060d53a5cef974d58c10096a3222755cfaf8654c7efcdb5e", "review_evidence": "Trusted document inventory and production-check contract review."},
-      "depends_on": ["backend.build_adapter"],
-      "allowed_changes": ["tools/backend_adoption.py", "tools/generate_reference.py", "tools/generate_build_reports.py", "docs/**", "build.ps1"],
-      "evidence": [],
+      "requirements": [
+        "REQ-BUILD-DIST-001"
+      ],
+      "design_refs": [
+        "docs/GENERATED_REFERENCE.md",
+        "docs/BUILD.md",
+        "docs/BACKEND_ADOPTION.md"
+      ],
+      "acceptance": [
+        "The adapter generates or checks every declared document from implementation-backed inputs and fails when generated API, map, manual, or keyword output is stale."
+      ],
+      "acceptance_tests": [
+        {
+          "id": "backend_documentation_adapter_contract",
+          "target": "tests/system/test_backend_adoption.py",
+          "contract_digest": "7116f1709c23121d365be202453bc937d1582f31453bfce495d7618c479ebccb",
+          "oracle": "The production documentation check exits successfully only when every declared document is current and traceable.",
+          "required": true
+        }
+      ],
+      "contract_approval": {
+        "approved_by": "trusted",
+        "contract_digest": "96c0f63fd9f4545b060d53a5cef974d58c10096a3222755cfaf8654c7efcdb5e",
+        "review_evidence": "Trusted document inventory and production-check contract review."
+      },
+      "depends_on": [
+        "backend.build_adapter"
+      ],
+      "allowed_changes": [
+        "tools/backend_adoption.py",
+        "tools/generate_reference.py",
+        "tools/generate_build_reports.py",
+        "docs/**",
+        "build.ps1"
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "target": "tests/system/test_backend_adoption.py",
+          "contract_digest": "7116f1709c23121d365be202453bc937d1582f31453bfce495d7618c479ebccb",
+          "status": "passing",
+          "claim": "Every declared generated document matches its rendered production output."
+        }
+      ],
       "escalations": []
     },
     {
       "id": "backend.distribution",
       "title": "Implement deterministic end-user distribution verification",
-      "status": "not_started",
+      "status": "complete",
       "owner": "compiler2",
       "execution_tier": "implementation",
-      "requirements": ["REQ-BUILD-DIST-001"],
-      "design_refs": ["docs/BUILD.md", "docs/BACKEND_ADOPTION.md"],
-      "acceptance": ["The adapter packages only declared validated release artifacts, records content hashes, and proves two builds produce the same archive bytes."],
-      "acceptance_tests": [{"id": "backend_distribution_adapter_contract", "target": "tests/system/test_backend_adoption.py", "contract_digest": "7116f1709c23121d365be202453bc937d1582f31453bfce495d7618c479ebccb", "oracle": "The production distribution check validates required inputs, hashes, archive membership, and byte-for-byte reproducibility.", "required": true}],
-      "contract_approval": {"approved_by": "trusted", "contract_digest": "0e423446fd547d7ec955ea354c04b141a38c301dbfe4252d5c38fc5e37a5c788", "review_evidence": "Trusted distribution inventory and reproducibility contract review."},
-      "depends_on": ["backend.generated_documentation"],
-      "allowed_changes": ["tools/backend_adoption.py", "build.ps1", "docs/BUILD.md", "docs/BACKEND_ADOPTION.md"],
-      "evidence": [],
+      "requirements": [
+        "REQ-BUILD-DIST-001"
+      ],
+      "design_refs": [
+        "docs/BUILD.md",
+        "docs/BACKEND_ADOPTION.md"
+      ],
+      "acceptance": [
+        "The adapter packages only declared validated release artifacts, records content hashes, and proves two builds produce the same archive bytes."
+      ],
+      "acceptance_tests": [
+        {
+          "id": "backend_distribution_adapter_contract",
+          "target": "tests/system/test_backend_adoption.py",
+          "contract_digest": "7116f1709c23121d365be202453bc937d1582f31453bfce495d7618c479ebccb",
+          "oracle": "The production distribution check validates required inputs, hashes, archive membership, and byte-for-byte reproducibility.",
+          "required": true
+        }
+      ],
+      "contract_approval": {
+        "approved_by": "trusted",
+        "contract_digest": "0e423446fd547d7ec955ea354c04b141a38c301dbfe4252d5c38fc5e37a5c788",
+        "review_evidence": "Trusted distribution inventory and reproducibility contract review."
+      },
+      "depends_on": [
+        "backend.generated_documentation"
+      ],
+      "allowed_changes": [
+        "tools/backend_adoption.py",
+        "build.ps1",
+        "docs/BUILD.md",
+        "docs/BACKEND_ADOPTION.md"
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "target": "tests/system/test_backend_adoption.py",
+          "contract_digest": "7116f1709c23121d365be202453bc937d1582f31453bfce495d7618c479ebccb",
+          "status": "passing",
+          "claim": "The declared distribution archive contains required hashed inputs and is byte-for-byte reproducible across two builds."
+        }
+      ],
       "escalations": []
     },
     {
@@ -206,29 +330,48 @@
       "status": "complete",
       "owner": "compiler2",
       "execution_tier": "trusted",
-      "requirements": ["REQ-SKELETON-001"],
-      "design_refs": ["SKELETON.md", "manifests/routines.json", "manifests/backend/skeleton-readiness.json"],
-      "acceptance": ["Every authoritative routine record is represented exactly once with its design references and acceptance-test IDs; no source is generated."],
-      "acceptance_tests": [{
-        "id": "backend_skeleton_contract",
-        "target": "tests/system/test_backend_adoption.py",
-        "contract_digest": "7116f1709c23121d365be202453bc937d1582f31453bfce495d7618c479ebccb",
-        "oracle": "The authoritative routine inventory and deterministic Backend renderer must match exactly.",
-        "required": true
-      }],
+      "requirements": [
+        "REQ-SKELETON-001"
+      ],
+      "design_refs": [
+        "SKELETON.md",
+        "manifests/routines.json",
+        "manifests/backend/skeleton-readiness.json"
+      ],
+      "acceptance": [
+        "Every authoritative routine record is represented exactly once with its design references and acceptance-test IDs; no source is generated."
+      ],
+      "acceptance_tests": [
+        {
+          "id": "backend_skeleton_contract",
+          "target": "tests/system/test_backend_adoption.py",
+          "contract_digest": "7116f1709c23121d365be202453bc937d1582f31453bfce495d7618c479ebccb",
+          "oracle": "The authoritative routine inventory and deterministic Backend renderer must match exactly.",
+          "required": true
+        }
+      ],
       "contract_approval": {
         "approved_by": "trusted",
         "contract_digest": "ecda6d95f5aaee972e68c32ca1d167682898decaae728c8648dae378c3cd8940",
         "review_evidence": "Trusted conversion of all 405 authoritative routine records into the Backend skeleton profile."
       },
-      "depends_on": ["backend.governance_contract"],
-      "allowed_changes": ["manifests/backend/skeleton-profile.json", "manifests/backend/skeleton-readiness.json", "tests/**", "tools/generate_backend_skeleton_snapshot.py"],
-      "evidence": [{
-        "kind": "test",
-        "target": "tests/system/test_backend_adoption.py",
-        "status": "passing",
-        "claim": "All 405 authoritative routine records map exactly once to a complete Backend skeleton contract."
-      }],
+      "depends_on": [
+        "backend.governance_contract"
+      ],
+      "allowed_changes": [
+        "manifests/backend/skeleton-profile.json",
+        "manifests/backend/skeleton-readiness.json",
+        "tests/**",
+        "tools/generate_backend_skeleton_snapshot.py"
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "target": "tests/system/test_backend_adoption.py",
+          "status": "passing",
+          "claim": "All 405 authoritative routine records map exactly once to a complete Backend skeleton contract."
+        }
+      ],
       "escalations": []
     },
     {
@@ -237,29 +380,47 @@
       "status": "complete",
       "owner": "compiler2",
       "execution_tier": "trusted",
-      "requirements": ["REQ-SKELETON-001"],
-      "design_refs": ["manifests/backend/skeleton-profile.json", "docs/BACKEND_GOVERNANCE_AND_TESTING.md#test-discipline"],
-      "acceptance": ["Every skeleton entry has trusted tests, ABI, errors, clobbers, zero-page use, side effects, requirements, and design references before generation."],
-      "acceptance_tests": [{
-        "id": "backend_skeleton_contract",
-        "target": "tests/system/test_backend_adoption.py",
-        "contract_digest": "7116f1709c23121d365be202453bc937d1582f31453bfce495d7618c479ebccb",
-        "oracle": "The authoritative routine inventory and deterministic Backend renderer must match exactly.",
-        "required": true
-      }],
+      "requirements": [
+        "REQ-SKELETON-001"
+      ],
+      "design_refs": [
+        "manifests/backend/skeleton-profile.json",
+        "docs/BACKEND_GOVERNANCE_AND_TESTING.md#test-discipline"
+      ],
+      "acceptance": [
+        "Every skeleton entry has trusted tests, ABI, errors, clobbers, zero-page use, side effects, requirements, and design references before generation."
+      ],
+      "acceptance_tests": [
+        {
+          "id": "backend_skeleton_contract",
+          "target": "tests/system/test_backend_adoption.py",
+          "contract_digest": "7116f1709c23121d365be202453bc937d1582f31453bfce495d7618c479ebccb",
+          "oracle": "The authoritative routine inventory and deterministic Backend renderer must match exactly.",
+          "required": true
+        }
+      ],
       "contract_approval": {
         "approved_by": "trusted",
         "contract_digest": "c94e5968146e81162f5b2c3b9e904a02876caa083ac4c6d05bc21987db2d7f06",
         "review_evidence": "Trusted review sealed routine identity, module ownership, ABI, fail-closed behavior, and test traceability."
       },
-      "depends_on": ["backend.skeleton_inventory_conversion"],
-      "allowed_changes": ["manifests/backend/skeleton-profile.json", "tests/**", "docs/BACKEND_ADOPTION.md", "tools/generate_backend_skeleton_snapshot.py"],
-      "evidence": [{
-        "kind": "test",
-        "target": "tests/system/test_backend_adoption.py",
-        "status": "passing",
-        "claim": "The trusted skeleton contract test proves complete ABI and test traceability before generation."
-      }],
+      "depends_on": [
+        "backend.skeleton_inventory_conversion"
+      ],
+      "allowed_changes": [
+        "manifests/backend/skeleton-profile.json",
+        "tests/**",
+        "docs/BACKEND_ADOPTION.md",
+        "tools/generate_backend_skeleton_snapshot.py"
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "target": "tests/system/test_backend_adoption.py",
+          "status": "passing",
+          "claim": "The trusted skeleton contract test proves complete ABI and test traceability before generation."
+        }
+      ],
       "escalations": []
     },
     {
@@ -268,23 +429,40 @@
       "status": "complete",
       "owner": "compiler2",
       "execution_tier": "trusted",
-      "requirements": ["REQ-SKELETON-001"],
-      "design_refs": ["manifests/backend/skeleton-profile.json", "manifests/backend/skeleton-readiness.json"],
-      "acceptance": ["This remains the final task; trusted generation creates only new fail-closed skeleton files and never overwrites production source."],
-      "acceptance_tests": [{
-        "id": "backend_skeleton_contract",
-        "target": "tests/system/test_backend_adoption.py",
-        "contract_digest": "7116f1709c23121d365be202453bc937d1582f31453bfce495d7618c479ebccb",
-        "oracle": "The authoritative routine inventory and deterministic Backend renderer must match exactly.",
-        "required": true
-      }],
+      "requirements": [
+        "REQ-SKELETON-001"
+      ],
+      "design_refs": [
+        "manifests/backend/skeleton-profile.json",
+        "manifests/backend/skeleton-readiness.json"
+      ],
+      "acceptance": [
+        "This remains the final task; trusted generation creates only new fail-closed skeleton files and never overwrites production source."
+      ],
+      "acceptance_tests": [
+        {
+          "id": "backend_skeleton_contract",
+          "target": "tests/system/test_backend_adoption.py",
+          "contract_digest": "7116f1709c23121d365be202453bc937d1582f31453bfce495d7618c479ebccb",
+          "oracle": "The authoritative routine inventory and deterministic Backend renderer must match exactly.",
+          "required": true
+        }
+      ],
       "contract_approval": {
         "approved_by": "trusted",
         "contract_digest": "9616507a6d8f6eb8e4a952b2cc364269b21f0326d4d79686a534b8a11a90e47a",
         "review_evidence": "Trusted final generation produced the isolated tracked design-review snapshot without changing production source."
       },
-      "depends_on": ["backend.skeleton_acceptance"],
-      "allowed_changes": ["generated/backend-skeletons/**", "manifests/backend/**", "docs/BACKEND_ADOPTION.md", "tests/system/test_backend_adoption.py", "tools/generate_backend_skeleton_snapshot.py"],
+      "depends_on": [
+        "backend.skeleton_acceptance"
+      ],
+      "allowed_changes": [
+        "generated/backend-skeletons/**",
+        "manifests/backend/**",
+        "docs/BACKEND_ADOPTION.md",
+        "tests/system/test_backend_adoption.py",
+        "tools/generate_backend_skeleton_snapshot.py"
+      ],
       "evidence": [
         {
           "kind": "artifact",

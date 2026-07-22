@@ -30,12 +30,13 @@ The compressor provides:
 The compressor version is recorded in `build_manifest.json` alongside the
 cc65 toolchain versions.
 
-VICE Next supplies the supervised emulator runtime. Configure its executables
-explicitly (for example ``VICE_X64SC`` and ``VICE_XPLUS4``). The instrumented
-runtime currently available to this project is:
+VICE Next supplies the supervised emulator runtime. Set `VICE_NEXT_RUNTIME` to
+the directory containing its executables. The Windows runtime verified on
+2026-07-22 comes from release `v3.10-instrumented-20260722-nmi.1` (archive
+SHA-256 `f8ab4106d6d86757a59eb34a73b7912ab311ba71badc28b45f4a999bfa1a0a38`):
 
 ```text
-C:\Users\me\Documents\Coding Projects\builds\vice-instrumentation-windows\extracted\src
+C:\Users\me\Downloads\vice-instrumentation-29898426510\windows-extracted\HeadlessVICE-3.10-win64-rnone
 ```
 
 The runtime provides `x64sc.exe` and `xplus4.exe`. Packaging uses its

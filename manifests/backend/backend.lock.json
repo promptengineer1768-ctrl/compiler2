@@ -3,7 +3,7 @@
   "schema_epoch": 1,
   "consumer": "compiler2",
   "framework_version": "0.1.0-dev",
-  "framework_revision": "b6c5d2d3d6565ff0e9e0cc1aa26458e1d3197ee0",
+  "framework_revision": "fea25498a6b2c5e152197c4a3f990c25c6a5558a",
   "generator_version": "0.1.0-dev",
   "inputs": {
     "manifests/backend/basic-return-c64.json": "sha256:295c23140c9582b40e2ac7f1c6e8e9623dc5bf4851c5db2e3c0137a4530c8a30",
@@ -16,8 +16,8 @@
     "manifests/backend/documentation-profile.json": "sha256:7c5c3f058e6315361833cb47ac00001fcbdcd48cb2d1b91d64f4923d0ba41844",
     "manifests/backend/distribution-profile.json": "sha256:ca3118483a69562991e876062a7b1cd43628712e0bec7fae014c063e384efad5",
     "manifests/backend/skeleton-profile.json": "sha256:3c8ddb56785d8471fca1d0495d7db2f5a80355f7b61bf851b5d4ff8293e44d08",
-    "manifests/backend/adoption-tasks.json": "sha256:a84a5650de7fcba26396c358c9394432cf3c3a521346257bcfa080b2ae1f37fb",
-    "manifests/backend/readiness.json": "sha256:fa0b36fcd73bca1ff37f1a95be4af3bfbf08cad2bb921d3b2a81cedf90741c42",
+    "manifests/backend/adoption-tasks.json": "sha256:2462e5229adeca746844d0d6db24a6e4f3decb79be94a493f8e74c0fa57fa7bd",
+    "manifests/backend/readiness.json": "sha256:fc06fbd5a42bfef66ec0755584d8c00227f3081131b4dde3a1672ea9c38c3818",
     "manifests/backend/testing-profile.json": "sha256:78c8d390ae00782c045e724b9cf818ecf135a2b7867d2a91d14ba17883e53ecf",
     "manifests/backend/skeleton-readiness.json": "sha256:818e6ccda301927b2bcfbe4797688c4ef22998bf7d198a172548b6ebd2ab57b7",
     "manifests/backend/target-profile.json": "sha256:8ded0211f08205a9ee24ce698782ed2f046031dcedcc6125fe3b617676673e36"

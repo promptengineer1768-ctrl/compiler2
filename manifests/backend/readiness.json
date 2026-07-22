@@ -2,7 +2,7 @@
   "$schema": "../../../backend/schemas/consumer-readiness.schema.json",
   "schema_epoch": 1,
   "consumer": "compiler2",
-  "backend_revision": "b6c5d2d3d6565ff0e9e0cc1aa26458e1d3197ee0",
+  "backend_revision": "fea25498a6b2c5e152197c4a3f990c25c6a5558a",
   "governance": {
     "requirements": "REQUIREMENTS.md",
     "design": "DESIGN.md",
