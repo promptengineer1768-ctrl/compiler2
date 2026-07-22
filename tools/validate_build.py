@@ -559,6 +559,8 @@ def validate_backend_adoption(project_root: Path) -> list[str]:
         manifest_root / "low-memory-plus4.json",
         manifest_root / "basic-return-c64.json",
         manifest_root / "basic-return-plus4.json",
+        manifest_root / "math-profile.json",
+        manifest_root / "numeric-type-profile.json",
     )
     errors: list[str] = []
     for path in adopted_paths:
@@ -1023,9 +1025,7 @@ def validate_expansion_contracts(build_dir: str | Path = "build") -> list[str]:
             "REU layout routine_records disagree with linked geoRAM dual placements"
         )
     if reu_layout.get("routine_record_count") != len(expected_dual):
-        errors.append(
-            "REU layout routine_record_count disagrees with dual placements"
-        )
+        errors.append("REU layout routine_record_count disagrees with dual placements")
 
     if isinstance(dual_records, list):
         for record in dual_records:
@@ -1038,7 +1038,10 @@ def validate_expansion_contracts(build_dir: str | Path = "build") -> list[str]:
                     f"REU dual record missing reu half: {record.get('routine_name')}"
                 )
                 continue
-            if reu_half.get("execution_status") != expansion_contracts.EXECUTION_NOT_LIVE:
+            if (
+                reu_half.get("execution_status")
+                != expansion_contracts.EXECUTION_NOT_LIVE
+            ):
                 errors.append(
                     "patch-only REU dual record claims live execution: "
                     f"{record.get('routine_name')}"

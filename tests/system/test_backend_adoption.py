@@ -23,6 +23,8 @@ from backend_framework.low_memory import (  # noqa: E402
     LowMemoryRegion,
     plan_low_memory,
 )
+from backend_framework.math import select_math  # noqa: E402
+from backend_framework.numeric_types import promoted_type  # noqa: E402
 from backend_framework.validation.manifests import (  # noqa: E402
     validate_manifest,
 )
@@ -33,6 +35,8 @@ ADOPTED = (
     "low-memory-plus4.json",
     "basic-return-c64.json",
     "basic-return-plus4.json",
+    "math-profile.json",
+    "numeric-type-profile.json",
 )
 
 
@@ -62,7 +66,7 @@ def _regions(profile: dict[str, Any]) -> tuple[LowMemoryRegion, ...]:
 def test_backend_revision_and_adopted_inputs_are_locked() -> None:
     """The sibling revision and every adopted input must match the lock."""
     lock = _load("backend.lock.json")
-    assert lock["framework_revision"] == "9283738083403e3f4282a99a0b47c096d552ee45"
+    assert lock["framework_revision"] == "3a3eb1908871553a02cc2ea8c22f81ba2c57b91f"
     verify_lock(lock, ROOT)
     assert set(lock["inputs"]) == {f"manifests/backend/{name}" for name in ADOPTED}
 
@@ -115,3 +119,24 @@ def test_profiles_do_not_claim_unimplemented_smc_or_plus4_production() -> None:
     assert target["extensions"]["smc_adoption"].startswith("requires_")
     plus4_return = _load("basic-return-plus4.json")
     assert plus4_return["extensions"]["production_target"] is False
+
+
+@pytest.mark.system
+def test_numeric_tags_are_preserved_and_new_ieee_provider_remains_planned() -> None:
+    """INT1/2/3 stay stable while nc256 replacement retains its proof gate."""
+    types = _load("numeric-type-profile.json")
+    assert promoted_type(types, "int1", "int2") == "int2"
+    assert {item["id"]: item["tag"] for item in types["types"]} == {
+        "int1": 1,
+        "int2": 2,
+        "int3": 3,
+        "float": 4,
+    }
+    catalog = json.loads(
+        (BACKEND_ROOT / "manifests/math-catalog.json").read_text("utf-8")
+    )
+    selected = select_math(catalog, _load("math-profile.json"))
+    assert {item.provider for item in selected} == {"arithmetic"}
+    assert _load("math-profile.json")["extensions"]["migration"].startswith(
+        "floatlib nc256 deprecated"
+    )
