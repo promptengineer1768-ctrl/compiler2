@@ -31,11 +31,23 @@ review.
 
 `.github/workflows/backend-consumer-ci.yml` is the first remote-consumer proof
 adapter. It checks out the Backend repository at the lock revision, builds and tests
-Compiler 2 on `windows-2022`, writes JUnit plus a JSON run summary, and publishes
+Compiler 2 on `ubuntu-latest`, writes JUnit plus a JSON run summary, and publishes
 separate downloadable artifacts for binaries/disks, manuals/generated references,
 the distribution bundle, and test reports. The Backend repository is an explicit
 workflow-dispatch input so the trusted publisher controls the remote used for the
-proof. Actions are pinned by commit digest and workflow permissions are read-only.
+proof. Actions and the source-built cc65 V2.19 toolchain are pinned by commit digest,
+the instrumented VICE archive is pinned by SHA-256, and workflow permissions are
+read-only. The Linux release build records the VICE benchmark as unmeasured because
+the current instrumented runtime closes its monitor connection on resume; local and
+hardware proving builds retain the measured path and may not invent a passing result.
+
+The first successful public-consumer proof is GitHub Actions run `29887249845` for
+Compiler 2 commit `5dd04f776a5e479074720fc250933f28eb395f98` and Backend commit
+`b6c5d2d3d6565ff0e9e0cc1aa26458e1d3197ee0`. Its downloaded JUnit report contains
+47 tests with zero failures, errors, or skips. Independent post-download validation
+checked all nine distribution-manifest payload hashes, all ten ZIP members, and ZIP
+CRC integrity. The readiness ZIP SHA-256 is
+`bbba1d983c07c5a0b0add3b6541b5dbd207baec109a8761adb15f13ad8c67822`.
 
 Skeleton generation is intentionally absent from CI. The trusted profile converts all
 405 authoritative routine records and the final trusted task renders a tracked,
