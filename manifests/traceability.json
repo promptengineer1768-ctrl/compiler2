@@ -10,7 +10,7 @@
       "id": "R2",
       "ears": "The system shall provide the Compiler 2 product, installation path, and interactive environment defined by the product requirements.",
       "source_section": "REQUIREMENTS.md#2",
-      "design_section": "DESIGN2.md",
+      "design_section": "DESIGN.md",
       "implementation": "src/geoasm/loader_core.asm",
       "tests": ["test_loader", "test_loader_core"],
       "status": "planned"
@@ -28,7 +28,7 @@
       "id": "R3",
       "ears": "The system shall implement the documented BASIC language profiles with stock-compatible semantics where compatibility is required.",
       "source_section": "REQUIREMENTS.md#3",
-      "design_section": "DESIGN2.md",
+      "design_section": "DESIGN.md",
       "implementation": "src/geoasm/compiler_pipeline.asm",
       "tests": ["test_e2e_basicv2_functions", "test_e2e_basicv35_functions"],
       "status": "planned"
@@ -76,7 +76,7 @@
       "id": "R5",
       "ears": "When a tokenized program is loaded, stored, or saved, the system shall preserve the documented Commodore program format.",
       "source_section": "REQUIREMENTS.md#5",
-      "design_section": "DESIGN2.md",
+      "design_section": "DESIGN.md",
       "implementation": "src/geoasm/program_codec.asm",
       "tests": ["test_program_codec", "test_program_lifecycle"],
       "status": "planned"
@@ -112,7 +112,7 @@
       "id": "R7",
       "ears": "The system shall manage compiler and runtime memory through the documented arenas, handles, and lifetime rules.",
       "source_section": "REQUIREMENTS.md#7",
-      "design_section": "DESIGN2.md",
+      "design_section": "DESIGN.md",
       "implementation": "src/arena/arena_core.asm",
       "tests": ["test_arena_core"],
       "status": "planned"
@@ -253,10 +253,20 @@
       "status": "planned"
     },
     {
+      "id": "R11.1",
+      "ears": "When the Noels Retro Lab benchmark is run in clean NTSC VICE, the system shall execute the installed compiled artifact, match the required output, and record a timing comparison with the stock C64 BASIC V2 reference.",
+      "source_section": "REQUIREMENTS.md#11.1",
+      "design_section": "DESIGN.md#11.1",
+      "implementation": "tests/e2e/test_noels_retro_lab.py",
+      "tests": ["test_noels_retro_lab_runs_in_memory_from_installed_editor"],
+      "reference_fixture_provenance": "tests/performance",
+      "status": "planned"
+    },
+    {
       "id": "R12",
       "ears": "If a recoverable or fatal error occurs, the system shall expose deterministic diagnostics and preserve the documented recovery behavior.",
       "source_section": "REQUIREMENTS.md#12",
-      "design_section": "DESIGN2.md",
+      "design_section": "DESIGN.md",
       "implementation": "src/geoasm/diagnostics.asm",
       "tests": ["test_diagnostics", "test_fatal"],
       "status": "planned"
@@ -268,7 +278,7 @@
       "design_section": "docs/BUILD.md",
       "implementation": "build.ps1",
       "tests": ["test_build_validation", "test_validate_build"],
-      "status": "passing"
+      "status": "planned"
     },
     {
       "id": "R13",
@@ -277,7 +287,7 @@
       "design_section": "docs/TESTING.md",
       "implementation": "tests",
       "tests": ["test_smoke_selection", "test_test_harness"],
-      "status": "passing"
+      "status": "planned"
     },
     {
       "id": "R13.1",

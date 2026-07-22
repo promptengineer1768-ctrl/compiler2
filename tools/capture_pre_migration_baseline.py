@@ -28,7 +28,7 @@ SOURCE_INPUTS = (
     "docs",
     "build.ps1",
     "REQUIREMENTS.md",
-    "DESIGN2.md",
+    "DESIGN.md",
     "REU_REQUIREMENTS.md",
     "REU_DESIGN.md",
 )

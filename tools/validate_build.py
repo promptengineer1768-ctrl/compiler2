@@ -70,7 +70,7 @@ def _build_input_paths(project_root: Path) -> list[Path]:
         for path in (
             project_root / "build.ps1",
             project_root / "REQUIREMENTS.md",
-            project_root / "DESIGN2.md",
+            project_root / "DESIGN.md",
             project_root / "REU_REQUIREMENTS.md",
             project_root / "REU_DESIGN.md",
         )

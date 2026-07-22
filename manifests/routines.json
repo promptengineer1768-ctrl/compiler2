@@ -8666,7 +8666,7 @@
       "irq_safe": false,
       "irq_masked_ok": false,
       "calls": [],
-      "side_effects": "Includes all generations named by `DESIGN2.md` §6.2",
+      "side_effects": "Includes all generations named by `DESIGN.md` §6.2",
       "size_ceiling": 256,
       "arena_handles_read": [],
       "arena_handles_written": []

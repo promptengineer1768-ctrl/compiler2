@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import time
+import hashlib
 from pathlib import Path
 from typing import Any, Final
 
@@ -11,6 +12,7 @@ from tests.e2e.reference_fixtures import load_reference
 
 ROOT: Final = Path(__file__).resolve().parents[2]
 DISK: Final = ROOT / "build" / "compiler.d64"
+WARM_SNAPSHOT_DIR: Final = ROOT / "debug" / "vice-warm"
 KEY_QUEUE: Final = 0x0277
 KEY_COUNT: Final = 0x00C6
 # Project editor ZP / BSS (from build/compiler.lbl; keep in sync if relocated).
@@ -264,13 +266,24 @@ def _boot_product(vice: Any, machine: Any) -> str:
     raise TimeoutError(f"product READY not reached:\n{last}")
 
 
+def _product_snapshot_path() -> Path:
+    """Return the artifact-keyed warm-state snapshot shared by E2E workers."""
+    digest = hashlib.sha256(DISK.read_bytes()).hexdigest()[:16]
+    return WARM_SNAPSHOT_DIR / f"compiler2-product-basicv2-{digest}.vsf"
+
+
+def _product_ready(vice: Any, machine: Any) -> bool:
+    """Return whether a cold boot or restored snapshot reached product READY."""
+    return "BASIC V3 READY" in vice.screen_text(machine)
+
+
 def run_product_cell(cell: dict[str, Any], *, port: int = 6700) -> dict[str, Any]:
     """Execute one matrix cell on Compiler 2 and return observation record.
 
     Returns:
         Dict with keys: actual, screen, mode, error (optional).
     """
-    from vice_harness import MACHINES, running_vice
+    from vice_harness import MACHINES, running_warm_vice
 
     if not DISK.exists():
         raise FileNotFoundError(f"missing product disk: {DISK}")
@@ -284,12 +297,14 @@ def run_product_cell(cell: dict[str, Any], *, port: int = 6700) -> dict[str, Any
     if not source_lines:
         raise ValueError(f"cell {cell.get('cell_id')} has no source_lines")
 
-    with running_vice(
+    with running_warm_vice(
         machine,
-        port=port,
+        _product_snapshot_path(),
+        lambda vice: _boot_product(vice, machine),
+        lambda vice: _product_ready(vice, machine),
         extra_args=("-georam", "-georamsize", "512", "-8", str(DISK)),
     ) as vice:
-        _boot_product(vice, machine)
+        del port  # Supervisor leases unique monitor ports for every worker.
         if mode == "immediate":
             for line in source_lines:
                 _paint_and_return(vice, machine, line)

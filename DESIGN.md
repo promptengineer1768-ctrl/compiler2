@@ -1272,6 +1272,17 @@ C64 BASIC V2; BASIC 3.5 against stock Plus/4 BASIC 3.5, normalized by cycles
 because clock speeds differ). There is no compiled-speed requirement for IEEE
 extensions, the editor, or DOS wedge commands.
 
+### 11.1 Noels Retro Lab End-to-End Gate (R11.1)
+
+`tests/performance/noels_retro_lab_cbm_v2.bas` is retained unchanged as the
+integration-scale performance contract. The VICE test loads it through the
+installed editor, invokes `RUN`, proves that the installed compiled artifact
+executed rather than an editor/interpreter fallback, checks the ten dots,
+`500500`, and `E` output, and records the artifact fingerprint plus `TI`
+jiffies. The result is compared with the versioned 2,388-jiffy stock C64 BASIC
+V2 reference in clean NTSC VICE. This gate exercises the normal production
+path; generated native fixtures and prefilled timing data are invalid evidence.
+
 Every optimized form is differential-tested against the generic path in the
 local emulator, against stock BASIC V2/3.5 where the syntax is stock, and
 against VICE for IRQ/STOP/timer/banking behavior, covering positive/negative/
@@ -1669,7 +1680,7 @@ than a stock VICE reference, since no stock ROM implements this surface.
 ## 18. Document Map
 
 ```text
-DESIGN2.md                       (this file — top-level architecture/index)
+DESIGN.md                       (this file — top-level architecture/index)
 REQUIREMENTS.md                  (common product requirements)
 REU_REQUIREMENTS.md              (dual-device / REU EARS requirements)
 REU_DESIGN.md                    (dual-device + REU detailed design)

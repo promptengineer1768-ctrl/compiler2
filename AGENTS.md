@@ -12,8 +12,8 @@ contracts here.
 **Design is the source of truth for architecture.** Normative order:
 
 1. `REQUIREMENTS.md` (and `REU_REQUIREMENTS.md` for dual-device expansion)
-2. `DESIGN2.md` (and `REU_DESIGN.md` for dual-device / REU detail)
-3. focused docs under `docs/` that `DESIGN2.md` points to
+2. `DESIGN.md` (and `REU_DESIGN.md` for dual-device / REU detail)
+3. focused docs under `docs/` that `DESIGN.md` points to
 4. manifests, generated contracts, and production source
 
 When documents disagree, requirements win over design prose; design wins over
@@ -242,7 +242,7 @@ Do not:
 - enlarge the production ABI solely to expose state to tests;
 - claim integration or E2E coverage when production stages are bypassed;
 - mark verification tasks complete without running their documented commands;
-- infer completion from existing `[x]` markers in `TASKS.md`.
+- infer completion from existing `[x]` markers in generated task Markdown.
 
 If a temporary scaffold is necessary, mark the owning task `[~]`, document the
 missing behavior, and keep an authoritative failing test for it.
@@ -300,7 +300,36 @@ Every discovered defect must produce:
 Tests must detect recurrence independently. One broad happy-path test is not a
 substitute for root-cause coverage.
 
-### TASKS.md Status Rules
+### Task Manifest Status and Completion Rules
+
+`manifests/tasks.json` is the formal source of truth for task state and
+completion evidence. `TASKS.md` and `REU_TASKS.md` are generated views: never
+edit their checkboxes directly. Read `docs/TASKS_MANIFEST.md` before changing
+task status.
+
+To check current task state, run:
+
+```powershell
+& $PYTHON tools/task_manifest.py validate
+```
+
+To update a task, change its matching `tasks[]` record in
+`manifests/tasks.json`, retain its `requirements` and `design_refs`, add
+evidence records, then regenerate and validate:
+
+```powershell
+& $PYTHON tools/task_manifest.py render
+& $PYTHON tools/task_manifest.py validate
+```
+
+An `"x"` task requires at least one passing machine-readable evidence record
+and no failing, missing, stale, skipped, or invalidated evidence. Each record
+must state its `kind`, machine-addressable `target`, `status`, and the exact
+`claim` it proves. Use one record per test, artifact, public symbol, command,
+or VICE run; do not collapse several assertions into an unverifiable prose
+claim. The validator rejects stale generated Markdown, duplicate task IDs, and
+unsupported completion states. It also rejects an unanchored task or a
+traceability requirement with no owning task.
 
 Treat every existing status as untrusted until verified.
 

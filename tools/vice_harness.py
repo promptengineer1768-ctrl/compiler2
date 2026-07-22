@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import struct
 import sys
 import time
@@ -11,7 +12,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Callable, Final
 
 ROOT: Final = Path(__file__).resolve().parents[1]
 VICE_NEXT_ROOT: Final = ROOT.parent / "tools" / "vice-next-mcp"
@@ -256,13 +257,26 @@ class ViceMCP:
             raise ValueError("RESTORE action must be press or release")
         monitor = self._bound().monitor
         assert monitor is not None
-        monitor.keyboard_matrix(-3, 0, action == "press")
+        monitor.keyboard_restore(action == "press")
 
     def autostart(self, path: Path, *, run: bool = True) -> None:
         """Load a PRG or disk image through native autostart."""
         monitor = self._bound().monitor
         assert monitor is not None
         _autostart(monitor, path, run=run)
+
+    def snapshot_save(self, path: Path) -> None:
+        """Save this exact emulator state to a caller-owned snapshot path."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        monitor = self._bound().monitor
+        assert monitor is not None
+        monitor.dump(path)
+
+    def snapshot_load(self, path: Path) -> None:
+        """Restore one caller-owned snapshot into this isolated instance."""
+        monitor = self._bound().monitor
+        assert monitor is not None
+        monitor.undump(path)
 
     def submit_command(
         self,
@@ -365,6 +379,98 @@ def running_vice(
         yield client
     finally:
         supervisor.close()
+
+
+@contextmanager
+def _snapshot_lock(path: Path, timeout: float = 180.0) -> Iterator[None]:
+    """Serialize cold creation of one reusable warm snapshot across workers."""
+    lock = path.with_suffix(path.suffix + ".lock")
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            try:
+                owner = int(lock.read_text(encoding="ascii").strip())
+                os.kill(owner, 0)
+            except (FileNotFoundError, ProcessLookupError, ValueError):
+                lock.unlink(missing_ok=True)
+                continue
+            except PermissionError:
+                pass
+            try:
+                if time.time() - lock.stat().st_mtime > timeout:
+                    lock.unlink(missing_ok=True)
+                    continue
+            except FileNotFoundError:
+                continue
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f"timed out waiting for warm snapshot {path}")
+            time.sleep(0.1)
+            continue
+        os.write(descriptor, str(os.getpid()).encode("ascii"))
+        os.close(descriptor)
+        try:
+            yield
+        finally:
+            lock.unlink(missing_ok=True)
+        return
+
+
+def _private_snapshot_path(snapshot: Path) -> Path:
+    """Return a worker-private snapshot copy safe for parallel UNDUMP calls."""
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "master")
+    safe_worker = "".join(char if char.isalnum() else "_" for char in worker)
+    return snapshot.with_name(
+        f"{snapshot.stem}.{safe_worker}.{os.getpid()}.{time.time_ns()}{snapshot.suffix}"
+    )
+
+
+@contextmanager
+def running_warm_vice(
+    machine: ViceMachine,
+    snapshot: Path,
+    prepare: Callable[[ViceMCP], object],
+    ready: Callable[[ViceMCP], bool],
+    *,
+    startup_timeout: float = 15.0,
+    extra_args: tuple[str, ...] = (),
+) -> Iterator[ViceMCP]:
+    """Start an isolated instance from a verified, build-keyed warm snapshot.
+
+    Exactly one xdist worker cold-boots and publishes the snapshot atomically.
+    Every consumer restores a private copy, preventing VICE snapshot races while
+    preserving parallel execution after the warm state is available.
+    """
+    snapshot.parent.mkdir(parents=True, exist_ok=True)
+    private = _private_snapshot_path(snapshot)
+    with running_vice(
+        machine, startup_timeout=startup_timeout, extra_args=extra_args
+    ) as client:
+        try:
+            if snapshot.exists():
+                shutil.copy2(snapshot, private)
+                client.snapshot_load(private)
+            else:
+                with _snapshot_lock(snapshot):
+                    if snapshot.exists():
+                        shutil.copy2(snapshot, private)
+                        client.snapshot_load(private)
+                    else:
+                        prepare(client)
+                        if not ready(client):
+                            raise RuntimeError(
+                                "cold VICE boot did not reach verified warm state"
+                            )
+                        temporary = private.with_suffix(".tmp")
+                        client.snapshot_save(temporary)
+                        os.replace(temporary, snapshot)
+                        shutil.copy2(snapshot, private)
+            if not ready(client):
+                raise RuntimeError("restored VICE warm snapshot is not ready")
+            yield client
+        finally:
+            private.unlink(missing_ok=True)
 
 
 def _address(value: object) -> int:

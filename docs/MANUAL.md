@@ -1,7 +1,7 @@
 # BASIC V3 User Manual
 
 > Status: user-facing language reference for Compiler 2.
-> `../REQUIREMENTS.md` is the compatibility authority; `../DESIGN2.md` and
+> `../REQUIREMENTS.md` is the compatibility authority; `../DESIGN.md` and
 > `COMPILER_ARCHITECTURE.md` are architecture authorities. Entries here do not
 > prove implementation status unless the requirements matrix and tests also
 > mark them implemented.

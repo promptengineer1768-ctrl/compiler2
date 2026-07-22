@@ -5,7 +5,7 @@ design responsibility to a checked-in manifest, assembly module, host tool,
 generated artifact, and test layer. It is not itself an implementation: a row
 in a routine table is an obligation, not evidence that the behavior exists.
 
-**Authority:** `REQUIREMENTS.md` / `REU_REQUIREMENTS.md`, then `DESIGN2.md` /
+**Authority:** `REQUIREMENTS.md` / `REU_REQUIREMENTS.md`, then `DESIGN.md` /
 `REU_DESIGN.md`, then focused `docs/`. This skeleton must not invent architecture
 or reintroduce a geoRAM-only product model. Generated manifests are the source
 of truth for concrete addresses, IDs, ABI records, and sizes; prose here must
@@ -16,7 +16,7 @@ not duplicate generated values as if they were current output.
 ### 0.1 Design-audit demotions (2026-07-09) and re-implementation (2026-07-15)
 
 After the dual-device / QUIT / SAVE-token / COMPILE-layout design lock, production
-code was audited against `REQUIREMENTS.md` and `DESIGN2.md`. Modules that
+code was audited against `REQUIREMENTS.md` and `DESIGN.md`. Modules that
 claimed completeness under an older model were **reverted to SKELETON**, then
 re-implemented on 2026-07-15 for Phases 2–6 (non-VICE). Later-phase items remain
 open.
@@ -1347,7 +1347,7 @@ Dependency fingerprints, dirty repair, and atomic source/compiled publication.
 
 | Routine | In | Out | Clob | Side | Purpose |
 |---|---|---|---|---|---|
-| `incremental_fingerprint` | X/Y=source and dependency record | X/Y=fingerprint handle | A X Y | Includes all generations named by `DESIGN2.md` §6.2 | Cache key |
+| `incremental_fingerprint` | X/Y=source and dependency record | X/Y=fingerprint handle | A X Y | Includes all generations named by `DESIGN.md` §6.2 | Cache key |
 | `incremental_mark_dependents` | X/Y=edit descriptor | X/Y=dirty-set handle, C=error | A X Y | Tracks branch, DATA, loop, subroutine, variable, layout effects | Structural invalidation |
 | `incremental_resolve_dirty` | X/Y=transaction/dirty set | C=error | A X Y | Recompiles or relinks every required record | No interpreter fallback |
 | `incremental_publish` | X/Y=validated source/code transaction | X/Y=new generation record, C=error | A X Y | Atomically swaps both roots and image checksum | Publication rule |

@@ -33,10 +33,10 @@ CURRENT_PLACEMENT_BY_LAYER = {
     "geoasm": "expansion_xip",
 }
 XIP_ANCHOR = (
-    "REQUIREMENTS.md §7.2 and §8; DESIGN2.md §8; "
+    "REQUIREMENTS.md §7.2 and §8; DESIGN.md §8; "
     "docs/COMPILER_ARCHITECTURE.md §2"
 )
-RESIDENT_ANCHOR = "REQUIREMENTS.md §8; DESIGN2.md §8"
+RESIDENT_ANCHOR = "REQUIREMENTS.md §8; DESIGN.md §8"
 
 
 def _current_placement(routine: dict[str, Any]) -> str:

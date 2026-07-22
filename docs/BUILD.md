@@ -221,7 +221,7 @@ The installable PRG contains the common BASIC loader, dual-device detectors,
 expansion dispatcher, and normal-RAM installation payload. Expansion images
 are separate sidecars: `georam.bin` (geoRAM XIP page image) and `reu.bin`
 (REU overlay/arena image). A release D64 always carries both sidecars; startup
-loads only the selected device's sidecar (`DESIGN2.md` §2, §8.3;
+loads only the selected device's sidecar (`DESIGN.md` §2, §8.3;
 `REU_DESIGN.md` §8).
 
 The release D64 must use the lowercase disk title `compiler2` and store:

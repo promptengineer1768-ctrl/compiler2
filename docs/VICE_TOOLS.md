@@ -32,17 +32,25 @@ python tools/generate_vice_fixtures.py --from-keyword-matrix --group group1 --mi
 Product E2E against the matrix runs with:
 
 ```powershell
-python -m pytest tests/e2e/test_keyword_matrix.py -v
+python -m pytest -n auto tests/e2e tests/hardware -v
 ```
+
+Product E2E uses a build-fingerprinted warm snapshot under `debug/vice-warm/`.
+On a cache miss, one worker performs the complete cold boot and verifies
+`BASIC V3 READY` before atomically publishing the snapshot. Each worker restores
+a private copy into its own supervised, ephemeral-port VICE instance, so the
+remaining VICE tests can execute in parallel without sharing monitor ports or
+mutable snapshot files. A changed `compiler.d64` creates a new snapshot key.
 
 Group order is group1 → group2 → group3. Within a group, capture stock
 oracles first, then product tests in immediate → program → compile order.
 
-The harness starts a fresh supervised emulator for every case, tokenizes stock
+The harness starts an isolated supervised emulator for every case, tokenizes stock
 BASIC source with an explicitly configured `petcat.exe`, autostarts the
 resulting PRG, and records the VICE version and SHA-256 identities of the
 available machine ROMs. C64 screen observations use `$0400`; Plus/4
-observations use `$0C00`.
+observations use `$0C00`. PAL/NTSC selection is not a general test dimension;
+use a named timing profile only for a test with an explicit timing requirement.
 
 For stock BASIC semantic fixtures, prefer tokenized PRG autostart and wait for
 the final stable `READY.` predicate. Preserve the fixture's profile, ROM

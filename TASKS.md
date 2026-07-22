@@ -3,8 +3,9 @@
 This is the master task list for Compiler 2 implementation. Tasks follow
 **Test-Driven Development (TDD)**: write failing tests first (RED), implement
 minimal code to pass (GREEN), then refactor. Tasks are ordered from
-`DESIGN2.md`, `SKELETON.md`, and the hybrid TDD gates below with prerequisites
-enforced.
+`DESIGN.md`, `SKELETON.md`, and the hybrid TDD gates below with prerequisites
+enforced. This file is generated from `manifests/tasks.json`; change task state
+there, then run `python tools/task_manifest.py render`.
 
 ## TDD Cycle
 
@@ -53,15 +54,19 @@ yet. As soon as a validator or harness exists, add the gate retroactively.
 | `[-]` | Blocked (document blocker) |
 | `[!]` | Skipped (document reason) |
 
-### 2026-07-02 Completion Audit
+### Canonical Completion Evidence
 
-All 786 task statuses were reset and re-audited because prior `[x]` markers
-were not reliable evidence of completion. Only objectively structural
-`Create`/`Generate` tasks whose named artifacts currently exist and are
-nonempty remain `[x]`. Behavioral, semantic, TDD-phase, validation, and
-verification claims are `[~]` until their complete acceptance criteria are
-proved during the completion goal. Per-item evidence is generated at
-`build/task_audit.json` by `tools/audit_tasks.py`.
+`manifests/tasks.json` is the canonical checklist. Every complete task needs
+machine-readable evidence that names a specific claim and a passing test,
+artifact, or symbol. The validator rejects complete tasks with no passing
+evidence or with stale/failing evidence. Historical checkmarks without proof
+were conservatively reset to `[~]`; conformance-ledger invalidations are also
+recorded as explicit task evidence.
+
+```powershell
+python tools/task_manifest.py validate
+python tools/task_manifest.py render
+```
 
 ## How to Resume
 
@@ -88,7 +93,7 @@ proved during the completion goal. Per-item evidence is generated at
 - [x] Create `src/common/constants.asm` with error codes and type tags
 - [x] Create `src/common/macros.asm` with debug macros
 - [x] Create `src/common/zp.inc` importing `build/zp_symbols.inc`
-- [x] Validate ca65/ld65 toolchain paths in build script
+- [~] Validate ca65/ld65 toolchain paths in build script
 
 **Verification:**
 ```powershell
@@ -122,8 +127,8 @@ python tools/validate_build.py --manifests
 - [x] Generate `build/zp_allocation.json` — machine-readable ZP allocation
 - [x] Generate `build/zp_allocation.md` — human-readable report
 - [x] Generate `build/zp_interference.dot` — interference graph
-- [x] Validate no ZP address conflicts
-- [x] Validate all routine clobber lists satisfied
+- [~] Validate no ZP address conflicts
+- [~] Validate all routine clobber lists satisfied
 
 **Verification:**
 ```powershell
@@ -137,9 +142,9 @@ python -c "import json; d=json.load(open('build/zp_allocation.json')); assert d[
 
 - [x] Create `tools/georam_pages.py` — page placement and call directory
 - [x] Generate `build/routine_directory.json` — routine ID to placement
-- [x] Generate call directory for each 256-routine group
-- [x] Validate no routine crosses `$DEFF` page boundary
-- [x] Validate all routine IDs unique and complete
+- [~] Generate call directory for each 256-routine group
+- [~] Validate no routine crosses `$DEFF` page boundary
+- [~] Validate all routine IDs unique and complete
 
 **Verification:**
 ```powershell
@@ -156,7 +161,7 @@ python tools/validate_build.py --routine-directory
 - [x] Generate `build/arena_layout.json`
 - [x] Generate `build/production_entries.json` and `build/test_entries.json`
 - [x] Generate `build/keyword_lookup_report.json`
-- [x] Validate all generated contracts consistent
+- [~] Validate all generated contracts consistent
 
 **Verification:**
 ```powershell
@@ -171,8 +176,8 @@ python tools/validate_build.py --contracts
 - [x] Create `tools/linker_config.py` — ld65 config from policy + generated segments
 - [x] Create `manifests/linker_policy.json` with fixed banking, segments
 - [x] Generate `build/compiler.cfg` — final ld65 configuration
-- [x] Validate no segment overlaps
-- [x] Validate NMI/RESET/IRQ vectors at `$FFFA-$FFFF`
+- [~] Validate no segment overlaps
+- [~] Validate NMI/RESET/IRQ vectors at `$FFFA-$FFFF`
 
 **Verification:**
 ```powershell
@@ -185,9 +190,9 @@ python tools/validate_build.py --linker
 **Prerequisites:** T0.6
 
 **CONTRACT phase:**
-- [x] Map every `SKELETON.md` section 7 tool function to a `TESTS.md` Host Tool Tests row
-- [x] Define fixture directories under `tests/fixtures/tools/`
-- [x] Define generated-output comparison rules that ignore timestamps and host paths
+- [~] Map every `SKELETON.md` section 7 tool function to a `TESTS.md` Host Tool Tests row
+- [~] Define fixture directories under `tests/fixtures/tools/`
+- [~] Define generated-output comparison rules that ignore timestamps and host paths
 
 **RED phase:**
 - [x] Create `tests/tools/test_zp_alloc.py`
@@ -200,15 +205,15 @@ python tools/validate_build.py --linker
 - [x] Create `tests/tools/test_validate_build.py`
 - [x] Create `tests/tools/test_test_harness.py`
 - [x] Create `tests/tools/test_generate_reference.py`
-- [x] Verify the tests fail against missing or stubbed behavior
+- [~] Verify the tests fail against missing or stubbed behavior
 
 **GREEN phase:**
-- [x] Implement only the tool behavior needed for the fixture-backed tests
-- [x] Wire tool tests into pytest collection without requiring VICE
+- [~] Implement only the tool behavior needed for the fixture-backed tests
+- [~] Wire tool tests into pytest collection without requiring VICE
 
 **REFACTOR phase:**
-- [x] Run `ruff`, `black --check`, and `mypy --strict` on `tools/` and `tests/`
-- [x] Verify tool tests still pass
+- [~] Run `ruff`, `black --check`, and `mypy --strict` on `tools/` and `tests/`
+- [~] Verify tool tests still pass
 
 **Verification:**
 ```powershell
@@ -274,22 +279,22 @@ Get-ChildItem docs/*.md | Measure-Object | Select-Object -ExpandProperty Count
 
 **RED phase:**
 - [x] Create `tests/e2e/cases/basicv2_limits.yaml`
-- [x] Encode every row from `docs/BASIC_COMPATIBILITY_LIMITS.md`
-- [x] Add source-derived expected behavior from `c64rom`
-- [x] Mark each case `vice_pending` until the VICE harness can generate the
+- [~] Encode every row from `docs/BASIC_COMPATIBILITY_LIMITS.md`
+- [~] Add source-derived expected behavior from `c64rom`
+- [~] Mark each case `vice_pending` until the VICE harness can generate the
       authoritative fixture
-- [x] Add coverage validation that fails when a compatibility-limit row lacks
+- [~] Add coverage validation that fails when a compatibility-limit row lacks
       an E2E case
 
 **GREEN phase:**
-- [x] Populate the limit manifest with line number, variable name, string,
+- [~] Populate the limit manifest with line number, variable name, string,
       byte/address, array, logical-file, device, filename, and input cases
-- [x] Link each case to the owning keyword or feature group
-- [x] Expose the manifest to the shared E2E mode runner
+- [~] Link each case to the owning keyword or feature group
+- [~] Expose the manifest to the shared E2E mode runner
 
 **REFACTOR phase:**
-- [x] Remove duplicate hand-written limit cases from individual test modules
-- [x] Keep case IDs stable for future VICE fixture generation
+- [~] Remove duplicate hand-written limit cases from individual test modules
+- [~] Keep case IDs stable for future VICE fixture generation
 
 **Verification:**
 ```powershell
@@ -310,14 +315,14 @@ remain `vice_pending: true` until authoritative VICE captures are generated.
 
 **RED phase:**
 - [x] Create `tests/fixtures/reference/` directory structure
-- [x] Define fixture schema (JSON format for VICE observations)
-- [x] Create empty fixture files for each BASIC V2 test case
+- [~] Define fixture schema (JSON format for VICE observations)
+- [~] Create empty fixture files for each BASIC V2 test case
 
 **GREEN phase:**
-- [x] Generate stock C64 BASIC V2 immediate-mode reference fixtures using VICE
-- [x] Generate stock C64 BASIC V2 program-mode reference fixtures using VICE
-- [x] Record VICE executable version and ROM checksums in fixtures
-- [x] Validate fixtures match `c64rom` source-derived expectations
+- [~] Generate stock C64 BASIC V2 immediate-mode reference fixtures using VICE
+- [~] Generate stock C64 BASIC V2 program-mode reference fixtures using VICE
+- [~] Record VICE executable version and ROM checksums in fixtures
+- [~] Validate fixtures match `c64rom` source-derived expectations
 
 **Verification:**
 ```powershell
@@ -340,13 +345,13 @@ metadata, ROM SHA-256 checksums, and deterministic regeneration fingerprints.
 **Prerequisites:** T1.1
 
 **RED phase:**
-- [x] Create Plus/4 VICE machine configuration
-- [x] Define Plus/4 fixture schema
+- [~] Create Plus/4 VICE machine configuration
+- [~] Define Plus/4 fixture schema
 
 **GREEN phase:**
-- [x] Generate Plus/4 BASIC V3.5 immediate-mode reference fixtures
-- [x] Generate Plus/4 BASIC V3.5 program-mode reference fixtures
-- [x] Validate fixtures against Plus/4 ROM semantics
+- [~] Generate Plus/4 BASIC V3.5 immediate-mode reference fixtures
+- [~] Generate Plus/4 BASIC V3.5 program-mode reference fixtures
+- [~] Validate fixtures against Plus/4 ROM semantics
 
 **Verification:**
 ```powershell
@@ -366,14 +371,14 @@ normalization rules.
 
 **RED phase:**
 - [x] Create `tests/system/test_traceability.py` — traceability tests
-- [x] Define expected requirement-to-test mappings
+- [~] Define expected requirement-to-test mappings
 
 **GREEN phase:**
 - [x] Create `tools/generate_reference.py` — API.md and MAP.md generator
 - [x] Generate `build/requirements_matrix.json`
 - [x] Generate `build/requirements_matrix.md`
-- [x] Validate every requirement maps to at least one test
-- [x] Validate every test maps to at least one requirement
+- [~] Validate every requirement maps to at least one test
+- [~] Validate every test maps to at least one requirement
 
 **Verification:**
 ```powershell
@@ -404,20 +409,20 @@ tools.
 
 **RED phase:**
 - [x] Create `tests/unit/test_ram_under_io.py`
-- [x] Define test cases for enter/exit/copy operations
-- [x] Add test-only exports to `manifests/test_entries.json`
-- [x] Verify tests fail (no implementation yet)
+- [~] Define test cases for enter/exit/copy operations
+- [~] Add test-only exports to `manifests/test_entries.json`
+- [~] Verify tests fail (no implementation yet)
 
 **GREEN phase:**
 - [x] Create `src/resident/ram_under_io.asm`
-- [x] Implement `ram_under_io_enter` — select all-RAM mapping, mask IRQ
-- [x] Implement `ram_under_io_exit` — restore `$35`, restore IRQ state
-- [x] Implement `ram_under_io_copy_in` — bounded chunk copy into `$D000-$DFFF`
-- [x] Implement `ram_under_io_copy_out` — bounded chunk copy from `$D000-$DFFF`
+- [~] Implement `ram_under_io_enter` — select all-RAM mapping, mask IRQ
+- [~] Implement `ram_under_io_exit` — restore `$35`, restore IRQ state
+- [~] Implement `ram_under_io_copy_in` — bounded chunk copy into `$D000-$DFFF`
+- [~] Implement `ram_under_io_copy_out` — bounded chunk copy from `$D000-$DFFF`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions in previously passing tests
+- [~] Verify all unit tests pass
+- [~] Verify no regressions in previously passing tests
 
 **Verification:**
 ```powershell
@@ -443,20 +448,20 @@ memory-map, and build-validation system contracts with 27 passing tests.
 
 **RED phase:**
 - [x] Create `tests/unit/test_kernal_bridge.py`
-- [x] Define test cases for each bridge routine (§6.5 SKELETON.md)
-- [x] Define test cases for banking save/restore
-- [x] Define test cases for IRQ state preservation
-- [x] Verify tests fail
+- [~] Define test cases for each bridge routine (§6.5 SKELETON.md)
+- [~] Define test cases for banking save/restore
+- [~] Define test cases for IRQ state preservation
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/resident/kernal_bridge.asm`
-- [x] Implement all KERNAL bridge routines
-- [x] Implement `$01` save/restore for each bridge call
-- [x] Implement IRQ state save/restore across blocking calls
+- [~] Implement all KERNAL bridge routines
+- [~] Implement `$01` save/restore for each bridge call
+- [~] Implement IRQ state save/restore across blocking calls
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -484,23 +489,23 @@ touched KERNAL bridge tests.
 
 **RED phase:**
 - [x] Create `tests/unit/test_irq.py`
-- [x] Define test cases for IRQ entry/exit
-- [x] Define test cases for jiffy advance
-- [x] Define test cases for cursor blink
-- [x] Define test cases for keyboard scan
-- [x] Verify tests fail
+- [~] Define test cases for IRQ entry/exit
+- [~] Define test cases for jiffy advance
+- [~] Define test cases for cursor blink
+- [~] Define test cases for keyboard scan
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/resident/irq.asm`
-- [x] Implement `irq_entry` — save A/X/Y/mapping, call UDTIM, cursor, SCNKEY
-- [x] Implement `irq_update_jiffy` — call KERNAL UDTIM
-- [x] Implement `irq_cursor_blink` — toggle cursor visibility
-- [x] Implement `irq_scan_keyboard` — call KERNAL SCNKEY
-- [x] Implement `irq_restore_mapping` — restore `$01` and P before RTI
+- [~] Implement `irq_entry` — save A/X/Y/mapping, call UDTIM, cursor, SCNKEY
+- [~] Implement `irq_update_jiffy` — call KERNAL UDTIM
+- [~] Implement `irq_cursor_blink` — toggle cursor visibility
+- [~] Implement `irq_scan_keyboard` — call KERNAL SCNKEY
+- [~] Implement `irq_restore_mapping` — restore `$01` and P before RTI
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -528,19 +533,19 @@ strict mypy on the touched IRQ tests.
 
 **RED phase:**
 - [x] Create `tests/unit/test_screen.py`
-- [x] Define test cases for each screen operation (§6.4 SKELETON.md)
-- [x] Define test cases for cursor movement and wrapping
-- [x] Define test cases for line input with quote mode
-- [x] Verify tests fail
+- [~] Define test cases for each screen operation (§6.4 SKELETON.md)
+- [~] Define test cases for cursor movement and wrapping
+- [~] Define test cases for line input with quote mode
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/resident/screen.asm`
-- [x] Implement all screen routines
-- [x] Implement bounded line capture with quote mode
+- [~] Implement all screen routines
+- [~] Implement bounded line capture with quote mode
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -570,27 +575,27 @@ strict mypy on the touched screen tests.
 
 **RED phase:**
 - [x] Create `tests/unit/test_georam_detect.py`
-- [x] Define test cases for detection with geoRAM present
-- [x] Define test cases for detection with geoRAM absent
-- [x] Define test cases for undersized geoRAM
-- [x] Define test cases for state save/restore round-trip
-- [x] Define test cases for capacity detection
-- [x] Verify tests fail
+- [~] Define test cases for detection with geoRAM present
+- [~] Define test cases for detection with geoRAM absent
+- [~] Define test cases for undersized geoRAM
+- [~] Define test cases for state save/restore round-trip
+- [~] Define test cases for capacity detection
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/arena/georam_detect.asm`
-- [x] Implement `detect_georam` — non-destructive probe
-- [x] Implement `detect_save_state` / `detect_restore_state`
-- [x] Implement `detect_probe_pattern1` / `detect_probe_pattern2`
-- [x] Implement `detect_probe_aliasing` — capacity detection
-- [x] Implement `detect_check_minimum` — 512 KiB threshold
-- [x] Implement `detect_publish_profile` — dual-device expansion profile
-- [x] Implement `detect_validate_profile` — session integrity
-- [x] Implement REU non-destructive detect + dual selection (prefer geoRAM store)
+- [~] Implement `detect_georam` — non-destructive probe
+- [~] Implement `detect_save_state` / `detect_restore_state`
+- [~] Implement `detect_probe_pattern1` / `detect_probe_pattern2`
+- [~] Implement `detect_probe_aliasing` — capacity detection
+- [~] Implement `detect_check_minimum` — 512 KiB threshold
+- [~] Implement `detect_publish_profile` — dual-device expansion profile
+- [~] Implement `detect_validate_profile` — session integrity
+- [~] Implement REU non-destructive detect + dual selection (prefer geoRAM store)
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -623,28 +628,28 @@ geoRAM detection tests.
 
 **RED phase:**
 - [x] Create `tests/unit/test_georam_gate.py`
-- [x] Define test cases for select writes correct registers
-- [x] Define test cases for context push/pop round-trip
-- [x] Define test cases for nested calls preserve caller state
-- [x] Define test cases for handle-based operations with validation
+- [~] Define test cases for select writes correct registers
+- [~] Define test cases for context push/pop round-trip
+- [~] Define test cases for nested calls preserve caller state
+- [~] Define test cases for handle-based operations with validation
 - [x] Create `tests/integration/test_georam_cycle.py`
-- [x] Define integration test for full geoRAM call cycle
-- [x] Verify tests fail
+- [~] Define integration test for full geoRAM call cycle
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/resident/georam_gate.asm`
 - [x] Create `src/arena/context_stack.asm`
-- [x] Implement `georam_select` — write `$DFFE`/`$DFFF`, update mirror
-- [x] Implement `georam_ctx_push` / `georam_ctx_pop` — context save/restore
-- [x] Implement `georam_call_group_n` — generated group dispatch
-- [x] Implement `georam_tail_group_n` — tail transfer
-- [x] Implement handle-based read/write/copy routines
-- [x] Implement `georam_checksum` and `georam_verify_mirror`
+- [~] Implement `georam_select` — write `$DFFE`/`$DFFF`, update mirror
+- [~] Implement `georam_ctx_push` / `georam_ctx_pop` — context save/restore
+- [~] Implement `georam_call_group_n` — generated group dispatch
+- [~] Implement `georam_tail_group_n` — tail transfer
+- [~] Implement handle-based read/write/copy routines
+- [~] Implement `georam_checksum` and `georam_verify_mirror`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify all integration tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify all integration tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -701,18 +706,18 @@ linked page image, and geoRAM hardware-window path.
 
 **RED phase:**
 - [x] Create `tests/unit/test_fatal.py`
-- [x] Define test cases for fatal path restores machine state
-- [x] Define test cases for fatal path reports failure
-- [x] Verify tests fail
+- [~] Define test cases for fatal path restores machine state
+- [~] Define test cases for fatal path reports failure
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/resident/fatal.asm`
-- [x] Implement `fatal_georam` — clean failure path
-- [x] Implement `fatal_restore_machine` — shared bounded cleanup
+- [~] Implement `fatal_georam` — clean failure path
+- [~] Implement `fatal_restore_machine` — shared bounded cleanup
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -744,20 +749,20 @@ geoRAM selection reset, failure metadata storage, and carry-set fatal return.
 
 **RED phase:**
 - [x] Create `tests/unit/test_resident_main.py`
-- [x] Define test cases for input capture and dispatch
-- [x] Define test cases for boundary assertions
-- [x] Verify tests fail
+- [~] Define test cases for input capture and dispatch
+- [~] Define test cases for boundary assertions
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/resident/resident_main.asm`
-- [x] Implement `resident_main` — READY/editor loop
-- [x] Implement `resident_poll_input` — foreground GETIN
-- [x] Implement `resident_submit_line` — transactional handoff
-- [x] Implement `resident_assert_boundary` — debug assertions
+- [~] Implement `resident_main` — READY/editor loop
+- [~] Implement `resident_poll_input` — foreground GETIN
+- [~] Implement `resident_submit_line` — transactional handoff
+- [~] Implement `resident_assert_boundary` — debug assertions
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -800,22 +805,22 @@ resident/generator files.
 
 **RED phase:**
 - [x] Create `tests/unit/test_page_alloc.py`
-- [x] Define test cases for allocation and deallocation
-- [x] Define test cases for fragmentation handling
-- [x] Define test cases for bounds checking
-- [x] Verify tests fail
+- [~] Define test cases for allocation and deallocation
+- [~] Define test cases for fragmentation handling
+- [~] Define test cases for bounds checking
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/arena/page_alloc.asm`
-- [x] Implement `page_alloc_init` — initialize free-page bitmap
-- [x] Implement `page_alloc` — allocate pages from free bitmap
-- [x] Implement `page_free` — return pages to free bitmap
-- [x] Implement `page_alloc_count` / `page_alloc_largest`
-- [x] Implement `page_check_in_range` — bounds check
+- [~] Implement `page_alloc_init` — initialize free-page bitmap
+- [~] Implement `page_alloc` — allocate pages from free bitmap
+- [~] Implement `page_free` — return pages to free bitmap
+- [~] Implement `page_alloc_count` / `page_alloc_largest`
+- [~] Implement `page_check_in_range` — bounds check
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -850,22 +855,22 @@ tools/validate_build.py --all` passed.
 
 **RED phase:**
 - [x] Create `tests/unit/test_arena_core.py`
-- [x] Define test cases for arena lifecycle
-- [x] Define test cases for integrity detection
-- [x] Define test cases for generation tracking
-- [x] Verify tests fail
+- [~] Define test cases for arena lifecycle
+- [~] Define test cases for integrity detection
+- [~] Define test cases for generation tracking
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/arena/arena_core.asm`
-- [x] Implement `arena_init_all` — construct arena directory
-- [x] Implement `arena_create` / `arena_destroy`
-- [x] Implement `arena_check_integrity` — canary, checksum, generation
-- [x] Implement `arena_reset` — deterministic reset with generation bump
-- [x] Implement `arena_get_handle` / `arena_handle_valid`
+- [~] Implement `arena_init_all` — construct arena directory
+- [~] Implement `arena_create` / `arena_destroy`
+- [~] Implement `arena_check_integrity` — canary, checksum, generation
+- [~] Implement `arena_reset` — deterministic reset with generation bump
+- [~] Implement `arena_get_handle` / `arena_handle_valid`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -902,19 +907,19 @@ arena test. T3.2 is complete.
 
 **RED phase:**
 - [x] Create `tests/unit/test_overlay.py`
-- [x] Define test cases for overlay swap cycle
-- [x] Define test cases for routine resolution
-- [x] Verify tests fail
+- [~] Define test cases for overlay swap cycle
+- [~] Define test cases for routine resolution
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/arena/overlay_dispatch.asm`
-- [x] Implement `overlay_enter` / `overlay_exit`
-- [x] Implement `overlay_resolve` — routine ID to page/offset
-- [x] Implement `overlay_validate` — directory integrity
+- [~] Implement `overlay_enter` / `overlay_exit`
+- [~] Implement `overlay_resolve` — routine ID to page/offset
+- [~] Implement `overlay_validate` — directory integrity
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -949,23 +954,23 @@ depth tracking, caller selection restoration, and underflow rejection.
 
 **RED phase:**
 - [x] Create `tests/unit/test_program_codec.py`
-- [x] Define test cases for stock format decode/encode round-trip
-- [x] Define test cases for extended format decode/encode round-trip
-- [x] Define test cases for malformed input rejection
-- [x] Verify tests fail
+- [~] Define test cases for stock format decode/encode round-trip
+- [~] Define test cases for extended format decode/encode round-trip
+- [~] Define test cases for malformed input rejection
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/geoasm/program_codec.asm`
-- [x] Implement `program_classify_file` — stock vs extended
-- [x] Implement `program_decode_stock` — BASIC V2 import
-- [x] Implement `program_encode_stock` — canonical BASIC V2 export
-- [x] Implement `program_decode_extended` — versioned extension import
-- [x] Implement `program_encode_extended` — extension export
-- [x] Implement `program_select_save_format` — tokens outside REM/string → C2 / Plus/4 3.5 / V2
+- [~] Implement `program_classify_file` — stock vs extended
+- [~] Implement `program_decode_stock` — BASIC V2 import
+- [~] Implement `program_encode_stock` — canonical BASIC V2 export
+- [~] Implement `program_decode_extended` — versioned extension import
+- [~] Implement `program_encode_extended` — extension export
+- [~] Implement `program_select_save_format` — tokens outside REM/string → C2 / Plus/4 3.5 / V2
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -1017,24 +1022,24 @@ regression blocker recorded above.
 
 **RED phase:**
 - [x] Create `tests/unit/test_program_store.py`
-- [x] Define test cases for transaction commit and rollback
-- [x] Define test cases for atomic publication
+- [~] Define test cases for transaction commit and rollback
+- [~] Define test cases for atomic publication
 - [x] Create `tests/integration/test_program_lifecycle.py`
-- [x] Define integration test for LOAD/SAVE round-trip
-- [x] Verify tests fail
+- [~] Define integration test for LOAD/SAVE round-trip
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/geoasm/program_store.asm`
-- [x] Implement `program_tx_begin` — start transaction
-- [x] Implement `program_tx_put_line` / `program_tx_delete_line`
-- [x] Implement `program_tx_commit` — atomic publish
-- [x] Implement `program_tx_abort` — rollback
-- [x] Implement `program_replace_from_load` — transactional LOAD
+- [~] Implement `program_tx_begin` — start transaction
+- [~] Implement `program_tx_put_line` / `program_tx_delete_line`
+- [~] Implement `program_tx_commit` — atomic publish
+- [~] Implement `program_tx_abort` — rollback
+- [~] Implement `program_replace_from_load` — transactional LOAD
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify all integration tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify all integration tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -1085,21 +1090,21 @@ blocker recorded above.
 
 **RED phase:**
 - [x] Create `tests/unit/test_variables.py`
-- [x] Define test cases for each load/store operation
-- [x] Define test cases for type promotion and coercion
-- [x] Verify tests fail
+- [~] Define test cases for each load/store operation
+- [~] Define test cases for type promotion and coercion
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/runtime/variables.asm`
-- [x] Implement `var_resolve` — descriptor to address
-- [x] Implement `var_load_int` / `var_store_int`
-- [x] Implement `var_load_float` / `var_store_float`
-- [x] Implement `var_load_string` / `var_store_string`
-- [x] Implement `var_promote_to_float` / `var_coerce`
+- [~] Implement `var_resolve` — descriptor to address
+- [~] Implement `var_load_int` / `var_store_int`
+- [~] Implement `var_load_float` / `var_store_float`
+- [~] Implement `var_load_string` / `var_store_string`
+- [~] Implement `var_promote_to_float` / `var_coerce`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Implementation evidence (2026-07-03):** Replaced raw-pointer helper semantics
 with 12-byte `VD` variable descriptors and typed `VI`/`VF`/`VS` store request
@@ -1143,21 +1148,21 @@ C:\Users\me\AppData\Local\Programs\Python\Python313\python.exe -m ruff check tes
 
 **RED phase:**
 - [x] Create `tests/unit/test_arrays.py`
-- [x] Define test cases for DIM and element access
-- [x] Define test cases for bounds checking
-- [x] Define test cases for REDIM'D ARRAY error
-- [x] Verify tests fail
+- [~] Define test cases for DIM and element access
+- [~] Define test cases for bounds checking
+- [~] Define test cases for REDIM'D ARRAY error
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/runtime/arrays.asm`
-- [x] Implement `arr_dim` — allocation
-- [x] Implement `arr_resolve_element` — bounds check and offset
-- [x] Implement `arr_load_element` / `arr_store_element`
-- [x] Implement `arr_redim` / `arr_free`
+- [~] Implement `arr_dim` — allocation
+- [~] Implement `arr_resolve_element` — bounds check and offset
+- [~] Implement `arr_load_element` / `arr_store_element`
+- [~] Implement `arr_redim` / `arr_free`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Implementation evidence (2026-07-03):** Replaced the bounded façade with one
 arena-backed `AD` representation and typed `AM`, `AE`, and `AS` requests.
@@ -1194,21 +1199,21 @@ C:\Users\me\AppData\Local\Programs\Python\Python313\python.exe tools/validate_bu
 
 **RED phase:**
 - [x] Create `tests/unit/test_strings.py`
-- [x] Define test cases for each string operation
-- [x] Define test cases for stock-compatible PETSCII behavior
-- [x] Verify tests fail
+- [~] Define test cases for each string operation
+- [~] Define test cases for stock-compatible PETSCII behavior
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/runtime/strings.asm`
-- [x] Implement `str_alloc` / `str_free`
-- [x] Implement `str_assign` / `str_copy` / `str_concat`
-- [x] Implement `str_left` / `str_right` / `str_mid`
-- [x] Implement `str_len` / `str_cmp`
-- [x] Implement `str_chr` / `str_asc` / `str_val` / `str_str`
+- [~] Implement `str_alloc` / `str_free`
+- [~] Implement `str_assign` / `str_copy` / `str_concat`
+- [~] Implement `str_left` / `str_right` / `str_mid`
+- [~] Implement `str_len` / `str_cmp`
+- [~] Implement `str_chr` / `str_asc` / `str_val` / `str_str`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Implementation evidence (2026-07-03):** Replaced the bounded two-buffer and
 raw-pointer implementation with one caller-owned 12-byte `SD` representation,
@@ -1241,21 +1246,21 @@ broad blocker recorded above.
 
 **RED phase:**
 - [x] Create `tests/unit/test_math_core.py`
-- [x] Define test cases for each arithmetic operation
-- [x] Define test cases for stock BASIC V2 numeric compatibility
-- [x] Verify tests fail
+- [~] Define test cases for each arithmetic operation
+- [~] Define test cases for stock BASIC V2 numeric compatibility
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/runtime/math_core.asm`
-- [x] Implement `math_add` / `math_sub` / `math_mul` / `math_div`
-- [x] Implement `math_negate` / `math_cmp`
-- [x] Implement `math_int` / `math_sgn` / `math_abs` / `math_fpe`
-- [x] Implement `math_int_to_float` / `math_float_to_int`
-- [x] Implement integer arithmetic: `math_add_int` / `math_sub_int` / `math_mul_int` / `math_div_int`
+- [~] Implement `math_add` / `math_sub` / `math_mul` / `math_div`
+- [~] Implement `math_negate` / `math_cmp`
+- [~] Implement `math_int` / `math_sgn` / `math_abs` / `math_fpe`
+- [~] Implement `math_int_to_float` / `math_float_to_int`
+- [~] Implement integer arithmetic: `math_add_int` / `math_sub_int` / `math_mul_int` / `math_div_int`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Implementation evidence (2026-07-02):** Removed all core-math arithmetic
 postprocessors from the emulator fixture, switched the suite to linked labels
@@ -1301,24 +1306,24 @@ and error tests. The Math Core plus transcendental/trig neighborhood passed all
 
 **RED phase:**
 - [x] Create `tests/unit/test_control.py`
-- [x] Define test cases for FOR/NEXT cycle
-- [x] Define test cases for DO/LOOP cycle
-- [x] Define test cases for GOSUB/RETURN cycle
-- [x] Define test cases for STOP/CONT state machine
-- [x] Verify tests fail
+- [~] Define test cases for FOR/NEXT cycle
+- [~] Define test cases for DO/LOOP cycle
+- [~] Define test cases for GOSUB/RETURN cycle
+- [~] Define test cases for STOP/CONT state machine
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/runtime/control.asm`
-- [x] Implement `ctrl_for_init` / `ctrl_for_next`
-- [x] Implement `ctrl_do_init` / `ctrl_loop_test` / `ctrl_exit_loop`
-- [x] Implement `ctrl_gosub` / `ctrl_return`
-- [x] Implement `ctrl_on_goto` / `ctrl_on_gosub`
-- [x] Implement `ctrl_stop` / `ctrl_end` / `ctrl_cont`
-- [x] Implement `ctrl_check_stop`
+- [~] Implement `ctrl_for_init` / `ctrl_for_next`
+- [~] Implement `ctrl_do_init` / `ctrl_loop_test` / `ctrl_exit_loop`
+- [~] Implement `ctrl_gosub` / `ctrl_return`
+- [~] Implement `ctrl_on_goto` / `ctrl_on_gosub`
+- [~] Implement `ctrl_stop` / `ctrl_end` / `ctrl_cont`
+- [~] Implement `ctrl_check_stop`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Implementation evidence (2026-07-02):** Removed FOR/NEXT and ON
 GOTO/GOSUB semantic postprocessors, captured the production RED failure, and
@@ -1376,26 +1381,26 @@ Black and Ruff passed, manifest and generated-contract validation passed, and
 **RED phase:**
 - [x] Create `tests/unit/test_io.py`
 - [x] Create `tests/unit/test_errors.py`
-- [x] Define test cases for PRINT formatting
-- [x] Define test cases for INPUT prompt and read
-- [x] Define test cases for LOAD/SAVE through KERNAL
-- [x] Define test cases for error formatting and unwind
-- [x] Verify tests fail
+- [~] Define test cases for PRINT formatting
+- [~] Define test cases for INPUT prompt and read
+- [~] Define test cases for LOAD/SAVE through KERNAL
+- [~] Define test cases for error formatting and unwind
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/runtime/io.asm`
 - [x] Create `src/runtime/runtime_io.asm`
 - [x] Create `src/runtime/errors.asm`
-- [x] Implement `io_print_value` / `io_print_newline` / `io_print_space`
-- [x] Implement `io_input_value` / `io_input_string` / `io_get`
-- [x] Implement `rio_load` / `rio_save` / `rio_verify`
-- [x] Implement `rio_open` / `rio_close` / `rio_chrin` / `rio_chrout`
-- [x] Use one bit-7-terminated static-output-string ABI and shared emitter
-- [x] Implement `err_raise` / `err_from_kernal` / error shortcuts
+- [~] Implement `io_print_value` / `io_print_newline` / `io_print_space`
+- [~] Implement `io_input_value` / `io_input_string` / `io_get`
+- [~] Implement `rio_load` / `rio_save` / `rio_verify`
+- [~] Implement `rio_open` / `rio_close` / `rio_chrin` / `rio_chrout`
+- [~] Use one bit-7-terminated static-output-string ABI and shared emitter
+- [~] Implement `err_raise` / `err_from_kernal` / error shortcuts
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -1470,21 +1475,21 @@ tests.
 
 **RED phase:**
 - [x] Create `tests/unit/test_system.py`
-- [x] Define test cases for PEEK/POKE with protected ranges
-- [x] Define test cases for TI/TI$ read and write
-- [x] Verify tests fail
+- [~] Define test cases for PEEK/POKE with protected ranges
+- [~] Define test cases for TI/TI$ read and write
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/runtime/system.asm`
-- [x] Implement `system_peek` / `system_poke` with protection
-- [x] Implement `system_sys` / `system_usr`
-- [x] Implement `system_wait`
-- [x] Implement `system_ti_load` / `system_ti_store`
-- [x] Implement `system_ti_string_load` / `system_ti_string_store`
+- [~] Implement `system_peek` / `system_poke` with protection
+- [~] Implement `system_sys` / `system_usr`
+- [~] Implement `system_wait`
+- [~] Implement `system_ti_load` / `system_ti_store`
+- [~] Implement `system_ti_string_load` / `system_ti_string_store`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -1518,21 +1523,21 @@ slice above (152 passed), and the full unit suite
 
 **RED phase:**
 - [x] Create `tests/unit/test_tokenizer.py`
-- [x] Define test cases for each token type
-- [x] Define test cases for dialect filtering
-- [x] Define test cases for abbreviation handling
-- [x] Verify tests fail
+- [~] Define test cases for each token type
+- [~] Define test cases for dialect filtering
+- [~] Define test cases for abbreviation handling
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/geoasm/tokenizer.asm`
-- [x] Implement `token_init` / `token_next` / `token_peek`
-- [x] Implement `token_identifier` — first-character trie traversal
-- [x] Implement `token_number` / `token_string`
-- [x] Implement `token_skip_whitespace` / `token_rem` / `token_data`
+- [~] Implement `token_init` / `token_next` / `token_peek`
+- [~] Implement `token_identifier` — first-character trie traversal
+- [~] Implement `token_number` / `token_string`
+- [~] Implement `token_skip_whitespace` / `token_rem` / `token_data`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -1575,22 +1580,22 @@ T6.1 and are evidence for the owning pipeline task, not tokenizer regressions.
 
 **RED phase:**
 - [x] Create `tests/unit/test_parser.py`
-- [x] Define test cases for statement parsing
-- [x] Define test cases for expression precedence
-- [x] Define test cases for function and array parsing
-- [x] Verify tests fail
+- [~] Define test cases for statement parsing
+- [~] Define test cases for expression precedence
+- [~] Define test cases for function and array parsing
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/geoasm/parser.asm`
-- [x] Implement `parse_line` / `parse_statement`
-- [x] Implement `parse_expression` / `parse_primary`
-- [x] Implement `parse_comparison` / `parse_term` / `parse_factor`
-- [x] Implement `parse_function_call` / `parse_array_ref`
-- [x] Implement `parse_for` / `parse_gosub`
+- [~] Implement `parse_line` / `parse_statement`
+- [~] Implement `parse_expression` / `parse_primary`
+- [~] Implement `parse_comparison` / `parse_term` / `parse_factor`
+- [~] Implement `parse_function_call` / `parse_array_ref`
+- [~] Implement `parse_for` / `parse_gosub`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -1613,21 +1618,21 @@ rather than the complete expression-parser path.
 
 **RED phase:**
 - [x] Create `tests/unit/test_semantic.py`
-- [x] Define test cases for dialect validation
-- [x] Define test cases for direct/program classification
-- [x] Verify tests fail
+- [~] Define test cases for dialect validation
+- [~] Define test cases for direct/program classification
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/geoasm/semantic.asm`
-- [x] Implement `semantic_validate_dialect`
-- [x] Implement `semantic_classify_direct`
-- [x] Implement `semantic_validate_line`
-- [x] Implement `semantic_check_for_dialect` / `semantic_set_dialect`
-- [x] Implement `semantic_get_numeric_mode` / `semantic_set_numeric_mode`
+- [~] Implement `semantic_validate_dialect`
+- [~] Implement `semantic_classify_direct`
+- [~] Implement `semantic_validate_line`
+- [~] Implement `semantic_check_for_dialect` / `semantic_set_dialect`
+- [~] Implement `semantic_get_numeric_mode` / `semantic_set_numeric_mode`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -1642,20 +1647,20 @@ pytest tests/unit/test_semantic.py -v
 
 **RED phase:**
 - [x] Create `tests/unit/test_ir_builder.py`
-- [x] Define test cases for each IR emission operation
-- [x] Verify tests fail
+- [~] Define test cases for each IR emission operation
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/geoasm/ir_builder.asm`
-- [x] Implement `ir_init` / `ir_finish_line`
-- [x] Implement `ir_emit_stmt` / `ir_emit_expr`
-- [x] Implement `ir_emit_var_ref` / `ir_emit_array_ref` / `ir_emit_string_ref`
-- [x] Implement `ir_emit_branch` / `ir_emit_loop`
-- [x] Implement `ir_emit_literal_int` / `ir_emit_literal_float` / `ir_emit_literal_str`
+- [~] Implement `ir_init` / `ir_finish_line`
+- [~] Implement `ir_emit_stmt` / `ir_emit_expr`
+- [~] Implement `ir_emit_var_ref` / `ir_emit_array_ref` / `ir_emit_string_ref`
+- [~] Implement `ir_emit_branch` / `ir_emit_loop`
+- [~] Implement `ir_emit_literal_int` / `ir_emit_literal_float` / `ir_emit_literal_str`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -1670,21 +1675,21 @@ pytest tests/unit/test_ir_builder.py -v
 
 **RED phase:**
 - [x] Create `tests/unit/test_optimizer.py`
-- [x] Define test cases for fast-path eligibility
-- [x] Define test cases for invalidation detection
-- [x] Verify tests fail
+- [~] Define test cases for fast-path eligibility
+- [~] Define test cases for invalidation detection
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/geoasm/optimizer.asm`
-- [x] Implement `opt_run_passes`
-- [x] Implement `opt_build_effect_summaries`
-- [x] Implement `opt_eligible_for_for_fast` / `opt_eligible_for_do_fast`
-- [x] Implement `opt_check_invalidation` / `opt_check_aliasing`
-- [x] Implement `opt_propagate_dirty` / `opt_select_branch_polarity`
+- [~] Implement `opt_run_passes`
+- [~] Implement `opt_build_effect_summaries`
+- [~] Implement `opt_eligible_for_for_fast` / `opt_eligible_for_do_fast`
+- [~] Implement `opt_check_invalidation` / `opt_check_aliasing`
+- [~] Implement `opt_propagate_dirty` / `opt_select_branch_polarity`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -1699,25 +1704,25 @@ pytest tests/unit/test_optimizer.py -v
 
 **RED phase:**
 - [x] Create `tests/unit/test_codegen.py`
-- [x] Define test cases for each codegen operation
+- [~] Define test cases for each codegen operation
 - [x] Create `tests/integration/test_compile_pipeline.py`
-- [x] Define integration test for full compile pipeline
-- [x] Verify tests fail
+- [~] Define integration test for full compile pipeline
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/geoasm/codegen.asm`
-- [x] Implement `codegen_init` / `codegen_finish_line`
-- [x] Implement `codegen_emit_stmt`
-- [x] Implement `codegen_emit_for_fast` / `codegen_emit_for_generic`
-- [x] Implement `codegen_emit_do_fast` / `codegen_emit_do_generic`
-- [x] Implement `codegen_emit_if` / `codegen_emit_gosub` / `codegen_emit_return`
-- [x] Implement `codegen_emit_on` / `codegen_emit_print` / `codegen_emit_input`
-- [x] Implement `codegen_emit_let` / `codegen_emit_dim` / `codegen_emit_data`
+- [~] Implement `codegen_init` / `codegen_finish_line`
+- [~] Implement `codegen_emit_stmt`
+- [~] Implement `codegen_emit_for_fast` / `codegen_emit_for_generic`
+- [~] Implement `codegen_emit_do_fast` / `codegen_emit_do_generic`
+- [~] Implement `codegen_emit_if` / `codegen_emit_gosub` / `codegen_emit_return`
+- [~] Implement `codegen_emit_on` / `codegen_emit_print` / `codegen_emit_input`
+- [~] Implement `codegen_emit_let` / `codegen_emit_dim` / `codegen_emit_data`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify all integration tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify all integration tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -1733,20 +1738,20 @@ pytest tests/integration/test_compile_pipeline.py -v
 
 **RED phase:**
 - [x] Create `tests/unit/test_direct_dispatch.py`
-- [x] Define test cases for wedge prefix detection
-- [x] Define test cases for command classification
-- [x] Verify tests fail
+- [~] Define test cases for wedge prefix detection
+- [~] Define test cases for command classification
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/geoasm/direct_dispatch.asm`
-- [x] Implement `direct_probe_prefix` — wedge detection
-- [x] Implement `direct_classify` — direct/program policy
-- [x] Implement `direct_execute_command`
-- [x] Implement `direct_execute_temporary` — immediate compiler path
+- [~] Implement `direct_probe_prefix` — wedge detection
+- [~] Implement `direct_classify` — direct/program policy
+- [~] Implement `direct_execute_command`
+- [~] Implement `direct_execute_temporary` — immediate compiler path
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -1761,19 +1766,19 @@ pytest tests/unit/test_direct_dispatch.py -v
 
 **RED phase:**
 - [x] Create `tests/integration/test_compiler_pipeline.py`
-- [x] Define integration test for full pipeline with all eight boundaries
-- [x] Verify tests fail
+- [~] Define integration test for full pipeline with all eight boundaries
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/geoasm/compiler_pipeline.asm`
-- [x] Implement `pipeline_compile_line` — per-line compile
-- [x] Implement `pipeline_compile_program` — whole-program compile
-- [x] Implement `pipeline_serialize_boundary` / `pipeline_validate_boundary`
-- [x] Implement `pipeline_report_failure`
+- [~] Implement `pipeline_compile_line` — per-line compile
+- [~] Implement `pipeline_compile_program` — whole-program compile
+- [~] Implement `pipeline_serialize_boundary` / `pipeline_validate_boundary`
+- [~] Implement `pipeline_report_failure`
 
 **REFACTOR phase:**
-- [x] Verify all integration tests pass
-- [x] Verify no regressions
+- [~] Verify all integration tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -1789,23 +1794,23 @@ pytest tests/integration/test_compiler_pipeline.py -v
 **RED phase:**
 - [x] Create `tests/unit/test_incremental.py`
 - [x] Create `tests/integration/test_incremental_compile.py`
-- [x] Define test cases for fingerprint computation
-- [x] Define test cases for dirty marking and resolution
-- [x] Define integration test for incremental line entry
-- [x] Verify tests fail
+- [~] Define test cases for fingerprint computation
+- [~] Define test cases for dirty marking and resolution
+- [~] Define integration test for incremental line entry
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/geoasm/incremental.asm`
-- [x] Implement `incremental_fingerprint`
-- [x] Implement `incremental_mark_dependents`
-- [x] Implement `incremental_resolve_dirty`
-- [x] Implement `incremental_publish`
-- [x] Implement `incremental_can_run` / `incremental_abort`
+- [~] Implement `incremental_fingerprint`
+- [~] Implement `incremental_mark_dependents`
+- [~] Implement `incremental_resolve_dirty`
+- [~] Implement `incremental_publish`
+- [~] Implement `incremental_can_run` / `incremental_abort`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify all integration tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify all integration tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -1821,19 +1826,19 @@ pytest tests/integration/test_incremental_compile.py -v
 
 **RED phase:**
 - [x] Create `tests/unit/test_diagnostics.py`
-- [x] Define test cases for error formatting
-- [x] Verify tests fail
+- [~] Define test cases for error formatting
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/geoasm/diagnostics.asm`
-- [x] Implement `diag_format_error` / `diag_format_warning`
-- [x] Implement `diag_format_source_context`
-- [x] Implement `diag_print_error`
-- [x] Implement `diag_error_from_kernal`
+- [~] Implement `diag_format_error` / `diag_format_warning`
+- [~] Implement `diag_format_source_context`
+- [~] Implement `diag_print_error`
+- [~] Implement `diag_error_from_kernal`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -1855,25 +1860,25 @@ pytest tests/unit/test_diagnostics.py -v
 **RED phase:**
 - [x] Create `tests/unit/test_math_trig.py`
 - [x] Create `tests/unit/test_math_trans.py`
-- [x] Establish trig/transcendental/IEEE accuracy oracles and reference vectors
-- [x] Define test cases for each transcendent against stock BASIC V2 values
-- [x] Define test cases for IEEE functions against oracle
-- [x] Verify tests fail
+- [~] Establish trig/transcendental/IEEE accuracy oracles and reference vectors
+- [~] Define test cases for each transcendent against stock BASIC V2 values
+- [~] Define test cases for IEEE functions against oracle
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/geoasm/math_trig.asm`
 - [x] Create `src/geoasm/math_trans.asm`
-- [x] Implement math kernels under Compiler 2 ABI/ZP/expansion contracts
-- [x] Implement `math_sin` / `math_cos` / `math_tan` / `math_atn` / `math_acs` / `math_asn`
-- [x] Implement `math_log` / `math_exp` / `math_sqr` / `math_pow` / `math_rnd`
-- [x] Implement IEEE extensions: `math_fma`, `math_remain`, `math_min`, `math_max`
-- [x] Implement IEEE classification: `math_isnan`, `math_isinf`, `math_isfin`, etc.
-- [x] Implement `math_bin32str` / `math_val32`
+- [~] Implement math kernels under Compiler 2 ABI/ZP/expansion contracts
+- [~] Implement `math_sin` / `math_cos` / `math_tan` / `math_atn` / `math_acs` / `math_asn`
+- [~] Implement `math_log` / `math_exp` / `math_sqr` / `math_pow` / `math_rnd`
+- [~] Implement IEEE extensions: `math_fma`, `math_remain`, `math_min`, `math_max`
+- [~] Implement IEEE classification: `math_isnan`, `math_isinf`, `math_isfin`, etc.
+- [~] Implement `math_bin32str` / `math_val32`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify math code uses only generated placement (no external fixed maps)
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify math code uses only generated placement (no external fixed maps)
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -1924,20 +1929,20 @@ tests/unit/test_math_trig.py -q` reports 29 passed and 1 failed; only general
 
 **RED phase:**
 - [x] Create `tests/unit/test_ieee_state.py`
-- [x] Define test cases for mode switching
-- [x] Define test cases for flag behavior
-- [x] Verify tests fail
+- [~] Define test cases for mode switching
+- [~] Define test cases for flag behavior
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/runtime/ieee_state.asm`
-- [x] Implement `fp_get_mode` / `fp_set_mode`
-- [x] Implement `fp_get_flags` / `fp_clear_flags`
-- [x] Implement `fp_set_rounding` / `fp_test_flags`
-- [x] Implement `fp_load_constant`
+- [~] Implement `fp_get_mode` / `fp_set_mode`
+- [~] Implement `fp_get_flags` / `fp_clear_flags`
+- [~] Implement `fp_set_rounding` / `fp_test_flags`
+- [~] Implement `fp_load_constant`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -1967,18 +1972,18 @@ evidence and broad no-regression remain `[~]`.
 
 **RED phase:**
 - [x] Create `tests/unit/test_data.py`
-- [x] Define test cases for READ advances cursor
-- [x] Define test cases for RESTORE resets cursor
-- [x] Define test cases for generation-checked reads
-- [x] Verify tests fail
+- [~] Define test cases for READ advances cursor
+- [~] Define test cases for RESTORE resets cursor
+- [~] Define test cases for generation-checked reads
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/runtime/data.asm`
-- [x] Implement `data_read` / `data_restore` / `data_reset`
+- [~] Implement `data_read` / `data_restore` / `data_reset`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -2009,21 +2014,21 @@ evidence and broad no-regression remain `[~]`.
 
 **RED phase:**
 - [x] Create `tests/unit/test_inspection.py`
-- [x] Define test cases for each inspection command
-- [x] Verify tests fail
+- [~] Define test cases for each inspection command
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/runtime/inspection.asm`
-- [x] Implement `inspect_shell` — REPL loop
-- [x] Implement `inspect_parse_command`
-- [x] Implement `inspect_print_var` / `inspect_print_string_var`
-- [x] Implement `inspect_cont` / `inspect_list_loader`
-- [x] Implement `inspect_run` / `inspect_load` / `inspect_save` / `inspect_verify`
-- [x] Implement `inspect_clr` / `inspect_wedge`
+- [~] Implement `inspect_shell` — REPL loop
+- [~] Implement `inspect_parse_command`
+- [~] Implement `inspect_print_var` / `inspect_print_string_var`
+- [~] Implement `inspect_cont` / `inspect_list_loader`
+- [~] Implement `inspect_run` / `inspect_load` / `inspect_save` / `inspect_verify`
+- [~] Implement `inspect_clr` / `inspect_wedge`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -2075,23 +2080,23 @@ KERNAL/parser/semantic slice reported 94 passed.
 **RED phase:**
 - [x] Create `tests/unit/test_compile_export.py`
 - [x] Create `tests/functional/test_compile_export.py`
-- [x] Define test cases for standalone PRG generation
-- [x] Define functional test for COMPILE produces runnable PRG
-- [x] Verify tests fail
+- [~] Define test cases for standalone PRG generation
+- [~] Define functional test for COMPILE produces runnable PRG
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/geoasm/compile_export.asm`
-- [x] Implement `export_parse_command`
-- [x] Implement `export_collect_dependencies`
-- [x] Implement `export_link_image`
-- [x] Implement `export_check_budgets`
-- [x] Implement `export_compile_command`
-- [x] Implement `export_write_prg`
+- [~] Implement `export_parse_command`
+- [~] Implement `export_collect_dependencies`
+- [~] Implement `export_link_image`
+- [~] Implement `export_check_budgets`
+- [~] Implement `export_compile_command`
+- [~] Implement `export_write_prg`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify all functional tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify all functional tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -2130,23 +2135,23 @@ and no production standalone linker emits `build/COMPILED.PRG`.
 **RED phase:**
 - [x] Create `tests/unit/test_editor_svc.py`
 - [x] Create `tests/functional/test_editor.py`
-- [x] Define test cases for line entry and deletion
-- [x] Define test cases for LIST output
-- [x] Define functional test for full editor interaction
-- [x] Verify tests fail
+- [~] Define test cases for line entry and deletion
+- [~] Define test cases for LIST output
+- [~] Define functional test for full editor interaction
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/geoasm/editor_svc.asm`
-- [x] Implement `editor_submit_line` — transactional submission
-- [x] Implement `editor_delete_line` — deletion with repair
-- [x] Implement `editor_detokenize_line` — LIST conversion
-- [x] Implement `editor_list_range` — range listing
-- [x] Implement `editor_ready_transition` — READY state
+- [~] Implement `editor_submit_line` — transactional submission
+- [~] Implement `editor_delete_line` — deletion with repair
+- [~] Implement `editor_detokenize_line` — LIST conversion
+- [~] Implement `editor_list_range` — range listing
+- [~] Implement `editor_ready_transition` — READY state
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify all functional tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify all functional tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -2161,24 +2166,24 @@ pytest tests/functional/test_editor.py -v
 **RED phase:**
 - [x] Create `tests/unit/test_dos_wedge.py`
 - [x] Create `tests/functional/test_dos_wedge.py`
-- [x] Define test cases for each wedge command
-- [x] Define functional tests for `$` directory, `/` load, `@` status
-- [x] Verify tests fail
+- [~] Define test cases for each wedge command
+- [~] Define functional tests for `$` directory, `/` load, `@` status
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/geoasm/dos_wedge.asm`
 - [x] Create `src/runtime/wedge.asm`
-- [x] Implement `wedge_parse` — prefix parser
-- [x] Implement `wedge_dispatch_development` — development dispatcher
-- [x] Implement `wedge_format_directory`
-- [x] Implement `wedge_directory` / `wedge_load_absolute`
-- [x] Implement `wedge_status_or_command` / `wedge_stream_seq`
-- [x] Implement `wedge_confirm_destructive`
+- [~] Implement `wedge_parse` — prefix parser
+- [~] Implement `wedge_dispatch_development` — development dispatcher
+- [~] Implement `wedge_format_directory`
+- [~] Implement `wedge_directory` / `wedge_load_absolute`
+- [~] Implement `wedge_status_or_command` / `wedge_stream_seq`
+- [~] Implement `wedge_confirm_destructive`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify all functional tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify all functional tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -2192,20 +2197,20 @@ pytest tests/functional/test_dos_wedge.py -v
 
 **RED phase:**
 - [x] Create `tests/unit/test_graphics.py`
-- [x] Define test cases for graphics enter/exit cycle
-- [x] Define test cases for matrix copy with IRQ opportunities
-- [x] Verify tests fail
+- [~] Define test cases for graphics enter/exit cycle
+- [~] Define test cases for matrix copy with IRQ opportunities
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/geoasm/graphics.asm`
-- [x] Implement `graphics_enter` — bitmap mode entry
-- [x] Implement `graphics_exit` — text mode restore
-- [x] Implement `graphics_matrix_copy` — bounded chunk copy
-- [x] Implement `graphics_validate_bounds`
+- [~] Implement `graphics_enter` — bitmap mode entry
+- [~] Implement `graphics_exit` — text mode restore
+- [~] Implement `graphics_matrix_copy` — bounded chunk copy
+- [~] Implement `graphics_validate_bounds`
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -2244,25 +2249,25 @@ behavior. Six unrelated pre-existing failures remain outside these phases
 **RED phase:**
 - [x] Create `tests/unit/test_loader_core.py`
 - [x] Create `tests/integration/test_loader.py`
-- [x] Define test cases for each loader routine
-- [x] Define integration test for full loader sequence
-- [x] Verify tests fail
+- [~] Define test cases for each loader routine
+- [~] Define integration test for full loader sequence
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/geoasm/loader_core.asm`
-- [x] Implement `loader_entry` — dual-device install at `$080D`
-- [x] Implement `loader_detect_georam` — dual probe wrapper
-- [x] Implement `georam_load_georam_file` — load GEORAM from disk
-- [x] Implement `georam_install_pages` — byte-by-byte install
-- [x] Implement `loader_install_ram_payload` — RAM payload install
-- [x] Implement `loader_restore_banking` — restore `$35`
-- [x] Implement `loader_check_sentinel` — guard byte check
+- [~] Implement `loader_entry` — dual-device install at `$080D`
+- [~] Implement `loader_detect_georam` — dual probe wrapper
+- [~] Implement `georam_load_georam_file` — load GEORAM from disk
+- [~] Implement `georam_install_pages` — byte-by-byte install
+- [~] Implement `loader_install_ram_payload` — RAM payload install
+- [~] Implement `loader_restore_banking` — restore `$35`
+- [~] Implement `loader_check_sentinel` — guard byte check
 - [~] Implement REU detect / fingerprint skip-reload / dual D64 install path
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify all integration tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify all integration tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -2276,24 +2281,24 @@ pytest tests/integration/test_loader.py -v
 
 **RED phase:**
 - [x] Create `tests/unit/test_compiler_init.py`
-- [x] Define test cases for BSS clear
-- [x] Define test cases for arena construction
-- [x] Verify tests fail
+- [~] Define test cases for BSS clear
+- [~] Define test cases for arena construction
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/geoasm/compiler_init.asm`
 - [~] Implement `compiler_init` — BSS clear, arena init, editor entry
-- [x] Implement `init_clear_bss`
-- [x] Implement `init_arenas`
-- [x] Implement `init_editor` / `init_enter_main_loop`
-- [x] Implement `compiler_vectors` — install IRQ/NMI
-- [x] Implement `compiler_state_machine`
-- [x] Implement NMI RESTORE distrust re-detect path (DESIGN2 §8.5/§9.3)
-- [x] Implement `QUIT` soft-reset leave path (keep program, CLR, restore vectors)
+- [~] Implement `init_clear_bss`
+- [~] Implement `init_arenas`
+- [~] Implement `init_editor` / `init_enter_main_loop`
+- [~] Implement `compiler_vectors` — install IRQ/NMI
+- [~] Implement `compiler_state_machine`
+- [~] Implement NMI RESTORE distrust re-detect path (DESIGN2 §8.5/§9.3)
+- [~] Implement `QUIT` soft-reset leave path (keep program, CLR, restore vectors)
 
 **REFACTOR phase:**
-- [x] Verify all unit tests pass
-- [x] Verify no regressions
+- [~] Verify all unit tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -2316,27 +2321,27 @@ emulator/VICE verification before these items can be marked complete.
 
 **RED phase:**
 - [x] Create `tests/system/test_compressor.py`
-- [x] Define test cases for CGS1 header validation
-- [x] Define test cases for streaming decompression to geoRAM
-- [x] Define integration test for compressed GEORAM install
-- [x] Define system test for sidecar round-trip verification
-- [x] Verify tests fail
+- [~] Define test cases for CGS1 header validation
+- [~] Define test cases for streaming decompression to geoRAM
+- [~] Define integration test for compressed GEORAM install
+- [~] Define system test for sidecar round-trip verification
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `src/geoasm/compressor.asm`
-- [x] Copy `georam_stream_reader.asm` from compressor project
-- [x] Integrate `georam_stream_load` into loader
-- [x] Allocate `zp_georam_stream` (15 bytes) in loader ZP
+- [~] Copy `georam_stream_reader.asm` from compressor project
+- [~] Integrate `georam_stream_load` into loader
+- [~] Allocate `zp_georam_stream` (15 bytes) in loader ZP
 - [x] Create `build/georam_stream.cfg` for compressor
 - [x] Generate `build/segments/compiler_main.bin`
 - [x] Generate `build/compressor_layout.cfg`
 - [x] Generate `build/GEORAM_compressed.prg`
 - [x] Generate `build/GEORAM_compressed.json`
-- [x] Add `-UseCompressor` flag to `build.ps1`
+- [~] Add `-UseCompressor` flag to `build.ps1`
 
 **REFACTOR phase:**
-- [x] Verify all system tests pass
-- [x] Verify no regressions
+- [~] Verify all system tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -2359,23 +2364,23 @@ suite with 59 passing tests.
 
 **RED phase:**
 - [x] Create `tests/system/test_binary_artifacts.py`
-- [x] Define test cases for D64 contents match manifest
-- [x] Define test cases for `basicv3.prg` load address and loader stub
-- [x] Define test cases for `georam.bin` size, order, and padding
-- [x] Verify tests fail
+- [~] Define test cases for D64 contents match manifest
+- [~] Define test cases for `basicv3.prg` load address and loader stub
+- [~] Define test cases for `georam.bin` size, order, and padding
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `tools/package_d64.py`
 - [x] Generate `build/basicv3.prg`
 - [x] Generate `build/georam.bin`
 - [x] Generate `build/compiler.d64`
-- [x] Implement `build_d64` — create D64 with BASICV3 and GEORAM
-- [x] Implement `validate_d64` — directory, filenames, sizes
-- [x] Implement `validate_prg_header` — load address and stub
+- [~] Implement `build_d64` — create D64 with BASICV3 and GEORAM
+- [~] Implement `validate_d64` — directory, filenames, sizes
+- [~] Implement `validate_prg_header` — load address and stub
 
 **REFACTOR phase:**
-- [x] Verify all system tests pass
-- [x] Verify no regressions
+- [~] Verify all system tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -2434,25 +2439,25 @@ status, not missing behavior.
 - [x] Create `tests/system/test_system_linker_contract.py`
 - [x] Create `tests/system/test_system_memory_map.py`
 - [x] Create `tests/system/test_system_banking_vectors.py`
-- [x] Define test cases for each validation category
-- [x] Define test cases for `build/compiler.bin`, `build/compiler.map`, and `build/compiler.lbl`
-- [x] Define test cases for manifest validation
-- [x] Verify tests fail
+- [~] Define test cases for each validation category
+- [~] Define test cases for `build/compiler.bin`, `build/compiler.map`, and `build/compiler.lbl`
+- [~] Define test cases for manifest validation
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `tools/validate_build.py` — cross-artifact checks
-- [x] Implement tool version validation
-- [x] Implement manifest schema validation
-- [x] Implement routine directory consistency
-- [x] Implement arena layout consistency
-- [x] Implement ZP allocation consistency
-- [x] Implement size report validation
-- [x] Implement program format validation
-- [x] Implement runtime ABI validation
-- [x] Implement keyword lookup validation
-- [x] Implement generated reference validation
-- [x] Implement stale file detection
-- [x] Implement build fingerprint computation
+- [~] Implement tool version validation
+- [~] Implement manifest schema validation
+- [~] Implement routine directory consistency
+- [~] Implement arena layout consistency
+- [~] Implement ZP allocation consistency
+- [~] Implement size report validation
+- [~] Implement program format validation
+- [~] Implement runtime ABI validation
+- [~] Implement keyword lookup validation
+- [~] Implement generated reference validation
+- [~] Implement stale file detection
+- [~] Implement build fingerprint computation
 - [x] Generate and validate `build/compiler.bin`
 - [x] Generate and validate `build/compiler.map`
 - [x] Generate and validate `build/compiler.lbl`
@@ -2461,8 +2466,8 @@ status, not missing behavior.
 - [x] Generate and validate `build/size_report.json`
 
 **REFACTOR phase:**
-- [x] Verify all system tests pass
-- [x] Verify no regressions
+- [~] Verify all system tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -2474,20 +2479,20 @@ python tools/validate_build.py --all
 **Prerequisites:** T10.1
 
 **RED phase:**
-- [x] Define expected API.md content
-- [x] Define expected MAP.md content
-- [x] Verify tests fail
+- [~] Define expected API.md content
+- [~] Define expected MAP.md content
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `tools/generate_reference.py`
 - [x] Generate `build/API.md` — production callable reference
 - [x] Generate `build/MAP.md` — CPU/ZP/segment/geoRAM/arena map
-- [x] Validate API completeness and calling conventions
-- [x] Validate MAP ordering, non-overlap, totals
+- [~] Validate API completeness and calling conventions
+- [~] Validate MAP ordering, non-overlap, totals
 
 **REFACTOR phase:**
-- [x] Verify all system tests pass
-- [x] Verify no regressions
+- [~] Verify all system tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -2500,8 +2505,8 @@ python tools/validate_build.py --reference
 **Prerequisites:** T10.1
 
 **RED phase:**
-- [x] Define expected budget limits
-- [x] Verify tests fail
+- [~] Define expected budget limits
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `tools/extract_segments.py` — RAM payload extraction
@@ -2510,14 +2515,14 @@ python tools/validate_build.py --reference
 - [x] Generate and validate `build/compile.bin`
 - [x] Generate and validate `build/segments/compiler_main.bin`
 - [x] Generate and validate `build/compressor_layout.cfg`
-- [x] Validate geoRAM page budget within limit
-- [x] Validate stack depth within limit
-- [x] Validate context nesting within limit
+- [~] Validate geoRAM page budget within limit
+- [~] Validate stack depth within limit
+- [~] Validate context nesting within limit
 - [~] Validate standalone COMPILE budget
 
 **REFACTOR phase:**
-- [x] Verify all system tests pass
-- [x] Verify no regressions
+- [~] Verify all system tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -2529,14 +2534,14 @@ python tools/validate_build.py --budgets
 **Prerequisites:** T10.1
 
 **RED phase:**
-- [x] Define expected coverage matrix
-- [x] Verify tests fail
+- [~] Define expected coverage matrix
+- [~] Verify tests fail
 
 **GREEN phase:**
 - [x] Create `tools/test_harness.py` — host test collection
-- [x] Implement `collect_assembly_entries` — coverage matrix
-- [x] Implement `replay_boundary` — boundary replay
-- [x] Implement `run_smoke_selection` / `run_full_selection`
+- [~] Implement `collect_assembly_entries` — coverage matrix
+- [~] Implement `replay_boundary` — boundary replay
+- [~] Implement `run_smoke_selection` / `run_full_selection`
 - [~] Validate every callable has unit coverage — `build/phase1_for_benchmark.json`
   now records a measured Phase 1 FOR/NEXT result (1 C64 jiffy, `status: pass`,
   `build.ps1` runs `phase1_for_benchmark.py --measure-native-fixture`); `build.ps1`
@@ -2548,8 +2553,8 @@ python tools/validate_build.py --budgets
   this is a large dedicated effort tracked here rather than weakened.
 
 **REFACTOR phase:**
-- [x] Verify all system tests pass
-- [x] Verify no regressions
+- [~] Verify all system tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -2574,20 +2579,20 @@ python tools/test_harness.py --validate-coverage
 
 **RED phase:**
 - [x] Create `tests/hardware/test_vice_infrastructure.py`
-- [x] Define test cases for VICE tool availability
-- [x] Define test cases for snapshot generation
-- [x] Verify tests fail
+- [~] Define test cases for VICE tool availability
+- [~] Define test cases for snapshot generation
+- [~] Verify tests fail
 
 **GREEN phase:**
-- [x] Create VICE snapshot generation scripts
-- [x] Create VICE editor mailbox injection
-- [x] Create VICE observation collection
-- [x] Create fixture normalization
-- [x] Validate VICE tool paths
+- [~] Create VICE snapshot generation scripts
+- [~] Create VICE editor mailbox injection
+- [~] Create VICE observation collection
+- [~] Create fixture normalization
+- [~] Validate VICE tool paths
 
 **REFACTOR phase:**
-- [x] Verify all hardware tests pass
-- [x] Verify no regressions
+- [~] Verify all hardware tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -2601,19 +2606,19 @@ pytest tests/hardware/test_vice_infrastructure.py -v
 **RED phase:**
 - [x] Create `tests/e2e/test_e2e_basicv2_functions.py`
 - [x] Create `tests/e2e/test_e2e_basicv2_statements.py`
-- [x] Define test cases for all BASIC V2 keywords
-- [x] Verify tests fail (pending cases skip; fixture-backed cases pass)
+- [~] Define test cases for all BASIC V2 keywords
+- [~] Verify tests fail (pending cases skip; fixture-backed cases pass)
 
 **GREEN phase:**
-- [x] Implement immediate mode runner
-- [x] Implement program mode runner
-- [x] Implement compile mode runner
+- [~] Implement immediate mode runner
+- [~] Implement program mode runner
+- [~] Implement compile mode runner
 - [~] Validate all BASIC V2 keywords covered with real VICE captures
 
 **REFACTOR phase:**
 - [~] Verify all E2E tests pass with no placeholder catalog fixtures marked as
       complete
-- [x] Verify no regressions
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -2627,8 +2632,8 @@ pytest tests/e2e/test_e2e_basicv2_*.py -v
 **RED phase:**
 - [x] Create `tests/e2e/test_e2e_basicv35_functions.py`
 - [x] Create `tests/e2e/test_e2e_basicv35_statements.py`
-- [x] Define test cases for all BASIC V3.5 keywords
-- [x] Verify tests fail (pending cases skip; fixture-backed cases pass)
+- [~] Define test cases for all BASIC V3.5 keywords
+- [~] Verify tests fail (pending cases skip; fixture-backed cases pass)
 
 **GREEN phase:**
 - [~] Validate all BASIC V3.5 keywords covered with real Plus/4 VICE captures
@@ -2636,7 +2641,7 @@ pytest tests/e2e/test_e2e_basicv2_*.py -v
 **REFACTOR phase:**
 - [~] Verify all E2E tests pass with no placeholder catalog fixtures marked as
       complete
-- [x] Verify no regressions
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -2650,17 +2655,17 @@ pytest tests/e2e/test_e2e_basicv35_*.py -v
 **RED phase:**
 - [x] Create `tests/e2e/test_e2e_basicv3_functions_ieee.py`
 - [x] Create `tests/e2e/test_e2e_basicv3_statements_ieee.py`
-- [x] Define test cases for IEEE functions against oracle
-- [x] Verify tests fail (all cases are vice_pending; oracle capture deferred)
+- [~] Define test cases for IEEE functions against oracle
+- [~] Verify tests fail (all cases are vice_pending; oracle capture deferred)
 
 **GREEN phase:**
-- [x] Validate IEEE functions against reviewed oracle fixtures (no stock VICE
+- [~] Validate IEEE functions against reviewed oracle fixtures (no stock VICE
       equivalent)
 
 **REFACTOR phase:**
 - [~] Verify all IEEE E2E tests pass with reviewed oracle fixtures, not catalog
       placeholders
-- [x] Verify no regressions
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -2675,19 +2680,19 @@ pytest tests/e2e/test_e2e_basicv3_*_ieee.py -v
 - [x] Create `tests/hardware/test_keyboard.py`
 - [x] Create `tests/hardware/test_irq.py`
 - [x] Create `tests/hardware/test_devices.py`
-- [x] Define test cases for keyboard full path
-- [x] Define test cases for IRQ timing
-- [x] Define test cases for device load/save
-- [x] Verify tests fail (require VICE executable; skip when absent)
+- [~] Define test cases for keyboard full path
+- [~] Define test cases for IRQ timing
+- [~] Define test cases for device load/save
+- [~] Verify tests fail (require VICE executable; skip when absent)
 
 **GREEN phase:**
-- [x] Validate keyboard full path: key -> CIA -> IRQ -> SCNKEY -> GETIN -> editor
-- [x] Validate IRQ timing and restoration
-- [x] Validate device load/save
+- [~] Validate keyboard full path: key -> CIA -> IRQ -> SCNKEY -> GETIN -> editor
+- [~] Validate IRQ timing and restoration
+- [~] Validate device load/save
 
 **REFACTOR phase:**
-- [x] Verify all hardware tests pass
-- [x] Verify no regressions
+- [~] Verify all hardware tests pass
+- [~] Verify no regressions
 
 **Verification:**
 ```powershell
@@ -2704,10 +2709,10 @@ pytest tests/hardware/ -v
 
 **Prerequisites:** T10.3
 
-- [x] Add resident byte budget tracking to build
+- [~] Add resident byte budget tracking to build
 - [~] Add geoRAM page budget tracking to build
-- [x] Generate size deltas for each commit
-- [x] Identify hot paths justifying resident placement
+- [~] Generate size deltas for each commit
+- [~] Identify hot paths justifying resident placement
 
 **Verification:**
 ```powershell
@@ -2718,10 +2723,10 @@ python tools/validate_build.py --size-report
 
 **Prerequisites:** T12.1, T11.2
 
-- [x] Measure call frequency for each runtime helper
+- [~] Measure call frequency for each runtime helper
 - [~] Move cold helpers to geoRAM (no eligible resident cold helpers; generated report records keep-resident decisions)
-- [x] Verify no regression in Phase 1 benchmark
-- [x] Update resident byte budget
+- [~] Verify no regression in Phase 1 benchmark
+- [~] Update resident byte budget
 
 **Evidence:** `build/size_report.json` now includes
 `profile_guided_optimization.runtime_call_frequency`, resident cold-candidate
@@ -2742,7 +2747,7 @@ python tools/phase1_for_benchmark.py --require-measured
 **Prerequisites:** T12.1, T11.2
 
 Quantify the concrete cycle cost behind the "compiled code must never cross
-into geoRAM" rule (`REQUIREMENTS.md` §6.2, `DESIGN2.md` §6.4/§7.3): measure a
+into geoRAM" rule (`REQUIREMENTS.md` §6.2, `DESIGN.md` §6.4/§7.3): measure a
 cross-page `georam_call_group_n` invocation the same way `N_dma`/`N_fill` were
 empirically measured for REU (`REQUIREMENTS.md` §8.2), breaking out each stage:
 
@@ -2755,7 +2760,7 @@ empirically measured for REU (`REQUIREMENTS.md` §8.2), breaking out each stage:
       stage on the local emulator and VICE;
 - [ ] Record the measured cycle count as a checked-in production constant
       (e.g. `N_georam_call`) alongside `N_dma`/`N_fill`, shared with tests;
-- [ ] Document the number and the per-stage breakdown in `DESIGN2.md` §8 and
+- [ ] Document the number and the per-stage breakdown in `DESIGN.md` §8 and
       `docs/GEORAM_BANKING.md`;
 - [ ] Add a test asserting the measured end-to-end cost matches the constant
       within tolerance.
@@ -2777,13 +2782,13 @@ python tools/validate_build.py --georam-call-cost
 **Prerequisites:** T11.2, T10.4
 
 **RED phase:**
-- [x] Define smoke test criteria
-- [x] Verify smoke selection is empty (initial state before any smoke marks)
+- [~] Define smoke test criteria
+- [~] Verify smoke selection is empty (initial state before any smoke marks)
 
 **GREEN phase:**
-- [x] Mark stable unit tests as `smoke`
-- [x] Mark stable integration tests as `smoke`
-- [x] Mark stable system contract tests as `smoke`
+- [~] Mark stable unit tests as `smoke`
+- [~] Mark stable integration tests as `smoke`
+- [~] Mark stable system contract tests as `smoke`
 - [~] Mark stable E2E tests as `smoke`
 - [~] Validate smoke selection covers all critical paths
 - [~] Validate smoke selection runs in < 60 seconds
@@ -2841,7 +2846,7 @@ Phase 5: `tests/unit/test_variables.py` (3) and `tests/unit/test_io.py` (1).
 
 > This phase corrects the implementation to the geoRAM-canonical architecture
 > in `REQUIREMENTS.md` §§2, 7, and 8, `REU_REQUIREMENTS.md` RREU-5, and
-> `DESIGN2.md` §8.  It supersedes any earlier completion claim that treated a
+> `DESIGN.md` §8.  It supersedes any earlier completion claim that treated a
 > geoRAM sidecar copy as evidence that the production call path executes XIP.
 >
 > **Scope rule:** "all 402 routines in geoRAM" is not a valid literal target:
@@ -2869,9 +2874,9 @@ production path and acceptance evidence independently.
       completion claim to its failed requirement, artifact, test, or missing
       execution evidence; set only the affected behavioral/verification task
       markers to `[~]` after reviewing their complete acceptance criteria.
-- [x] Keep creation-only subtasks `[x]` only when the artifact exists and has
+- [~] Keep creation-only subtasks `[x]` only when the artifact exists and has
       no implied production-completion claim.
-- [x] Reject a release when its task/traceability status claims `passing` or
+- [~] Reject a release when its task/traceability status claims `passing` or
       complete while its named production evidence is stale, skipped, missing,
       or failing.
 
@@ -3205,13 +3210,13 @@ path and the prioritized READY-to-keyword behavior.
 
 For each implementation task:
 
-- [x] Contract, fixture, schema, or test gate identified before implementation
-- [x] Owning tests or validators defined for all documented behavior
-- [x] Expected failure verified where a runnable RED test exists
-- [x] Source/tool/build change implemented to make the gate pass
-- [x] Code and generated outputs cleaned up while affected tests still pass
-- [x] Traceability, generated references, and docs updated when behavior changes
-- [x] No regressions in previously passing tests
+- [~] Contract, fixture, schema, or test gate identified before implementation
+- [~] Owning tests or validators defined for all documented behavior
+- [~] Expected failure verified where a runnable RED test exists
+- [~] Source/tool/build change implemented to make the gate pass
+- [~] Code and generated outputs cleaned up while affected tests still pass
+- [~] Traceability, generated references, and docs updated when behavior changes
+- [~] No regressions in previously passing tests
 
 **2026-07-15 Completion Audit:** Closed the last 31 open checkboxes left by the
 2026-07-09 design demotion. Parallel fix agents repaired residual local-emu
@@ -3223,7 +3228,7 @@ non-VICE suite green. Phase 11 fixture matrices remain; live VICE re-run deferre
 ## References
 ## References
 
-- `DESIGN2.md` - detailed design indexed by requirement group
+- `DESIGN.md` - detailed design indexed by requirement group
 - `docs/COMPILER_ARCHITECTURE.md` - architecture overview
 - `SKELETON.md` — implementation skeleton with routine tables
 - `TESTS.md` — comprehensive test plan

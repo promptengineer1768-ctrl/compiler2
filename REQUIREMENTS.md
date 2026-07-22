@@ -4,7 +4,7 @@
 
 This document defines required externally visible behavior and engineering
 acceptance criteria. Dual-device expansion detail is specified in
-`REU_REQUIREMENTS.md`. `DESIGN2.md`, `REU_DESIGN.md`, and
+`REU_REQUIREMENTS.md`. `DESIGN.md`, `REU_DESIGN.md`, and
 `docs/COMPILER_ARCHITECTURE.md` describe the architecture that satisfies these
 requirements. If design documents and this file disagree on common product
 behavior, this document wins; if they disagree on dual-device expansion
@@ -1055,6 +1055,17 @@ C64 jiffies when run as a compiled program:
 This is a hard Phase 1 performance requirement because it proves that the
 minimal `FOR`/`NEXT`, numeric scalar, `TI`, and `PRINT` runtime path is faster
 than stock C64 BASIC V2 for the project bootstrap benchmark.
+
+### 11.1 Noels Retro Lab End-to-End Performance Gate
+
+The unchanged stock-CBM source `tests/performance/noels_retro_lab_cbm_v2.bas`
+is a release acceptance benchmark. In a clean NTSC C64 VICE instance, the
+installed Compiler 2 editor shall accept the source, `RUN` shall compile and
+execute it in memory, and the observed output shall contain the ten dots,
+`500500`, and `E`. The test shall record the installed artifact fingerprint
+and measured `TI` jiffies, then compare the result with the versioned 2,388
+jiffy stock C64 BASIC V2 reference. A hand-authored native fixture, prefabricated
+timing result, or interpreter/editor fallback does not satisfy this requirement.
 
 Incremental compilation should complete ordinary numbered-line entry in about
 0.5 seconds or less on the target development environment. This is not a hard

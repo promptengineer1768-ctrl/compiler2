@@ -1,6 +1,6 @@
 ; src/geoasm/program_codec.asm
 ; Stock V2, Plus/4 BASIC 3.5, and optional C2P1 program codec helpers.
-; SAVE format selection follows DESIGN2.md §5: C2-only > Plus/4 3.5 > V2,
+; SAVE format selection follows DESIGN.md §5: C2-only > Plus/4 3.5 > V2,
 ; scanning tokens outside REM/string/DATA contexts.
 
 .include "common/zp.inc"

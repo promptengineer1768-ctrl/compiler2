@@ -26,6 +26,7 @@ if (-not (Test-Path $Ld65)) { throw "ld65.exe not found at $Ld65" }
 # 1. Validate manifests
 Write-Host "=== Validating manifests ===" -ForegroundColor Green
 & $Python tools/validate_build.py --manifests
+& $Python tools/task_manifest.py validate
 if ($LASTEXITCODE -ne 0) { throw "Manifest validation failed." }
 
 if ($Validate) {

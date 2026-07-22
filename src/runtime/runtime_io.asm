@@ -17,7 +17,7 @@
 ; Language SAVE emits token-class format bytes (C2-only > Plus/4 3.5 > V2)
 ; for the published program, materializes them into the RS workspace, then
 ; calls KERNAL SAVE. Language VERIFY compares pure byte equality against
-; exactly those SAVE emission bytes (DESIGN2.md §5).
+; exactly those SAVE emission bytes (DESIGN.md §5).
 ;
 ; C=1 rejects malformed records or propagates a KERNAL failure. All external
 ; I/O traverses resident kernal_bridge entries.

@@ -25,7 +25,7 @@
       "line_order": "strictly_increasing",
       "link_policy": "canonical_absolute_next_record",
       "program_terminator_bytes": [0, 0],
-      "description": "Plus/4-compatible linked-line form with load address $1001 and stock 3.5 token bytes. See DESIGN2.md §5."
+      "description": "Plus/4-compatible linked-line form with load address $1001 and stock 3.5 token bytes. See DESIGN.md §5."
     },
     "extended_c2p1": {
       "name": "Compiler 2 optional C2P1 package (not required for stock V2/V3.5)",
@@ -40,7 +40,7 @@
       "checksum": "sum8_in_u16",
       "reserved_bytes": 6,
       "body": "normalized_logical_program_stream",
-      "description": "Optional package envelope for Compiler 2-only tokens. Stock BASIC V2 uses stock_basicv2; supported BASIC 3.5 uses stock_basicv35. See DESIGN2.md §5."
+      "description": "Optional package envelope for Compiler 2-only tokens. Stock BASIC V2 uses stock_basicv2; supported BASIC 3.5 uses stock_basicv35. See DESIGN.md §5."
     }
   },
   "save_format_ids": {

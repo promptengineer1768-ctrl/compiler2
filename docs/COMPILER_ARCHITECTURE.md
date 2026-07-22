@@ -3,7 +3,7 @@
 This document is the high-level architecture map for Compiler 2. It summarizes
 load-bearing design decisions and points to the normative documents that own
 the details. `../REQUIREMENTS.md` is the compatibility authority,
-`../DESIGN2.md` is the main design authority, `../REU_DESIGN.md` owns dual-device
+`../DESIGN.md` is the main design authority, `../REU_DESIGN.md` owns dual-device
 expansion detail, and `../SKELETON.md` maps responsibilities to source files,
 manifests, generated artifacts, and tests.
 
@@ -30,7 +30,7 @@ ABI, and semantics always follow this tree's design.
 ## Runtime Layers
 
 Compiler 2 is organized into five practical layers under a **dual-device**
-expansion model (geoRAM or REU selected at startup; see `DESIGN2.md` §1 and
+expansion model (geoRAM or REU selected at startup; see `DESIGN.md` §1 and
 `REU_DESIGN.md`).
 
 | Layer | Location | Responsibility |
@@ -119,7 +119,7 @@ the input exactly. Import then normalizes away stock absolute links. Stock
 export validates normalized records, clones non-scratch inputs to the scratch
 arena, prepends the `$0801` load address, and recomputes every BASIC link
 without mutating the published logical arena. Extended-token programs use the
-**C2P1** envelope (`DESIGN2.md` §5.2, `manifests/program_formats.json`): magic
+**C2P1** envelope (`DESIGN.md` §5.2, `manifests/program_formats.json`): magic
 `C2P1`, format and ABI versions, a 16-bit body length, an eight-bit additive
 checksum stored in a 16-bit field, and six zero reserved bytes; all fields are
 validated before in-place body publication. **CGS1** remains the compressed
@@ -383,7 +383,7 @@ and an independent IEEE oracle.
 | Concern | Primary documents |
 |---|---|
 | Requirements and compatibility | `../REQUIREMENTS.md`, `../REU_REQUIREMENTS.md` |
-| Detailed architecture | `../DESIGN2.md`, `../REU_DESIGN.md`, this document |
+| Detailed architecture | `../DESIGN.md`, `../REU_DESIGN.md`, this document |
 | Source/module skeleton | `../SKELETON.md` |
 | Build and artifacts | `BUILD.md`, `GENERATED_REFERENCE.md` |
 | geoRAM banking and loader | `GEORAM_BANKING.md`, `GEORAM_LOADER_DESIGN.md` |

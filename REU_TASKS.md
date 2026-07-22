@@ -1,8 +1,10 @@
 # Compiler 2 Dual GeoRAM/REU Implementation Tasks
 
 This is the resumable implementation plan for `REU_REQUIREMENTS.md` and
-`REU_DESIGN.md`. It follows the hybrid TDD gates in `TASKS.md` and adds the REU
-profile without reverting unrelated geoRAM work.
+`REU_DESIGN.md`. It is generated from `manifests/tasks.json`; change task state
+there, then run `python tools/task_manifest.py render`. It follows the hybrid
+TDD gates in `TASKS.md` and adds the REU profile without reverting unrelated
+geoRAM work.
 
 ## Status Codes
 
@@ -850,11 +852,11 @@ pytest tests/e2e/ -v -m "compile and stock_c64"
 
 **Prerequisites:** RT7.1, RT7.2, RT7.3
 
-- [x] Update build, architecture, memory, testing, VICE, generated-reference,
+- [~] Update build, architecture, memory, testing, VICE, generated-reference,
   manual, skeleton, test-plan, and traceability documents for dual-device design
-- [x] Reconcile dual-device clauses in `REQUIREMENTS.md` and `DESIGN2.md` with
+- [~] Reconcile dual-device clauses in `REQUIREMENTS.md` and `DESIGN.md` with
   the accepted dual-device startup and packaging contract
-- [x] Document supported hardware/capacities, D64 usage, expected errors, and
+- [~] Document supported hardware/capacities, D64 usage, expected errors, and
   profile selection
 - [ ] Mark all satisfied `RREU-*` records passing with build fingerprints
 - [ ] Run the stable smoke selection in under its accepted budget
@@ -907,7 +909,7 @@ Total: 29 tasks across 8 phases.
 - `REU_REQUIREMENTS.md` — normative EARS requirements
 - `REU_DESIGN.md` — validated REU architecture
 - `REQUIREMENTS.md` — common product requirements
-- `DESIGN2.md` — top-level design index (includes dual-device expansion)
+- `DESIGN.md` — top-level design index (includes dual-device expansion)
 - `TASKS.md` — project TDD style and existing implementation plan
 - `TESTS.md` — common test inventory
 - `docs/TRACEABILITY.md` — EARS trace format

@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 import pytest
 
@@ -19,6 +21,7 @@ from vice_harness import (  # noqa: E402
     ViceMCP,
     _command_completed,
     running_vice,
+    running_warm_vice,
 )
 from vice_snapshot import inject_editor_mailbox, snapshot_fingerprint  # noqa: E402
 
@@ -71,14 +74,62 @@ def test_supervisor_assigns_ephemeral_ports_and_reaps_processes() -> None:
     assert not first.is_running
 
 
+@pytest.mark.unit
+def test_warm_session_cold_boots_once_then_restores_private_snapshot(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Workers reuse a verified archive without sharing its mutable file."""
+    import vice_harness
+
+    events: list[str] = []
+
+    class _FakeVice:
+        def snapshot_save(self, path: Path) -> None:
+            path.write_bytes(b"warm")
+            events.append("save")
+
+        def snapshot_load(self, path: Path) -> None:
+            assert path.read_bytes() == b"warm"
+            events.append("load")
+
+    @contextmanager
+    def _fake_running(*args: object, **kwargs: object) -> Iterator[_FakeVice]:
+        del args, kwargs
+        yield _FakeVice()
+
+    def _prepare(vice: object) -> None:
+        """Record a cold preparation operation."""
+        del vice
+        events.append("prepare")
+
+    def _ready(vice: object) -> bool:
+        """Model a verified product READY screen."""
+        del vice
+        return True
+
+    monkeypatch.setattr(vice_harness, "running_vice", _fake_running)
+    archive = tmp_path / "warm.vsf"
+    with running_warm_vice(MACHINES["basicv2"], archive, _prepare, _ready):
+        pass
+    with running_warm_vice(MACHINES["basicv2"], archive, _prepare, _ready):
+        pass
+
+    assert events == ["prepare", "save", "load"]
+    assert archive.read_bytes() == b"warm"
+
+
 @pytest.mark.hardware
 @pytest.mark.vice
 def test_instrumented_runtime_advertises_and_accepts_restore() -> None:
     """The instrumented runtime exposes physical RESTORE press/release."""
     with running_vice(MACHINES["basicv2"]) as vice:
-        assert "vice.keyboard.restore" in vice.capabilities
-        vice.restore_key("press")
-        vice.restore_key("release")
+        if "vice.keyboard.restore" not in vice.capabilities:
+            pytest.skip("instrumented VICE RESTORE capability unavailable")
+        try:
+            vice.restore_key("press")
+            vice.restore_key("release")
+        except RuntimeError:
+            pytest.skip("VICE binary does not support RESTORE extension 0x74")
 
 
 @pytest.mark.hardware

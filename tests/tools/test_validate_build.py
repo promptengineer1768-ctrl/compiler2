@@ -43,7 +43,7 @@ def test_traceability_rejects_missing_normative_section(tmp_path: Path) -> None:
     (tmp_path / "REU_REQUIREMENTS.md").write_text(
         "# REU Requirements\n\n## RREU-1. Product\n", encoding="utf-8"
     )
-    (tmp_path / "DESIGN2.md").write_text("# Design\n", encoding="utf-8")
+    (tmp_path / "DESIGN.md").write_text("# Design\n", encoding="utf-8")
     (tmp_path / "implementation.py").write_text("\n", encoding="utf-8")
     trace = {
         "requirement_sources": ["REQUIREMENTS.md", "REU_REQUIREMENTS.md"],
@@ -52,7 +52,7 @@ def test_traceability_rejects_missing_normative_section(tmp_path: Path) -> None:
                 "id": "R2",
                 "ears": "The system shall provide the product.",
                 "source_section": "REQUIREMENTS.md#2",
-                "design_section": "DESIGN2.md",
+                "design_section": "DESIGN.md",
                 "implementation": "implementation.py",
                 "tests": ["test_product"],
                 "status": "planned",

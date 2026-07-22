@@ -5,11 +5,11 @@
 `REU_REQUIREMENTS.md` is authoritative for the dual-device expansion profile.
 `REQUIREMENTS.md` is authoritative for common Compiler 2 behavior and, after
 reconciliation, states the dual-device product model (R2, R2.1, R7, R8).
-`DESIGN2.md` is the top-level design index that integrates this document into
+`DESIGN.md` is the top-level design index that integrates this document into
 the overall architecture (§1, §2, §7.4, §8, §13). This file is the **detailed**
 design for dual-device selection, REU hardware/DMA, overlays, REU arenas, dual
 packaging, and REU verification. On disagreement, the applicable requirements
-document wins; `DESIGN2.md` must not reintroduce a geoRAM-only product model.
+document wins; `DESIGN.md` must not reintroduce a geoRAM-only product model.
 
 **Revised model (authoritative):** REU does **not** introduce a separate
 service-sized overlay architecture. **geoRAM 256-byte XIP is normative.** REU
@@ -26,7 +26,7 @@ fetch/stash/call and bulk-DMA helpers differ from geoRAM.
    **`$C800–$CDFF`**. Each slot is a true XIP origin: on DMA-in, fix abs
    `$DExx` → that slot’s high byte and route calls **directly** into the slot
    (not a data cache that recopies into `$CE00`). Prefill hot pages from a
-   generated preference list; pin while nested. See `DESIGN2.md` §8.2.
+   generated preference list; pin while nested. See `DESIGN.md` §8.2.
 4. Interactive DMA quanta ≤ **one jiffy** (~17 000 cycles); page fills are 256
    bytes. Hot slots pin while nested; prefill invariant hot pages at install.
 5. REU DMA also serves large bulk copies (e.g. GC) when size amortizes REC
@@ -511,7 +511,7 @@ separate generated placement and low-level gates.
 
 - `REU_REQUIREMENTS.md` — normative dual-device / REU EARS requirements
 - `REQUIREMENTS.md` — common product requirements (includes dual-device R2/R8)
-- `DESIGN2.md` — top-level design index integrating dual-device architecture
+- `DESIGN.md` — top-level design index integrating dual-device architecture
 - `docs/GEORAM_BANKING.md` — geoRAM backend hardware and call ABI
 - `docs/GEORAM_LOADER_DESIGN.md` — geoRAM install stream (CGS1)
 - `TASKS.md` / `REU_TASKS.md` — implementation order and TDD conventions

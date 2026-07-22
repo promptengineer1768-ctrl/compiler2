@@ -203,6 +203,7 @@ class TestBuildD64:
         data = out_d64.read_bytes()
         dir_offset = package_d64._d64_offset(18, 1)
         georam_entry = dir_offset + 2 + 32
+        # c1541 directory entry: byte 1-2 = start track/sector
         track = data[georam_entry + 1]
         sector = data[georam_entry + 2]
         offset = package_d64._d64_offset(track, sector)

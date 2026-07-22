@@ -10,17 +10,18 @@ requirements in this tree are the source of truth.
    - `../REQUIREMENTS.md` — product, language, memory, expansion summary, tests  
    - `../REU_REQUIREMENTS.md` — dual-device detection, REU DMA/overlays, dual packaging  
 2. **Design** — architecture that satisfies those requirements  
-   - `../DESIGN2.md` — top-level design index  
+   - `../DESIGN.md` — top-level design index
    - `../REU_DESIGN.md` — dual-device / REU detailed design  
 3. **Focused design docs** (this directory) — subsystem contracts named by
-   `DESIGN2.md`  
+   `DESIGN.md`
 4. **Implementation maps** — `../SKELETON.md`, `../TASKS.md`, `../REU_TASKS.md`,
+   with canonical state and evidence in `TASKS_MANIFEST.md` / `../manifests/tasks.json`,
    `../TESTS.md` (not authorities when they conflict with 1–3)  
 5. **Generated build references** — `build/API.md`, `build/MAP.md` (current
    build only; never normative inputs)
 
 When documents disagree, a higher tier wins. When a focused doc and
-`DESIGN2.md` disagree on architecture, update the focused doc or reconcile
+`DESIGN.md` disagree on architecture, update the focused doc or reconcile
 through requirements first.
 
 ## Normative design documents (`docs/`)

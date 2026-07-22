@@ -483,6 +483,12 @@ record is not a pass. Refresh the VICE-measured native benchmark fixture with:
 python tools/phase1_for_benchmark.py --measure-native-fixture --require-measured
 ```
 
+The Noels Retro Lab gate (`R11.1`) is separately release-required. It enters
+`tests/performance/noels_retro_lab_cbm_v2.bas` through the installed editor in
+clean NTSC VICE, issues `RUN`, proves compiled-artifact execution, checks the
+ten dots, `500500`, and `E`, and compares recorded `TI` jiffies against the
+versioned 2,388-jiffy stock BASIC V2 reference.
+
 The normal build preserves a compatible measured result so generated build
 reports do not regress back to a pending benchmark after the measurement has
 been captured.
@@ -580,11 +586,13 @@ deadlines that report the last screen, registers, banking state, and input
 state on failure. MCP calls should retry brief connection resets, but retries
 must remain bounded.
 
-Run layers 1-3 in the foreground. Run broad VICE suites in isolated background
-processes with unique ports, per-test timeouts, captured output, and cleanup in
-`finally`. Do not run VICE tests in parallel when setup or cleanup can terminate
-machine processes globally. Never reuse a port while a previous process may
-still be exiting.
+Run layers 1-3 in the foreground. Broad VICE suites use isolated supervised
+processes with ephemeral ports, per-test timeouts, captured output, and cleanup
+in `finally`. Product E2E first creates or restores a build-fingerprinted warm
+snapshot, then may run with `pytest -n auto`: each worker restores a private
+copy and owns its emulator process. Never use global VICE termination or a
+shared mutable snapshot file; direct hardware tests must likewise retain their
+own supervisor lifecycle.
 
 ### Known Reliable and Unreliable Patterns
 

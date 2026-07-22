@@ -189,8 +189,8 @@ def test_ram_under_io_enter_selects_all_ram_and_ram_window_is_writable() -> None
                 DONE_FLAG & 0xFF,
                 DONE_FLAG >> 8,
                 0x4C,
-                0x09,
-                0xC0,
+                (STUB_ADDR + 5) & 0xFF,
+                (STUB_ADDR + 5) >> 8,
             ]
         )
         _run_stub(vice, stub)
@@ -235,8 +235,8 @@ def test_ram_under_io_exit_restores_mapping() -> None:
                 DONE_FLAG & 0xFF,
                 DONE_FLAG >> 8,
                 0x4C,
-                0x09,
-                0xC0,
+                (STUB_ADDR + 5) & 0xFF,
+                (STUB_ADDR + 5) >> 8,
             ]
         )
         _run_stub(vice, stub)

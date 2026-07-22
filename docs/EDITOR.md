@@ -2,7 +2,7 @@
 
 The editor is a stock-compatible BASIC program editor with expansion-native
 services (geoRAM execute-in-place or REU-loaded overlays, per the dual-device
-profile in `DESIGN2.md` §8).
+profile in `DESIGN.md` §8).
 
 The resident front end owns only timing-sensitive work:
 

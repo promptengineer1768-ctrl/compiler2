@@ -12,7 +12,7 @@ agree: neither describes a geoRAM-only release product. This document defines
 requirements for one `BASICV3` installation that detects GeoRAM and REU
 hardware at startup and runs the Compiler 2 development environment with either
 supported device. Design detail is in `REU_DESIGN.md` and the expansion
-sections of `DESIGN2.md`.
+sections of `DESIGN.md`.
 
 The release D64 contains one common `BASICV3` PRG and the device payloads needed
 by both backends. Runtime detection and selection are mandatory; separate

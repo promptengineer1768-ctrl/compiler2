@@ -13,7 +13,7 @@ generated ZP protect tables remain in normal RAM.
 X/Y address unless it falls in generated protected storage.
 
 Protection is a **narrow control-plane** policy (`REQUIREMENTS.md` §3.1,
-`DESIGN2.md` §3.1). The runtime rejects writes only into integrity-critical
+`DESIGN.md` §3.1). The runtime rejects writes only into integrity-critical
 intervals published by the build:
 
 - `$FFF9-$FFFF` — project high-memory guard and 6502 hardware vectors;

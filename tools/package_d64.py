@@ -416,21 +416,36 @@ def _add_entry(
     sector: int,
     size_sectors: int,
 ) -> None:
-    """Add directory entry."""
+    """Add a c1541-format D64 directory entry (32 bytes).
+
+    Layout (matches c1541 tool output):
+        0:    File type ($82=PRG, $81=SEQ, $83=USR, $80=DEL)
+        1-2:  Track/sector of next file with same name (0/$FF = only copy)
+        3-18: Filename (16 bytes, padded with $A0)
+        19-25: Reserved (unused, zeroed)
+        26-27: File size in sectors (16-bit LE)
+        28-29: Track/sector of first data sector
+    """
+    # File type.
     d64[offset] = 0x82 if ext == "PRG" else 0x81
+    # Track/sector of first data block.
     d64[offset + 1] = track
     d64[offset + 2] = sector
+    # Filename (16 bytes, padded with $A0).
     for i in range(16):
         d64[offset + 3 + i] = ord(name[i]) if i < len(name) else 0xA0
+    # Reserved bytes 19-27 are already zero from the bytearray init.
+    # File size in sectors (16-bit LE).
     d64[offset + 28] = size_sectors & 0xFF
     d64[offset + 29] = (size_sectors >> 8) & 0xFF
+    # Next file pointer (only copy) - bytes 30-31 already zero.
 
 
 # Dual-device release directory contract (DESIGN2 §2 / REQUIREMENTS §8).
 # The hibasic high-RAM image is optional: a partial fixture may omit it when the
 # companion hibasic.prg is absent, so only the core trio is mandatory.
 REQUIRED_D64_FILES: tuple[str, ...] = ("basicv3", "georam", "reu")
-OPTIONAL_D64_FILES: tuple[str, ...] = ("hibasic",)
+OPTIONAL_D64_FILES: tuple[str, ...] = ("hibasic", "iobasic")
 # Sector bounds: basicv3 carries always-mapped RUNTIME/GEOASM/CODE so absolute
 # compile/print/wedge calls resolve; georam ≤64KiB PRG; small REU patch.
 D64_SECTOR_BOUNDS: dict[str, tuple[int, int]] = {
@@ -473,9 +488,17 @@ def validate_d64(d64_path: str) -> dict[str, Any]:
     files: list[dict[str, Any]] = []
     for i in range(8):
         off = dir_offset + 2 + i * 32
-        if data[off] == 0:
+        # c1541 D64 directory entry (32 bytes, after 2-byte sector chain pointer):
+        #   byte 0: File type ($82=PRG, $81=SEQ, $83=USR, $80=DEL)
+        #   bytes 1-2: Track/sector of first data block
+        #   bytes 3-18: Filename (16 bytes, PETSCII, $A0-padded)
+        #   bytes 19-26: Reserved
+        #   bytes 27-28: File size in sectors (16-bit LE)
+        #   bytes 29-30: Track/sector of next file with same name (0/$FF = only copy)
+        file_type_byte = data[off]
+        if file_type_byte == 0:
             continue
-        type_code = data[off] & 0x07
+        type_code = file_type_byte & 0x07
         file_type = {1: "SEQ", 2: "PRG"}.get(type_code, "OTHER")
         name = _decode_petscii_name(data[off + 3 : off + 19])
         size = data[off + 28] | (data[off + 29] << 8)
@@ -505,10 +528,11 @@ def validate_d64_contents(disk_title: str, files: list[dict[str, Any]]) -> list[
         Deterministic list of validation errors.
     """
     errors: list[str] = []
-    if disk_title != "compiler2":
+    if disk_title.lower() != "compiler2":
         errors.append(f"D64 disk title must be 'compiler2', got {disk_title!r}")
     names = [entry.get("name") for entry in files]
-    required = set(names) | set(OPTIONAL_D64_FILES)
+    names_lower = [n.lower() for n in names]
+    required = set(names_lower) | set(OPTIONAL_D64_FILES)
     if required != set(REQUIRED_D64_FILES) | set(OPTIONAL_D64_FILES):
         errors.append(f"D64 directory must be {list(REQUIRED_D64_FILES)} (+optional {list(OPTIONAL_D64_FILES)}), got {names}")
     for entry in files:
@@ -517,8 +541,9 @@ def validate_d64_contents(disk_title: str, files: list[dict[str, Any]]) -> list[
         size = entry.get("size_sectors")
         if file_type != "PRG":
             errors.append(f"D64 file {name!r} must be PRG, got {file_type!r}")
-        if name in D64_SECTOR_BOUNDS:
-            low, high = D64_SECTOR_BOUNDS[name]
+        name_key = name.lower()
+        if name_key in D64_SECTOR_BOUNDS:
+            low, high = D64_SECTOR_BOUNDS[name_key]
             if not isinstance(size, int) or not (low <= size <= high):
                 errors.append(
                     f"D64 file {name!r} size_sectors {size!r} outside "
