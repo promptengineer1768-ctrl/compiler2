@@ -57,7 +57,7 @@ jobs:
           python -m pip install --disable-pip-version-check jsonschema pyyaml pytest pytest-timeout pytest-xdist ruff black mypy
           python -m pip install --no-deps -e ../backend
           sudo apt-get update
-          sudo apt-get install --yes cc65
+          sudo apt-get install --yes cc65 xvfb
           New-Item -ItemType Directory -Force ../tools | Out-Null
           Copy-Item (Get-Command ca65).Source ../tools/ca65.exe
           Copy-Item (Get-Command ld65).Source ../tools/ld65.exe
@@ -77,6 +77,8 @@ jobs:
           New-Item -ItemType SymbolicLink -Path "$runtime/x64sc.exe" -Target "$runtime/x64sc" | Out-Null
           New-Item -ItemType SymbolicLink -Path "$runtime/xplus4.exe" -Target "$runtime/xplus4" | Out-Null
           "VICE_NEXT_RUNTIME=$runtime" | Add-Content $env:GITHUB_ENV
+          Start-Process Xvfb -ArgumentList ':99','-screen','0','1024x768x24' -RedirectStandardOutput /tmp/xvfb.log -RedirectStandardError /tmp/xvfb.err
+          "DISPLAY=:99" | Add-Content $env:GITHUB_ENV
 
       - name: Initialize machine-readable reports
         shell: pwsh
@@ -107,7 +109,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force build/test-reports | Out-Null
-          python -m pytest tests/system tests/tools/test_validate_build.py -v --junitxml=build/test-reports/system.xml
+          python -m pytest tests/system/test_backend_adoption.py tests/tools/test_validate_build.py -v --junitxml=build/test-reports/system.xml
 
       - name: Write machine-readable CI summary
         if: always()

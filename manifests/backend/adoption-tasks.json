@@ -136,13 +136,13 @@
       "acceptance_tests": [{
         "id": "backend_skeleton_contract",
         "target": "tests/system/test_backend_adoption.py",
-        "contract_digest": "3c3dcf84d27f2848be8c7757fc981e6c6ddf8b9c7b617bd5db972bc7d7f5c72b",
+        "contract_digest": "967a299a598c64af06370942095cff659c7ebaf6d0740ab7362cf7dfcdf9ad97",
         "oracle": "The authoritative routine inventory and deterministic Backend renderer must match exactly.",
         "required": true
       }],
       "contract_approval": {
         "approved_by": "trusted",
-        "contract_digest": "23d05a1b5caf81d8f5bf9cf342aa2f48a5b8a6e8b52bafc95b9603280b523dd4",
+        "contract_digest": "18205f631822d7de0a212d45bc9340570a17636ab26e1d74ce2b3345d402cd9a",
         "review_evidence": "Trusted conversion of all 405 authoritative routine records into the Backend skeleton profile."
       },
       "depends_on": ["backend.governance_contract"],
@@ -167,13 +167,13 @@
       "acceptance_tests": [{
         "id": "backend_skeleton_contract",
         "target": "tests/system/test_backend_adoption.py",
-        "contract_digest": "3c3dcf84d27f2848be8c7757fc981e6c6ddf8b9c7b617bd5db972bc7d7f5c72b",
+        "contract_digest": "967a299a598c64af06370942095cff659c7ebaf6d0740ab7362cf7dfcdf9ad97",
         "oracle": "The authoritative routine inventory and deterministic Backend renderer must match exactly.",
         "required": true
       }],
       "contract_approval": {
         "approved_by": "trusted",
-        "contract_digest": "9932ace920e8d626e06952ae5149ad9cd2b397b2541cd69e53eba6dac9bad5cf",
+        "contract_digest": "1f9cce20e3b2a164589e4304e392b3616cbac70e3b2620cafbb1f5137fb12e6b",
         "review_evidence": "Trusted review sealed routine identity, module ownership, ABI, fail-closed behavior, and test traceability."
       },
       "depends_on": ["backend.skeleton_inventory_conversion"],
@@ -198,13 +198,13 @@
       "acceptance_tests": [{
         "id": "backend_skeleton_contract",
         "target": "tests/system/test_backend_adoption.py",
-        "contract_digest": "3c3dcf84d27f2848be8c7757fc981e6c6ddf8b9c7b617bd5db972bc7d7f5c72b",
+        "contract_digest": "967a299a598c64af06370942095cff659c7ebaf6d0740ab7362cf7dfcdf9ad97",
         "oracle": "The authoritative routine inventory and deterministic Backend renderer must match exactly.",
         "required": true
       }],
       "contract_approval": {
         "approved_by": "trusted",
-        "contract_digest": "2ace54239d52fc7cc3b4d8d7eb777ea9eafdc095669eee2173010b763e4b062e",
+        "contract_digest": "f793bd319af93353b79d8c3c42ccd7f9bcb8aa77a44d2962fb508dc320c51215",
         "review_evidence": "Trusted final generation produced the isolated tracked design-review snapshot without changing production source."
       },
       "depends_on": ["backend.skeleton_acceptance"],
