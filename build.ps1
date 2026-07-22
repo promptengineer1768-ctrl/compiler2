@@ -8,7 +8,8 @@ param(
     # Dual-device both-present preference only (never drops a sidecar).
     [ValidateSet("GeoRam", "Reu")]
     [string]$ExpansionPreference = "GeoRam",
-    [switch]$Validate
+    [switch]$Validate,
+    [switch]$SkipViceBenchmarks
 )
 
 $ErrorActionPreference = "Stop"
@@ -281,7 +282,11 @@ if ($C1541Path) {
 }
 if ($LASTEXITCODE -ne 0) { throw "D64 packaging failed." }
 
-& $Python tools/phase1_for_benchmark.py --measure-native-fixture --json-out "$OutDir/phase1_for_benchmark.json"
+if ($SkipViceBenchmarks) {
+    & $Python tools/phase1_for_benchmark.py --json-out "$OutDir/phase1_for_benchmark.json"
+} else {
+    & $Python tools/phase1_for_benchmark.py --measure-native-fixture --json-out "$OutDir/phase1_for_benchmark.json"
+}
 if ($LASTEXITCODE -ne 0) { throw "Phase 1 FOR benchmark measurement failed." }
 
 & $Python `

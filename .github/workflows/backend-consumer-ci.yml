@@ -106,7 +106,7 @@ jobs:
 
       - name: Build release artifacts
         shell: pwsh
-        run: ./build.ps1 -ToolsRoot ../tools -Python (Get-Command python).Source -ExpansionPreference GeoRam
+        run: ./build.ps1 -ToolsRoot ../tools -Python (Get-Command python).Source -ExpansionPreference GeoRam -SkipViceBenchmarks
 
       - name: Run system and Backend-adoption tests
         if: always()

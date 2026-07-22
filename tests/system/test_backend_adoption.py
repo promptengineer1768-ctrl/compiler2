@@ -225,6 +225,7 @@ def test_remote_ci_pins_actions_and_publishes_all_proof_artifacts() -> None:
     assert "xvfb" in workflow.lower()
     assert "DISPLAY=:99" in workflow
     assert "tests/system/test_backend_adoption.py" in workflow
+    assert "-SkipViceBenchmarks" in workflow
 
 
 @pytest.mark.system
@@ -235,3 +236,13 @@ def test_build_stops_before_task_validation_if_manifest_validation_fails() -> No
     manifest_guard = build.index("Build manifest validation failed", manifests)
     tasks = build.index("tools/task_manifest.py validate")
     assert manifests < manifest_guard < tasks
+
+
+@pytest.mark.system
+def test_remote_build_can_separate_unsupported_vice_measurement() -> None:
+    """Linux packaging may omit measurement but cannot invent a passing result."""
+    build = (ROOT / "build.ps1").read_text("utf-8")
+    assert "[switch]$SkipViceBenchmarks" in build
+    assert "if ($SkipViceBenchmarks)" in build
+    assert "--measure-native-fixture" in build
+    assert "--require-measured" not in build
