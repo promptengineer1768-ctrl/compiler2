@@ -226,7 +226,7 @@ def test_remote_ci_pins_actions_and_publishes_all_proof_artifacts() -> None:
     assert "DISPLAY=:99" in workflow
     assert "tests/system/test_backend_adoption.py" in workflow
     assert "-SkipViceBenchmarks" in workflow
-    assert "CC65_REVISION: 555282497c3ecf8b313d87d5973093af19c35bd5" in workflow
+    assert "CC65_REVISION: a29ce64fb51c97b7dda58dc5818f8c64b6b6f3ce" in workflow
     assert "git -C ../cc65 checkout --detach $env:CC65_REVISION" in workflow
 
 

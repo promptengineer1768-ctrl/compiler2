@@ -24,7 +24,7 @@ jobs:
       BACKEND_REVISION: b6c5d2d3d6565ff0e9e0cc1aa26458e1d3197ee0
       BACKEND_REPOSITORY: ${{ inputs.backend_repository || 'promptengineer1768-ctrl/backend' }}
       COMPILER2_BACKEND_ROOT: ${{ github.workspace }}/backend
-      CC65_REVISION: 555282497c3ecf8b313d87d5973093af19c35bd5
+      CC65_REVISION: a29ce64fb51c97b7dda58dc5818f8c64b6b6f3ce
     steps:
       - name: Check out Compiler 2
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
