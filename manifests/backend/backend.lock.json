@@ -16,7 +16,7 @@
     "manifests/backend/documentation-profile.json": "sha256:7c5c3f058e6315361833cb47ac00001fcbdcd48cb2d1b91d64f4923d0ba41844",
     "manifests/backend/distribution-profile.json": "sha256:ca3118483a69562991e876062a7b1cd43628712e0bec7fae014c063e384efad5",
     "manifests/backend/skeleton-profile.json": "sha256:3c8ddb56785d8471fca1d0495d7db2f5a80355f7b61bf851b5d4ff8293e44d08",
-    "manifests/backend/adoption-tasks.json": "sha256:9792eda470a723c620aacfccb0c48be7e6e854a9fbb5adde1afaa7adcb46d03f",
+    "manifests/backend/adoption-tasks.json": "sha256:596dc23cff1986def441eb378228e3e7eeb0709a0173e01358cab96151d7fba5",
     "manifests/backend/readiness.json": "sha256:fa0b36fcd73bca1ff37f1a95be4af3bfbf08cad2bb921d3b2a81cedf90741c42",
     "manifests/backend/testing-profile.json": "sha256:78c8d390ae00782c045e724b9cf818ecf135a2b7867d2a91d14ba17883e53ecf",
     "manifests/backend/skeleton-readiness.json": "sha256:818e6ccda301927b2bcfbe4797688c4ef22998bf7d198a172548b6ebd2ab57b7",

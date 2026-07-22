@@ -217,6 +217,11 @@ def test_remote_ci_pins_actions_and_publishes_all_proof_artifacts() -> None:
     assert "ci-summary.json" in workflow
     assert "Initialize machine-readable reports" in workflow
     assert workflow.count("if: always()") >= 6
+    assert "pyyaml" in workflow
+    assert (
+        "31eebade4c55bb4f9bda7ecb17f35f868c6c2cfceeea86b59ef777c2e25684a2" in workflow
+    )
+    assert "v3.10-instrumented-20260718-full.4" in workflow
 
 
 @pytest.mark.system
