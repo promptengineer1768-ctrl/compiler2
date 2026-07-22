@@ -79,6 +79,10 @@ jobs:
           "VICE_NEXT_RUNTIME=$runtime" | Add-Content $env:GITHUB_ENV
           Start-Process Xvfb -ArgumentList ':99','-screen','0','1024x768x24' -RedirectStandardOutput /tmp/xvfb.log -RedirectStandardError /tmp/xvfb.err
           "DISPLAY=:99" | Add-Content $env:GITHUB_ENV
+          "SDL_VIDEODRIVER=x11" | Add-Content $env:GITHUB_ENV
+          "VICE_DATADIR=$((Resolve-Path "$runtimeRoot/usr/local/share/vice").Path)" | Add-Content $env:GITHUB_ENV
+          & "$runtime/x64sc" -help | Select-Object -First 1
+          if ($LASTEXITCODE -ne 0) { throw 'VICE Linux runtime preflight failed' }
 
       - name: Initialize machine-readable reports
         shell: pwsh
