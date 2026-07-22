@@ -57,7 +57,7 @@ jobs:
           python -m pip install --disable-pip-version-check jsonschema pyyaml pytest pytest-timeout pytest-xdist ruff black mypy
           python -m pip install --no-deps -e ../backend
           sudo apt-get update
-          sudo apt-get install --yes cc65 xvfb
+          sudo apt-get install --yes cc65 xvfb libsdl2-dev libasound2-dev libpulse-dev libpng-dev zlib1g-dev libreadline-dev libglew-dev libevdev-dev
           New-Item -ItemType Directory -Force ../tools | Out-Null
           Copy-Item (Get-Command ca65).Source ../tools/ca65.exe
           Copy-Item (Get-Command ld65).Source ../tools/ld65.exe
