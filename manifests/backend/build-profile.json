@@ -1,0 +1,59 @@
+{
+  "$schema": "../../../backend/schemas/build-profile.schema.json",
+  "schema_epoch": 1,
+  "id": "compiler2_linux_ci_readiness",
+  "variables": {
+    "project_root": ".",
+    "output_directory": "build",
+    "expansion_preference": "GeoRam"
+  },
+  "steps": [
+    {
+      "id": "validate_manifests",
+      "command": ["pwsh", "-File", "build.ps1", "-Validate"],
+      "depends_on": [],
+      "inputs": ["build.ps1", "manifests/**/*.json", "docs/**/*.md"],
+      "outputs": [],
+      "platforms": ["linux"],
+      "parallel_safe": false
+    },
+    {
+      "id": "build_release",
+      "command": ["pwsh", "-File", "build.ps1", "-ToolsRoot", "../tools", "-Python", "python", "-ExpansionPreference", "GeoRam"],
+      "depends_on": ["validate_manifests"],
+      "inputs": ["src/**/*.asm", "tools/**/*.py", "manifests/**/*.json"],
+      "outputs": ["build/basicv3.prg", "build/compiler.d64", "build/API.md", "build/MAP.md"],
+      "platforms": ["linux"],
+      "parallel_safe": false
+    },
+    {
+      "id": "test_system",
+      "command": ["python", "-m", "pytest", "tests/system", "-v"],
+      "depends_on": ["build_release"],
+      "inputs": ["tests/system/**/*.py", "build/build_manifest.json"],
+      "outputs": [],
+      "platforms": ["linux"],
+      "parallel_safe": false
+    },
+    {
+      "id": "prepare_distribution",
+      "command": ["backend-framework", "package-distribution", "manifests/backend/distribution-profile.json"],
+      "depends_on": ["test_system"],
+      "inputs": ["manifests/backend/distribution-profile.json", "build/compiler.d64", "build/basicv3.prg"],
+      "outputs": ["build/distribution/compiler2/compiler2-readiness.zip"],
+      "platforms": ["linux"],
+      "parallel_safe": false,
+      "optional": true,
+      "description": "Readiness-only until the trusted distribution task is completed"
+    }
+  ],
+  "targets": [
+    {"id": "validate", "steps": ["validate_manifests"], "optional": false},
+    {"id": "program", "steps": ["build_release"], "optional": false},
+    {"id": "demo_disk", "steps": ["build_release"], "optional": false},
+    {"id": "documentation", "steps": ["build_release"], "optional": false},
+    {"id": "test", "steps": ["test_system"], "optional": false},
+    {"id": "distribution", "steps": ["prepare_distribution"], "optional": true}
+  ],
+  "toolchains": []
+}

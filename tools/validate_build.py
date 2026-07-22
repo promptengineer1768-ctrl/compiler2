@@ -533,7 +533,9 @@ def validate_backend_adoption(project_root: Path) -> list[str]:
     Returns:
         Human-readable validation errors; empty when every contract is current.
     """
-    backend_root = project_root.parent / "backend"
+    backend_root = Path(
+        os.environ.get("COMPILER2_BACKEND_ROOT", project_root.parent / "backend")
+    )
     package_root = backend_root / "src"
     if not package_root.is_dir():
         return [f"pinned Backend package is missing: {package_root}"]
@@ -561,6 +563,13 @@ def validate_backend_adoption(project_root: Path) -> list[str]:
         manifest_root / "basic-return-plus4.json",
         manifest_root / "math-profile.json",
         manifest_root / "numeric-type-profile.json",
+        manifest_root / "build-profile.json",
+        manifest_root / "documentation-profile.json",
+        manifest_root / "distribution-profile.json",
+        manifest_root / "skeleton-profile.json",
+        manifest_root / "readiness.json",
+        manifest_root / "testing-profile.json",
+        manifest_root / "adoption-tasks.json",
     )
     errors: list[str] = []
     for path in adopted_paths:
@@ -1392,8 +1401,12 @@ def main() -> None:
         errors.extend(
             validate_tool_versions(
                 {
-                    "ca65": r"C:\Users\me\Documents\Coding Projects\tools\ca65.exe",
-                    "ld65": r"C:\Users\me\Documents\Coding Projects\tools\ld65.exe",
+                    "ca65": os.environ.get(
+                        "COMPILER2_CA65", str(DEFAULT_TOOLS_ROOT / "ca65.exe")
+                    ),
+                    "ld65": os.environ.get(
+                        "COMPILER2_LD65", str(DEFAULT_TOOLS_ROOT / "ld65.exe")
+                    ),
                 },
                 {"ca65": "V2.19", "ld65": "V2.19"},
             )

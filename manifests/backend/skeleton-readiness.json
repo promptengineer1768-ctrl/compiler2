@@ -1,0 +1,31 @@
+{
+  "schema_epoch": 1,
+  "consumer": "compiler2",
+  "status": "trusted_review_snapshot_generated",
+  "routine_inventory": {
+    "source": "manifests/routines.json",
+    "record_count": 405,
+    "completeness_validator": "tools/validate_build.py --manifests",
+    "conversion_status": "complete"
+  },
+  "design_inventory": [
+    "REQUIREMENTS.md",
+    "REU_REQUIREMENTS.md",
+    "DESIGN.md",
+    "REU_DESIGN.md",
+    "SKELETON.md",
+    "docs/COMPILER_ARCHITECTURE.md",
+    "docs/CONTROL_FLOW.md",
+    "docs/GENERATED_REFERENCE.md"
+  ],
+  "generation_policy": {
+    "authority": "trusted",
+    "overwrite_existing_source": false,
+    "requires_complete_conversion": true,
+    "requires_acceptance_tests": true,
+    "task_order": "final",
+    "snapshot_root": "generated/backend-skeletons",
+    "production_build_input": false,
+    "publication": "tracked_design_review_baseline_only"
+  }
+}

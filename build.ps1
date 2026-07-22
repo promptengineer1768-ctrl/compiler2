@@ -1,6 +1,7 @@
 param(
     [string]$ToolsRoot = "C:\Users\me\Documents\Coding Projects\tools",
     [string]$OutDir = "build",
+    [string]$Python = "C:\Users\me\AppData\Local\Programs\Python\Python313\python.exe",
     [switch]$GeoramCompiler,
     [switch]$UseCompressor,
     [string]$CompressorRoot = "C:\Users\me\Documents\Coding Projects\compressor",
@@ -15,7 +16,6 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Ca65 = Join-Path $ToolsRoot "ca65.exe"
 $Ld65 = Join-Path $ToolsRoot "ld65.exe"
-$Python = "C:\Users\me\AppData\Local\Programs\Python\Python313\python.exe"
 $env:COMPILER2_CA65 = $Ca65
 $env:COMPILER2_LD65 = $Ld65
 

@@ -26,7 +26,9 @@
   },
   "requirements": [
     "REQ-GOV-001",
-    "REQ-TEST-SHARED-001"
+    "REQ-TEST-SHARED-001",
+    "REQ-BUILD-DIST-001",
+    "REQ-SKELETON-001"
   ],
   "tasks": [
     {
@@ -48,7 +50,7 @@
       "contract_approval": {
         "approved_by": "trusted",
         "contract_digest": "8d407712c9577ddbb5589e76ca2cd76e73666088579e6d728c94f7bda0b775c3",
-        "review_evidence": "Trusted cross-file review at Backend revision b7e4b182bd6825f2649d69be7f6eb032c9b7db1e"
+        "review_evidence": "Trusted cross-file review at Backend revision ef1ecd153ca73114c9b8c58cf04ec1ca6ce5814f"
       },
       "depends_on": [],
       "allowed_changes": [
@@ -100,6 +102,127 @@
         "pytest.ini"
       ],
       "evidence": [],
+      "escalations": []
+    },
+    {
+      "id": "backend.build_docs_distribution",
+      "title": "Validate shared build, generated-documentation, and distribution profiles",
+      "status": "not_started",
+      "owner": "compiler2",
+      "execution_tier": "trusted",
+      "requirements": ["REQ-BUILD-DIST-001"],
+      "design_refs": ["docs/BUILD.md", "docs/GENERATED_REFERENCE.md", "docs/BACKEND_ADOPTION.md"],
+      "acceptance": ["Shared profiles reproduce the documented build targets and package only validated release artifacts without claiming a release."],
+      "acceptance_tests": [],
+      "contract_approval": {
+        "approved_by": "trusted",
+        "contract_digest": "f467e29bf2c5e74d6559f8ec7e8d9da32ba821df77de9001bd0f4c22834ea2a3",
+        "review_evidence": "Trusted readiness contract authored against Backend build/documentation/distribution schemas at revision ef1ecd153ca73114c9b8c58cf04ec1ca6ce5814f."
+      },
+      "depends_on": ["backend.governance_contract"],
+      "allowed_changes": ["manifests/backend/**", "docs/BACKEND_ADOPTION.md", "tests/system/test_backend_adoption.py", "tools/validate_build.py"],
+      "evidence": [],
+      "escalations": []
+    },
+    {
+      "id": "backend.skeleton_inventory_conversion",
+      "title": "Convert the complete Compiler 2 routine and design inventories into reviewed skeleton contracts",
+      "status": "complete",
+      "owner": "compiler2",
+      "execution_tier": "trusted",
+      "requirements": ["REQ-SKELETON-001"],
+      "design_refs": ["SKELETON.md", "manifests/routines.json", "manifests/backend/skeleton-readiness.json"],
+      "acceptance": ["Every authoritative routine record is represented exactly once with its design references and acceptance-test IDs; no source is generated."],
+      "acceptance_tests": [{
+        "id": "backend_skeleton_contract",
+        "target": "tests/system/test_backend_adoption.py",
+        "contract_digest": "9cf4394a6a5aa7a8d9261189470fe6d1ccf0db2b6fda1b62cc8f0809c3b30eae",
+        "oracle": "The authoritative routine inventory and deterministic Backend renderer must match exactly.",
+        "required": true
+      }],
+      "contract_approval": {
+        "approved_by": "trusted",
+        "contract_digest": "a50df9b428ac7ef4bc94dd21941598876107130ffddbc2352850b1cde21d49b6",
+        "review_evidence": "Trusted conversion of all 405 authoritative routine records into the Backend skeleton profile."
+      },
+      "depends_on": ["backend.governance_contract"],
+      "allowed_changes": ["manifests/backend/skeleton-profile.json", "manifests/backend/skeleton-readiness.json", "tests/**", "tools/generate_backend_skeleton_snapshot.py"],
+      "evidence": [{
+        "kind": "test",
+        "target": "tests/system/test_backend_adoption.py",
+        "status": "passing",
+        "claim": "All 405 authoritative routine records map exactly once to a complete Backend skeleton contract."
+      }],
+      "escalations": []
+    },
+    {
+      "id": "backend.skeleton_acceptance",
+      "title": "Review and seal all generated-skeleton acceptance contracts",
+      "status": "complete",
+      "owner": "compiler2",
+      "execution_tier": "trusted",
+      "requirements": ["REQ-SKELETON-001"],
+      "design_refs": ["manifests/backend/skeleton-profile.json", "docs/BACKEND_GOVERNANCE_AND_TESTING.md#test-discipline"],
+      "acceptance": ["Every skeleton entry has trusted tests, ABI, errors, clobbers, zero-page use, side effects, requirements, and design references before generation."],
+      "acceptance_tests": [{
+        "id": "backend_skeleton_contract",
+        "target": "tests/system/test_backend_adoption.py",
+        "contract_digest": "9cf4394a6a5aa7a8d9261189470fe6d1ccf0db2b6fda1b62cc8f0809c3b30eae",
+        "oracle": "The authoritative routine inventory and deterministic Backend renderer must match exactly.",
+        "required": true
+      }],
+      "contract_approval": {
+        "approved_by": "trusted",
+        "contract_digest": "f6588bc643fa7b225578e21eef3d48af019a3486ffa0121c3630043898ae4d6f",
+        "review_evidence": "Trusted review sealed routine identity, module ownership, ABI, fail-closed behavior, and test traceability."
+      },
+      "depends_on": ["backend.skeleton_inventory_conversion"],
+      "allowed_changes": ["manifests/backend/skeleton-profile.json", "tests/**", "docs/BACKEND_ADOPTION.md", "tools/generate_backend_skeleton_snapshot.py"],
+      "evidence": [{
+        "kind": "test",
+        "target": "tests/system/test_backend_adoption.py",
+        "status": "passing",
+        "claim": "The trusted skeleton contract test proves complete ABI and test traceability before generation."
+      }],
+      "escalations": []
+    },
+    {
+      "id": "backend.skeleton_generation_final",
+      "title": "Generate trusted non-building source skeletons as the final adoption task",
+      "status": "complete",
+      "owner": "compiler2",
+      "execution_tier": "trusted",
+      "requirements": ["REQ-SKELETON-001"],
+      "design_refs": ["manifests/backend/skeleton-profile.json", "manifests/backend/skeleton-readiness.json"],
+      "acceptance": ["This remains the final task; trusted generation creates only new fail-closed skeleton files and never overwrites production source."],
+      "acceptance_tests": [{
+        "id": "backend_skeleton_contract",
+        "target": "tests/system/test_backend_adoption.py",
+        "contract_digest": "9cf4394a6a5aa7a8d9261189470fe6d1ccf0db2b6fda1b62cc8f0809c3b30eae",
+        "oracle": "The authoritative routine inventory and deterministic Backend renderer must match exactly.",
+        "required": true
+      }],
+      "contract_approval": {
+        "approved_by": "trusted",
+        "contract_digest": "d273ca40bb95006ed3a999a01edfdab77784885f444432b011f9f18bbebe58dc",
+        "review_evidence": "Trusted final generation produced the isolated tracked design-review snapshot without changing production source."
+      },
+      "depends_on": ["backend.skeleton_acceptance"],
+      "allowed_changes": ["generated/backend-skeletons/**", "manifests/backend/**", "docs/BACKEND_ADOPTION.md", "tests/system/test_backend_adoption.py", "tools/generate_backend_skeleton_snapshot.py"],
+      "evidence": [
+        {
+          "kind": "artifact",
+          "target": "generated/backend-skeletons",
+          "status": "passing",
+          "claim": "The tracked snapshot contains 50 shadow modules, exactly 405 procedures, and exactly 405 deliberate assembler errors."
+        },
+        {
+          "kind": "test",
+          "target": "tests/system/test_backend_adoption.py",
+          "status": "passing",
+          "claim": "The deterministic snapshot check proves exact identity, module, ABI, and test traceability and excludes the snapshot from production build inputs."
+        }
+      ],
       "escalations": []
     }
   ]

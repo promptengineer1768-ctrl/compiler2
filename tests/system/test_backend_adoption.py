@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -10,7 +11,7 @@ from typing import Any
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT.parent / "backend"
+BACKEND_ROOT = Path(os.environ.get("COMPILER2_BACKEND_ROOT", ROOT.parent / "backend"))
 sys.path.insert(0, str(BACKEND_ROOT / "src"))
 
 from backend_framework.basic_return import (  # noqa: E402
@@ -28,6 +29,10 @@ from backend_framework.numeric_types import promoted_type  # noqa: E402
 from backend_framework.validation.manifests import (  # noqa: E402
     validate_manifest,
 )
+from tools.generate_backend_skeleton_snapshot import (  # noqa: E402
+    build_profile,
+    check_snapshot,
+)
 
 ADOPTED = (
     "target-profile.json",
@@ -37,10 +42,15 @@ ADOPTED = (
     "basic-return-plus4.json",
     "math-profile.json",
     "numeric-type-profile.json",
+    "build-profile.json",
+    "documentation-profile.json",
+    "distribution-profile.json",
+    "skeleton-profile.json",
     "readiness.json",
     "testing-profile.json",
     "adoption-tasks.json",
 )
+LOCKED = ADOPTED + ("skeleton-readiness.json",)
 
 
 def _load(name: str) -> dict[str, Any]:
@@ -69,9 +79,9 @@ def _regions(profile: dict[str, Any]) -> tuple[LowMemoryRegion, ...]:
 def test_backend_revision_and_adopted_inputs_are_locked() -> None:
     """The sibling revision and every adopted input must match the lock."""
     lock = _load("backend.lock.json")
-    assert lock["framework_revision"] == "b7e4b182bd6825f2649d69be7f6eb032c9b7db1e"
+    assert lock["framework_revision"] == "ef1ecd153ca73114c9b8c58cf04ec1ca6ce5814f"
     verify_lock(lock, ROOT)
-    assert set(lock["inputs"]) == {f"manifests/backend/{name}" for name in ADOPTED}
+    assert set(lock["inputs"]) == {f"manifests/backend/{name}" for name in LOCKED}
 
 
 @pytest.mark.system
@@ -143,3 +153,63 @@ def test_numeric_tags_are_preserved_and_new_ieee_provider_remains_planned() -> N
     assert _load("math-profile.json")["extensions"]["migration"].startswith(
         "floatlib nc256 deprecated"
     )
+
+
+@pytest.mark.system
+def test_backend_skeleton_contract() -> None:
+    """The tracked review snapshot exactly mirrors every authoritative routine."""
+    profile = _load("skeleton-profile.json")
+    readiness = _load("skeleton-readiness.json")
+    inventory = json.loads((ROOT / "manifests/routines.json").read_text("utf-8"))
+    assert profile["generated_by"] == "trusted"
+    assert profile == build_profile(inventory)
+    assert check_snapshot(profile) == []
+    assert readiness["routine_inventory"]["record_count"] == len(inventory["routines"])
+    assert len(profile["routines"]) == 405
+    assert {item["id"] for item in profile["routines"]} == {
+        item["name"] for item in inventory["routines"]
+    }
+    assert all(
+        item["tests"] == ["backend_skeleton_contract"] for item in profile["routines"]
+    )
+    snapshot = ROOT / "generated/backend-skeletons"
+    modules = tuple(snapshot.rglob("*.asm"))
+    generated = "".join(path.read_text("utf-8") for path in modules)
+    assert len(modules) == len({item["module"] for item in inventory["routines"]})
+    assert generated.count(".proc ") == 405
+    assert generated.count('.error "skeleton requires implementation"') == 405
+    assert readiness["generation_policy"]["task_order"] == "final"
+    assert readiness["generation_policy"]["overwrite_existing_source"] is False
+    assert readiness["generation_policy"]["snapshot_root"] == (
+        "generated/backend-skeletons"
+    )
+    assert "generated/backend-skeletons" not in json.dumps(_load("build-profile.json"))
+    tasks = _load("adoption-tasks.json")["tasks"]
+    assert tasks[-1]["id"] == "backend.skeleton_generation_final"
+    assert tasks[-1]["execution_tier"] == "trusted"
+    assert tasks[-1]["depends_on"] == ["backend.skeleton_acceptance"]
+    assert tasks[-1]["status"] == "complete"
+
+
+@pytest.mark.system
+def test_remote_ci_pins_actions_and_publishes_all_proof_artifacts() -> None:
+    """Remote proof exposes binaries, docs, distribution, and reports."""
+    workflow = (ROOT / ".github/workflows/backend-consumer-ci.yml").read_text("utf-8")
+    assert "ef1ecd153ca73114c9b8c58cf04ec1ca6ce5814f" in workflow
+    assert "@v" not in workflow
+    for artifact in (
+        "compiler2-binaries",
+        "compiler2-documentation",
+        "compiler2-distribution",
+        "compiler2-test-reports",
+    ):
+        assert f"name: {artifact}" in workflow
+    assert "--junitxml=build/test-reports/system.xml" in workflow
+    assert "runs-on: ubuntu-latest" in workflow
+    assert "working-directory: compiler2" in workflow
+    assert "path: compiler2" in workflow
+    assert "path: backend" in workflow
+    assert "COMPILER2_BACKEND_ROOT: ${{ github.workspace }}/backend" in workflow
+    assert "compiler2/build/test-reports/**" in workflow
+    assert "token: ${{ secrets.BACKEND_READ_TOKEN }}" in workflow
+    assert "ci-summary.json" in workflow

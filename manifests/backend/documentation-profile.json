@@ -1,0 +1,40 @@
+{
+  "$schema": "../../../backend/schemas/documentation-profile.schema.json",
+  "schema_epoch": 1,
+  "id": "compiler2_generated_docs_readiness",
+  "features": [
+    {
+      "id": "compiler_environment",
+      "title": "Compiler 2 development environment",
+      "status": "partial",
+      "summary": "The build, editor, compiler, and dual-device contracts exist, but full language production coverage remains incomplete.",
+      "implementation": ["src/resident", "src/geoasm", "src/runtime"],
+      "tests": ["tests/system", "tests/unit", "tests/e2e"],
+      "keywords": ["COMPILE", "QUIT", "BASIC2", "BASIC3.5"]
+    },
+    {
+      "id": "generated_api_map",
+      "title": "Generated API and memory map",
+      "status": "implemented",
+      "summary": "The release build deterministically generates API.md and MAP.md from validated linked contracts.",
+      "implementation": ["tools/generate_reference.py", "tools/generate_build_reports.py"],
+      "tests": ["tests/system/test_generated_reference.py", "tests/system/test_build_validation.py"],
+      "keywords": []
+    },
+    {
+      "id": "trusted_skeletons",
+      "title": "Trusted design-to-source skeletons",
+      "status": "planned",
+      "summary": "Skeleton generation is withheld until the complete routine inventory is converted and trusted acceptance review passes.",
+      "implementation": [],
+      "tests": [],
+      "keywords": []
+    }
+  ],
+  "documents": [
+    {"id": "manual", "kind": "manual", "template": "docs/MANUAL.md", "output": "build/docs/MANUAL.md"},
+    {"id": "keywords", "kind": "keyword_reference", "template": "docs/KEYWORDS.md", "output": "build/docs/KEYWORDS.md"},
+    {"id": "api", "kind": "api", "template": "docs/GENERATED_REFERENCE.md", "output": "build/API.md"},
+    {"id": "memory_map", "kind": "reference", "template": "docs/GENERATED_REFERENCE.md", "output": "build/MAP.md"}
+  ]
+}

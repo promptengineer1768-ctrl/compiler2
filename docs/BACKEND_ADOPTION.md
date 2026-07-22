@@ -26,3 +26,20 @@ Plus/4 ROM labels.
 every adopted consumer input. A normal validation must fail when any locked file is
 missing or changed; upgrades regenerate the lock explicitly after compatibility
 review.
+
+## Remote CI readiness
+
+`.github/workflows/backend-consumer-ci.yml` is the first remote-consumer proof
+adapter. It checks out the Backend repository at the lock revision, builds and tests
+Compiler 2 on `windows-2022`, writes JUnit plus a JSON run summary, and publishes
+separate downloadable artifacts for binaries/disks, manuals/generated references,
+the distribution bundle, and test reports. The Backend repository is an explicit
+workflow-dispatch input so the trusted publisher controls the remote used for the
+proof. Actions are pinned by commit digest and workflow permissions are read-only.
+
+Skeleton generation is intentionally absent from CI. The trusted profile converts all
+405 authoritative routine records and the final trusted task renders a tracked,
+fail-closed review snapshot under `generated/backend-skeletons`. Its 50 shadow modules
+contain deliberate assembler errors and are not production build inputs. The snapshot
+freezes routine names, module ownership, ABI descriptions, and test traceability for
+design review; it is not a duplicate implementation and must never overwrite `src/`.

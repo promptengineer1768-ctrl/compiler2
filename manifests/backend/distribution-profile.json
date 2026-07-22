@@ -1,0 +1,19 @@
+{
+  "$schema": "../../../backend/schemas/distribution-profile.schema.json",
+  "schema_epoch": 1,
+  "id": "compiler2_readiness_distribution",
+  "version": "readiness-not-release",
+  "output_directory": "build/distribution/compiler2",
+  "archive": "compiler2-readiness.zip",
+  "files": [
+    {"role": "readme", "source": "docs/README.md", "destination": "README.md", "required": true},
+    {"role": "manual", "source": "docs/MANUAL.md", "destination": "docs/MANUAL.md", "required": true},
+    {"role": "keyword_reference", "source": "docs/KEYWORDS.md", "destination": "docs/KEYWORDS.md", "required": true},
+    {"role": "system_disk", "source": "build/compiler.d64", "destination": "compiler2.d64", "required": true},
+    {"role": "program", "source": "build/basicv3.prg", "destination": "basicv3.prg", "required": true},
+    {"role": "other", "source": "build/API.md", "destination": "docs/API.md", "required": true},
+    {"role": "other", "source": "build/MAP.md", "destination": "docs/MAP.md", "required": true},
+    {"role": "other", "source": "build/test-reports/system.xml", "destination": "reports/system.xml", "required": true},
+    {"role": "other", "source": "build/test-reports/ci-summary.json", "destination": "reports/ci-summary.json", "required": true}
+  ]
+}

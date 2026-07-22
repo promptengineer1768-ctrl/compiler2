@@ -1,0 +1,127 @@
+name: Backend consumer proof
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend_repository:
+        description: Published repository containing the pinned Backend revision
+        required: true
+        default: promptengineer1768-ctrl/backend
+        type: string
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: compiler2
+    env:
+      BACKEND_REVISION: ef1ecd153ca73114c9b8c58cf04ec1ca6ce5814f
+      BACKEND_REPOSITORY: ${{ inputs.backend_repository || 'promptengineer1768-ctrl/backend' }}
+      COMPILER2_BACKEND_ROOT: ${{ github.workspace }}/backend
+    steps:
+      - name: Check out Compiler 2
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          path: compiler2
+
+      - name: Check out pinned Backend
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: ${{ env.BACKEND_REPOSITORY }}
+          ref: ${{ env.BACKEND_REVISION }}
+          path: backend
+          token: ${{ secrets.BACKEND_READ_TOKEN }}
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.13'
+          cache: pip
+
+      - name: Install Python and cc65 dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check jsonschema pytest pytest-timeout pytest-xdist ruff black mypy
+          python -m pip install --no-deps -e ../backend
+          sudo apt-get update
+          sudo apt-get install --yes cc65
+          New-Item -ItemType Directory -Force ../tools | Out-Null
+          Copy-Item (Get-Command ca65).Source ../tools/ca65.exe
+          Copy-Item (Get-Command ld65).Source ../tools/ld65.exe
+
+      - name: Validate pinned consumer contracts
+        shell: pwsh
+        run: |
+          python tools/validate_build.py --manifests
+          python tools/task_manifest.py validate
+
+      - name: Build release artifacts
+        shell: pwsh
+        run: ./build.ps1 -ToolsRoot ../tools -Python (Get-Command python).Source -ExpansionPreference GeoRam
+
+      - name: Run system and Backend-adoption tests
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force build/test-reports | Out-Null
+          python -m pytest tests/system tests/tools/test_validate_build.py -v --junitxml=build/test-reports/system.xml
+
+      - name: Write machine-readable CI summary
+        shell: pwsh
+        run: |
+          $summary = [ordered]@{
+            schema_version = 1
+            backend_revision = $env:BACKEND_REVISION
+            compiler2_commit = $env:GITHUB_SHA
+            workflow_run = $env:GITHUB_RUN_ID
+            junit = 'build/test-reports/system.xml'
+          }
+          $summary | ConvertTo-Json | Set-Content -Encoding utf8 build/test-reports/ci-summary.json
+
+      - name: Assemble readiness distribution
+        shell: pwsh
+        run: backend-framework package-distribution manifests/backend/distribution-profile.json
+
+      - name: Upload binaries and disks
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: compiler2-binaries
+          if-no-files-found: error
+          path: |
+            compiler2/build/*.prg
+            compiler2/build/*.bin
+            compiler2/build/*.d64
+            compiler2/build/*manifest.json
+
+      - name: Upload manuals and generated references
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: compiler2-documentation
+          if-no-files-found: error
+          path: |
+            compiler2/docs/*.md
+            compiler2/build/API.md
+            compiler2/build/MAP.md
+
+      - name: Upload distribution assets
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: compiler2-distribution
+          if-no-files-found: error
+          path: compiler2/build/distribution/**
+
+      - name: Upload machine-readable test reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: compiler2-test-reports
+          if-no-files-found: error
+          path: compiler2/build/test-reports/**
