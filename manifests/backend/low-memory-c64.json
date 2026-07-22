@@ -1,0 +1,27 @@
+{
+  "$schema": "../../../backend/schemas/low-memory-profile.schema.json",
+  "schema_epoch": 1,
+  "id": "compiler2_c64_editor",
+  "active_features": [
+    "basic",
+    "kernal",
+    "stock_screen",
+    "stock_screen_sprites"
+  ],
+  "regions": [
+    {"id": "basic_vectors", "start": 768, "end": 779, "reserve_when": ["basic"], "restore": "restore_basic_vectors"},
+    {"id": "basic_workspace", "start": 780, "end": 787, "reserve_when": ["basic"], "restore": "restore_basic_workspace"},
+    {"id": "kernal_vectors", "start": 788, "end": 819, "reserve_when": ["kernal"], "restore": "kernal_restor"},
+    {"id": "reserved_gap", "start": 820, "end": 827, "reserve_when": [], "restore": "none"},
+    {"id": "tape_workspace", "start": 828, "end": 1019, "reserve_when": ["tape"], "restore": "discard"},
+    {"id": "low_tail", "start": 1020, "end": 1023, "reserve_when": [], "restore": "none"},
+    {"id": "stock_screen", "start": 1024, "end": 2023, "reserve_when": ["stock_screen"], "restore": "screen_init"},
+    {"id": "screen_slack", "start": 2024, "end": 2039, "reserve_when": [], "restore": "none"},
+    {"id": "sprite_pointers", "start": 2040, "end": 2047, "reserve_when": ["stock_screen_sprites"], "restore": "clear"}
+  ],
+  "extensions": {
+    "machine": "c64",
+    "ownership_authority": "backend_c64_stock_partition",
+    "tape_policy": "disabled_during_compiler_session"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "../../../backend/schemas/backend-lock.schema.json",
+  "schema_epoch": 1,
+  "consumer": "compiler2",
+  "framework_version": "0.1.0-dev",
+  "framework_revision": "9283738083403e3f4282a99a0b47c096d552ee45",
+  "generator_version": "0.1.0-dev",
+  "inputs": {
+    "manifests/backend/basic-return-c64.json": "sha256:5c62d9cba6d9a05c29b42957d6c787f98cf3c3c52a72c1a8c34cba01ba8aaa4e",
+    "manifests/backend/basic-return-plus4.json": "sha256:47f2bee7765cbecfdba8c036c6bef60090c742db93766fe4a3ce801308aa4338",
+    "manifests/backend/low-memory-c64.json": "sha256:7235665fa676f673a353107b979a2e59760fdc6fd5539ab9399ea7a0c0284a52",
+    "manifests/backend/low-memory-plus4.json": "sha256:e87e2ad41d8444861f904daf5abc01d101bc474aaf7074638c39ea6fa4f0f627",
+    "manifests/backend/target-profile.json": "sha256:130458138a6ffb53f53679eda34a8e021c3a34ef63168b1b108c9060a38e1bdd"
+  },
+  "outputs": {},
+  "adopted_contracts": [
+    "backend-lock/v1",
+    "basic-return-profile/v1",
+    "low-memory-profile/v1",
+    "target-profile/v1"
+  ]
+}

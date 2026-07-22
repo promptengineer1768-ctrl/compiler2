@@ -1,0 +1,37 @@
+{
+  "$schema": "../../../backend/schemas/basic-return-profile.schema.json",
+  "schema_epoch": 1,
+  "id": "compiler2_c64_stock_basic_return",
+  "target": "c64_basic_v2",
+  "steps": [
+    "disable_interrupts",
+    "quiesce_project_interrupt_sources",
+    "close_channels",
+    "restore_cpu_port",
+    "restore_kernal_vectors",
+    "restore_basic_vectors",
+    "restore_screen_editor",
+    "restore_stock_colors",
+    "restore_basic_memory_pointers",
+    "clear_decimal",
+    "enable_interrupts",
+    "enter_basic_warm_start"
+  ],
+  "symbols": {
+    "cpu_port": 1,
+    "kernal_restor": "restor",
+    "screen_editor_init": "cint",
+    "basic_warm_start": "panic",
+    "compiler_entry": "quit_to_stock"
+  },
+  "stock_colors": {
+    "border": 14,
+    "background": 6,
+    "text": 14
+  },
+  "extensions": {
+    "contract_status": "adoption_gap_contract",
+    "required_before_live": "VICE evidence for every ordered state restoration step",
+    "retained_program_policy": "explicit_clr_without_cold_init"
+  }
+}

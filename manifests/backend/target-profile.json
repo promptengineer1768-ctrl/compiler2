@@ -1,0 +1,37 @@
+{
+  "$schema": "../../../backend/schemas/target-profile.schema.json",
+  "schema_epoch": 1,
+  "id": "compiler2_c64_current",
+  "cpu": "6502",
+  "toolchain": {
+    "assembler": "ca65",
+    "linker": "ld65",
+    "version": "2.19"
+  },
+  "capabilities": {
+    "writable_code": true,
+    "dispatch_reentrant": true,
+    "interrupt_contract": "Resident IRQ and NMI handlers never select expansion pages"
+  },
+  "dispatch": {
+    "backend": "non_smc",
+    "opcode_encoding": "dense_index",
+    "trusted_after_validation": false
+  },
+  "memory_model": "c64_georam_reu_resident_gate",
+  "numeric_abis": [
+    "commodore_float",
+    "int16"
+  ],
+  "string_abis": [
+    "commodore_string"
+  ],
+  "extensions": {
+    "consumer_contract": "current_production",
+    "language_reference_targets": [
+      "c64_basic_v2",
+      "plus4_basic_v35"
+    ],
+    "smc_adoption": "requires_resident_trampoline_and_production_path_evidence"
+  }
+}

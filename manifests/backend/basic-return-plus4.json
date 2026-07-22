@@ -1,0 +1,35 @@
+{
+  "$schema": "../../../backend/schemas/basic-return-profile.schema.json",
+  "schema_epoch": 1,
+  "id": "compiler2_plus4_stock_basic_return",
+  "target": "plus4_basic_v35_reference",
+  "steps": [
+    "disable_interrupts",
+    "quiesce_project_interrupt_sources",
+    "close_channels",
+    "restore_cpu_port",
+    "restore_kernal_vectors",
+    "restore_basic_vectors",
+    "restore_screen_editor",
+    "restore_stock_colors",
+    "restore_basic_memory_pointers",
+    "clear_decimal",
+    "enable_interrupts",
+    "enter_basic_warm_start"
+  ],
+  "symbols": {
+    "kernal_restor": "plus4_kernal_restor",
+    "screen_editor_init": "plus4_screen_editor_init",
+    "basic_warm_start": "plus4_basic_warm_start"
+  },
+  "stock_colors": {
+    "border": 0,
+    "background": 0,
+    "text": 1
+  },
+  "extensions": {
+    "contract_status": "reference_oracle_only",
+    "production_target": false,
+    "symbol_policy": "resolve_from_authoritative_plus4_rom_labels_before_activation"
+  }
+}

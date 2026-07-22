@@ -1,0 +1,25 @@
+{
+  "$schema": "../../../backend/schemas/low-memory-profile.schema.json",
+  "schema_epoch": 1,
+  "id": "compiler2_plus4_reference",
+  "active_features": [
+    "plus4_stock_system"
+  ],
+  "regions": [
+    {
+      "id": "plus4_stock_low_memory",
+      "start": 768,
+      "end": 2047,
+      "reserve_when": [
+        "plus4_stock_system"
+      ],
+      "restore": "none",
+      "notes": "Conservative reference-machine ownership; C64 reclaim rules must not be applied to Plus/4"
+    }
+  ],
+  "extensions": {
+    "machine": "plus4",
+    "consumer_contract": "reference_oracle_only",
+    "reclaim_policy": "none_until_plus4_rom_ownership_is_authoritatively_partitioned"
+  }
+}

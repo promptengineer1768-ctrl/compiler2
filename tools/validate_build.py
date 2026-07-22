@@ -515,7 +515,83 @@ def validate_manifests() -> bool:
             print(f"Error: Manifest {path} has invalid JSON: {e}")
             return False
 
+    backend_errors = validate_backend_adoption(Path.cwd())
+    if backend_errors:
+        for error in backend_errors:
+            print(f"Error: {error}")
+        return False
+
     return True
+
+
+def validate_backend_adoption(project_root: Path) -> list[str]:
+    """Validate the pinned sibling Backend contracts and consumer lock.
+
+    Args:
+        project_root: Compiler 2 repository root.
+
+    Returns:
+        Human-readable validation errors; empty when every contract is current.
+    """
+    backend_root = project_root.parent / "backend"
+    package_root = backend_root / "src"
+    if not package_root.is_dir():
+        return [f"pinned Backend package is missing: {package_root}"]
+    package_text = str(package_root)
+    if package_text not in sys.path:
+        sys.path.insert(0, package_text)
+
+    try:
+        from backend_framework.errors import BackendError  # type: ignore[import-untyped]
+        from backend_framework.locks import verify_lock  # type: ignore[import-untyped]
+        from backend_framework.validation.manifests import (  # type: ignore[import-untyped]
+            validate_manifest,
+        )
+    except ImportError as error:
+        return [f"pinned Backend package cannot be imported: {error}"]
+
+    manifest_root = project_root / "manifests" / "backend"
+    lock_path = manifest_root / "backend.lock.json"
+    adopted_paths = (
+        lock_path,
+        manifest_root / "target-profile.json",
+        manifest_root / "low-memory-c64.json",
+        manifest_root / "low-memory-plus4.json",
+        manifest_root / "basic-return-c64.json",
+        manifest_root / "basic-return-plus4.json",
+    )
+    errors: list[str] = []
+    for path in adopted_paths:
+        try:
+            validate_manifest(path)
+        except (BackendError, OSError, ValueError) as error:
+            errors.append(f"Backend manifest {path.name} is invalid: {error}")
+    if errors:
+        return errors
+
+    lock = _load_json(str(lock_path))
+    try:
+        verify_lock(lock, project_root)
+    except (BackendError, OSError, ValueError) as error:
+        errors.append(f"Backend consumer lock verification failed: {error}")
+
+    try:
+        revision = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=backend_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as error:
+        errors.append(f"pinned Backend revision cannot be read: {error}")
+    else:
+        expected = lock.get("framework_revision")
+        if revision != expected:
+            errors.append(
+                f"pinned Backend revision differs: expected {expected}, got {revision}"
+            )
+    return errors
 
 
 def compute_build_fingerprint(
