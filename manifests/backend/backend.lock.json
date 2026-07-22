@@ -3,7 +3,7 @@
   "schema_epoch": 1,
   "consumer": "compiler2",
   "framework_version": "0.1.0-dev",
-  "framework_revision": "3a3eb1908871553a02cc2ea8c22f81ba2c57b91f",
+  "framework_revision": "b7e4b182bd6825f2649d69be7f6eb032c9b7db1e",
   "generator_version": "0.1.0-dev",
   "inputs": {
     "manifests/backend/basic-return-c64.json": "sha256:5c62d9cba6d9a05c29b42957d6c787f98cf3c3c52a72c1a8c34cba01ba8aaa4e",
@@ -12,6 +12,9 @@
     "manifests/backend/low-memory-plus4.json": "sha256:e87e2ad41d8444861f904daf5abc01d101bc474aaf7074638c39ea6fa4f0f627",
     "manifests/backend/math-profile.json": "sha256:7f57763695571f7757cfa562b87c816d68f4abd9ae29f78449ce65197f7becdf",
     "manifests/backend/numeric-type-profile.json": "sha256:7f77157bda1ad921125023a55d76792004bf44d8cc3ce3cb60435aa636fd3606",
+    "manifests/backend/adoption-tasks.json": "sha256:f332aa08573b9f088f487f0cfd0be9d05334dde4f76a7b96dff2ab9a7ad52aa0",
+    "manifests/backend/readiness.json": "sha256:1ab365edd718e274b3ced5efaf7cda77dd07acfabd3cdc36ae4420a81eeb5bc8",
+    "manifests/backend/testing-profile.json": "sha256:3253ef830cc790965f241cc1bf8daba5ba1a022be43dc385abbf988cff5bf858",
     "manifests/backend/target-profile.json": "sha256:130458138a6ffb53f53679eda34a8e021c3a34ef63168b1b108c9060a38e1bdd"
   },
   "outputs": {},
@@ -21,6 +24,9 @@
     "low-memory-profile/v1",
     "target-profile/v1",
     "math-profile/v1",
-    "numeric-type-profile/v1"
+    "numeric-type-profile/v1",
+    "consumer-readiness/v1",
+    "task-manifest/v2",
+    "testing-profile/v1"
   ]
 }

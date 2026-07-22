@@ -1,0 +1,106 @@
+{
+  "$schema": "../../../backend/schemas/task-manifest.schema.json",
+  "schema_epoch": 2,
+  "authority_policy": {
+    "protected_paths": [
+      "REQUIREMENTS.md",
+      "DESIGN.md",
+      "schemas/**",
+      "manifests/backend/adoption-tasks.json",
+      "tests/**",
+      "**/fixtures/**",
+      "**/snapshots/**"
+    ],
+    "implementation_default_paths": [
+      "src/**",
+      "tools/**"
+    ],
+    "trusted_review_required": [
+      "requirements",
+      "design",
+      "acceptance_tests",
+      "expected_results",
+      "test_fixtures",
+      "task_authority"
+    ]
+  },
+  "requirements": [
+    "REQ-GOV-001",
+    "REQ-TEST-SHARED-001"
+  ],
+  "tasks": [
+    {
+      "id": "backend.governance_contract",
+      "title": "Maintain Backend governance and worker isolation contract",
+      "status": "complete",
+      "owner": "compiler2",
+      "execution_tier": "trusted",
+      "requirements": [
+        "REQ-GOV-001"
+      ],
+      "design_refs": [
+        "docs/BACKEND_GOVERNANCE_AND_TESTING.md#authority-and-isolation"
+      ],
+      "acceptance": [
+        "Requirements, design, AGENTS.md, CLAUDE.md, and readiness metadata agree."
+      ],
+      "acceptance_tests": [],
+      "contract_approval": {
+        "approved_by": "trusted",
+        "contract_digest": "8d407712c9577ddbb5589e76ca2cd76e73666088579e6d728c94f7bda0b775c3",
+        "review_evidence": "Trusted cross-file review at Backend revision b7e4b182bd6825f2649d69be7f6eb032c9b7db1e"
+      },
+      "depends_on": [],
+      "allowed_changes": [
+        "AGENTS.md",
+        "CLAUDE.md",
+        "REQUIREMENTS.md",
+        "DESIGN.md",
+        "docs/BACKEND_GOVERNANCE_AND_TESTING.md",
+        "manifests/backend/**"
+      ],
+      "evidence": [
+        {
+          "kind": "review",
+          "target": "docs/BACKEND_GOVERNANCE_AND_TESTING.md",
+          "status": "passing",
+          "claim": "Governance and zero-trust adoption contract is present and internally consistent."
+        }
+      ],
+      "escalations": []
+    },
+    {
+      "id": "backend.harness_acceptance",
+      "title": "Author sealed product acceptance tests for the shared harness adapter",
+      "status": "not_started",
+      "owner": "compiler2",
+      "execution_tier": "trusted",
+      "requirements": [
+        "REQ-TEST-SHARED-001"
+      ],
+      "design_refs": [
+        "docs/BACKEND_GOVERNANCE_AND_TESTING.md#test-discipline"
+      ],
+      "acceptance": [
+        "Every harness adapter task has a failing production-path test and authoritative oracle before low-level delegation."
+      ],
+      "acceptance_tests": [],
+      "contract_approval": {
+        "approved_by": "trusted",
+        "contract_digest": "3d485643ea1b47b782d300c96da11558637dee16bc3a2cd42e37da302cf7a6a5",
+        "review_evidence": "Trusted task definition; implementation delegation remains gated on test authoring."
+      },
+      "depends_on": [
+        "backend.governance_contract"
+      ],
+      "allowed_changes": [
+        "tests/**",
+        "manifests/backend/**",
+        "docs/TESTING.md",
+        "pytest.ini"
+      ],
+      "evidence": [],
+      "escalations": []
+    }
+  ]
+}

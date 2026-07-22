@@ -1329,3 +1329,14 @@ requirements matrix must report:
 - unsupported or planned status.
 
 No feature is complete solely because a static source-pattern test passes.
+
+## Shared governance and harness requirements
+
+- **REQ-GOV-001:** Trusted specification authority and low-level implementation or
+  operational authority shall follow `docs/BACKEND_GOVERNANCE_AND_TESTING.md`.
+  Sealed tests and task contracts define completion; disputed tests require trusted
+  review.
+- **REQ-TEST-SHARED-001:** Existing test discipline shall use shared Backend harness
+  contracts, content-addressed proven warm snapshots, isolated variations, demo
+  screenshots, and versioned BASIC V2/V3.5 oracles. Adoption metadata does not prove
+  product implementation.

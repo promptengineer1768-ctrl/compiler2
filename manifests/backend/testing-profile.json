@@ -1,0 +1,62 @@
+{
+  "$schema": "../../../backend/schemas/testing-profile.schema.json",
+  "schema_epoch": 1,
+  "id": "compiler2_shared_verification",
+  "layers": [
+    "unit",
+    "functional",
+    "integration",
+    "e2e",
+    "hardware",
+    "system"
+  ],
+  "runtimes": [
+    {
+      "id": "vice_c64",
+      "kind": "vice_next",
+      "executable": "${VICE_X64SC}",
+      "machine": "c64",
+      "capabilities": [
+        "snapshot",
+        "monitor",
+        "screenshot",
+        "cycle_count",
+        "parallel_instances"
+      ]
+    },
+    {
+      "id": "vice_plus4",
+      "kind": "vice_next",
+      "executable": "${VICE_XPLUS4}",
+      "machine": "plus4",
+      "capabilities": [
+        "snapshot",
+        "monitor",
+        "screenshot",
+        "cycle_count",
+        "parallel_instances"
+      ]
+    }
+  ],
+  "snapshot_policy": {
+    "content_addressed": true,
+    "required_proof_state": "program_started",
+    "allow_parallel_forks": true,
+    "invalidate_on": [
+      "artifact_hash",
+      "runtime_hash",
+      "machine_config",
+      "startup_script",
+      "proof_contract"
+    ]
+  },
+  "screenshot_policy": {
+    "required_for_every_demo": true,
+    "format": "png",
+    "compare": "masked_exact"
+  },
+  "extensions": {
+    "adapter_status": "ready_not_started"
+  }
+}
+

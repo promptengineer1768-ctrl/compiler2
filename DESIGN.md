@@ -1725,3 +1725,11 @@ file, cover every requirement group in `REQUIREMENTS.md` and
 `REU_REQUIREMENTS.md`. Where a subsystem has a dedicated doc, that doc is
 authoritative for its detail; this file owns the cross-cutting architecture
 and the requirement-to-design map in §0.
+
+## Governance and shared-test adoption
+
+REQ-GOV-001 is implemented by task schema epoch 2, protected trusted inputs,
+patch admission for unattended batches, and controller-recorded evidence.
+REQ-TEST-SHARED-001 makes the existing VICE harness a consumer adapter of Backend's
+testing and oracle contracts. Refactoring Python code into Backend and switching
+imports remain explicit implementation tasks, not a consequence of this design text.

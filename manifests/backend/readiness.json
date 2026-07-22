@@ -1,0 +1,53 @@
+{
+  "$schema": "../../../backend/schemas/consumer-readiness.schema.json",
+  "schema_epoch": 1,
+  "consumer": "compiler2",
+  "backend_revision": "b7e4b182bd6825f2649d69be7f6eb032c9b7db1e",
+  "governance": {
+    "requirements": "REQUIREMENTS.md",
+    "design": "DESIGN.md",
+    "task_manifest": "manifests/backend/adoption-tasks.json",
+    "instruction_files": [
+      "AGENTS.md",
+      "CLAUDE.md"
+    ],
+    "task_schema_epoch": 2
+  },
+  "worker_isolation": {
+    "canonical_checkout_read_only": true,
+    "git_metadata_exposed": false,
+    "credentials_exposed": false,
+    "worker_output": "patch_only",
+    "tests_from_trusted_checkout": true,
+    "controller_records_evidence": true
+  },
+  "delegated_operations": [
+    "answer_questions",
+    "update_named_files",
+    "update_non_normative_docs",
+    "run_tests",
+    "run_build",
+    "run_formatters",
+    "run_benchmarks",
+    "commit",
+    "push_approved_branch",
+    "dispatch_approved_workflow",
+    "clean_scoped_debug"
+  ],
+  "testing": {
+    "profile": "manifests/backend/testing-profile.json",
+    "layers": [
+      "unit",
+      "functional",
+      "integration",
+      "e2e",
+      "hardware",
+      "system"
+    ],
+    "warm_snapshots": true,
+    "parallel_variations": true,
+    "demo_screenshots": true,
+    "keyword_oracles": true
+  },
+  "implementation_status": "ready_not_started"
+}

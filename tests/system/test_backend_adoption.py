@@ -37,6 +37,9 @@ ADOPTED = (
     "basic-return-plus4.json",
     "math-profile.json",
     "numeric-type-profile.json",
+    "readiness.json",
+    "testing-profile.json",
+    "adoption-tasks.json",
 )
 
 
@@ -66,7 +69,7 @@ def _regions(profile: dict[str, Any]) -> tuple[LowMemoryRegion, ...]:
 def test_backend_revision_and_adopted_inputs_are_locked() -> None:
     """The sibling revision and every adopted input must match the lock."""
     lock = _load("backend.lock.json")
-    assert lock["framework_revision"] == "3a3eb1908871553a02cc2ea8c22f81ba2c57b91f"
+    assert lock["framework_revision"] == "b7e4b182bd6825f2649d69be7f6eb032c9b7db1e"
     verify_lock(lock, ROOT)
     assert set(lock["inputs"]) == {f"manifests/backend/{name}" for name in ADOPTED}
 
